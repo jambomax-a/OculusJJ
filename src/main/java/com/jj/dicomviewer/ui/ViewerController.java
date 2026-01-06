@@ -197,6 +197,13 @@ public class ViewerController extends JFrame {
         slider = new JSlider(JSlider.HORIZONTAL, 0, 100, 0);
         slider.setPreferredSize(new Dimension(200, 30));
 
+        // HOROS-20240407準拠: スライダーの変更リスナーを追加
+        slider.addChangeListener(e -> {
+            if (!slider.getValueIsAdjusting()) {
+                sliderAction();
+            }
+        });
+
         // HOROS-20240407準拠: ViewerController.m 7663行目
         // [seriesView setPixels:pixList[0] files:fileList[0] rois:roiList[0]
         // firstImage:0 level:'i' reset:YES];
@@ -432,6 +439,9 @@ public class ViewerController extends JFrame {
 
                 System.out.println("ViewerController.changeImageData: setPixels called, pixList size: "
                         + pixListForView.size() + ", fileList size: " + fileListForView.size());
+
+                // HOROS-20240407準拠: スライダーの最大値を設定してスライダーを更新
+                adjustSlider();
 
                 // HOROS-20240407準拠: 再描画を強制
                 if (imageView != null) {
@@ -1798,6 +1808,55 @@ public class ViewerController extends JFrame {
     private void propagateSettings() {
         // TODO: 実装
         System.out.println("ViewerController.propagateSettings: propagating settings");
+    }
+
+    /**
+     * スライダーの値を現在の画像インデックスに同期
+     * HOROS-20240407準拠: ViewerController.m adjustSlider
+     */
+    public void adjustSlider() {
+        if (imageView == null || slider == null) {
+            return;
+        }
+
+        // HOROS-20240407準拠: ViewerController.m adjustSlider
+        // if( [imageView flippedData]) [slider setIntValue: [pixList[ curMovieIndex] count] - [imageView curImage] -1];
+        // else [slider setIntValue:[imageView curImage]];
+
+        // flippedData は現時点では未実装のため、常にfalseとして扱う
+        int curImage = imageView.curImage;
+
+        // スライダーの最大値を更新
+        if (pixList[curMovieIndex] != null) {
+            int maxValue = pixList[curMovieIndex].size() - 1;
+            if (maxValue < 0) maxValue = 0;
+            slider.setMaximum(maxValue);
+        }
+
+        // スライダーの値を更新
+        slider.setValue(curImage);
+
+        System.out.println("ViewerController.adjustSlider: slider value set to " + curImage);
+    }
+
+    /**
+     * スライダーが変更されたときの処理
+     * HOROS-20240407準拠: スライダーのアクション処理（明示的なメソッド名は不明だが、adjustSliderと対応）
+     */
+    private void sliderAction() {
+        if (imageView == null || slider == null) {
+            return;
+        }
+
+        int sliderValue = slider.getValue();
+
+        // HOROS-20240407準拠: スライダーの値に応じて画像インデックスを変更
+        // flippedData は現時点では未実装のため、常にfalseとして扱う
+
+        System.out.println("ViewerController.sliderAction: setting image index to " + sliderValue);
+
+        // 画像インデックスを変更
+        imageView.setIndex(sliderValue);
     }
 
     /**

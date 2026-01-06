@@ -195,6 +195,15 @@ public class DCMView extends JPanel {
                 repaint(); // マウス位置が変わったら再描画
             }
         });
+
+        // HOROS-20240407準拠: マウスホイールリスナーを追加
+        // DCMView.m scrollWheel: メソッドの実装
+        addMouseWheelListener(new java.awt.event.MouseWheelListener() {
+            @Override
+            public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
+                scrollWheel(e);
+            }
+        });
     }
 
     /**
@@ -596,6 +605,53 @@ public class DCMView extends JPanel {
             repaint();
         } finally {
             scaleToFitNoReentry = false;
+        }
+    }
+
+    /**
+     * scrollWheel - マウスホイールイベント処理
+     * HOROS-20240407準拠: DCMView.m scrollWheel: メソッド
+     */
+    protected void scrollWheel(java.awt.event.MouseWheelEvent e) {
+        // HOROS-20240407準拠: DCMView.m scrollWheel: 行番号不明
+        if (curImage < 0) return;
+        if (dcmPixList == null || dcmPixList.isEmpty()) return;
+
+        // HOROS-20240407準拠: マウスホイールの回転量を取得
+        int rotation = e.getWheelRotation();
+
+        // HOROS-20240407準拠: reverseScrollWheel（ユーザー設定で反転可能）
+        // 現時点では常に1.0として扱う
+        float reverseScrollWheel = 1.0f;
+
+        // HOROS-20240407準拠: DCMView.m scrollWheel: の基本的なスクロール処理
+        // modifierキーのチェックは省略し、基本的な画像スクロールのみ実装
+        int inc = 0;
+
+        if (rotation > 0) {
+            // 下にスクロール（次の画像へ）
+            inc = 1;
+        } else if (rotation < 0) {
+            // 上にスクロール（前の画像へ）
+            inc = -1;
+        }
+
+        int newImage = curImage + inc;
+
+        // HOROS-20240407準拠: DCMView.m scrollWheel: の画像インデックス範囲チェック
+        // loopScrollWheel設定は現時点では未実装（常にfalseとして扱う）
+        if (newImage < 0) newImage = 0;
+        if (newImage >= dcmPixList.size()) newImage = dcmPixList.size() - 1;
+
+        // HOROS-20240407準拠: setIndexを呼び出して画像を切り替える
+        setIndex(newImage);
+
+        // HOROS-20240407準拠: is2DViewerの場合はViewerControllerのスライダーを更新
+        if (is2DViewer()) {
+            javax.swing.JFrame window = (javax.swing.JFrame) javax.swing.SwingUtilities.getWindowAncestor(this);
+            if (window instanceof ViewerController) {
+                ((ViewerController) window).adjustSlider();
+            }
         }
     }
 
