@@ -82,6 +82,42 @@ public class ViewerController extends JFrame {
     // - (NSString*) studyInstanceUID;
     private String studyInstanceUID;
 
+    /**
+     * studyInstanceUIDを取得
+     * HOROS-20240407準拠: ViewerController.h 732行目
+     */
+    public String getStudyInstanceUID() {
+        return studyInstanceUID;
+    }
+
+    /**
+     * 現在のStudyを取得
+     * HOROS-20240407準拠: ViewerController.m currentStudy
+     */
+    public DicomStudy getCurrentStudy() {
+        if (fileList != null && fileList.length > 0 && fileList[curMovieIndex] != null
+                && !fileList[curMovieIndex].isEmpty()) {
+            Object firstObj = fileList[curMovieIndex].get(0);
+            if (firstObj instanceof DicomImage) {
+                DicomSeries series = ((DicomImage) firstObj).getSeries();
+                if (series != null) {
+                    return series.getStudy();
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 2Dビューワーかどうか
+     * HOROS-20240407準拠: ViewerController.m 21659行目
+     */
+    public boolean is2DViewer() {
+        // HOROS-20240407準拠: ViewerController.m 21661行目
+        // return YES;
+        return true;
+    }
+
     // HOROS-20240407準拠: ViewerController.h 101行目
     // IBOutlet NSMatrix *previewMatrix;
     // IBOutlet NSScrollView *previewMatrixScrollView;
@@ -210,6 +246,23 @@ public class ViewerController extends JFrame {
         // [self changeImageData:f :d :v :YES];
         changeImageData(f, d, v, true);
 
+        // HOROS-20240407準拠: ViewerController.m 7657行目
+        // [self startLoadImageThread];
+        startLoadImageThread();
+
+        // HOROS-20240407準拠: ViewerController.m 7659行目
+        // [self showWindowTransition];
+        showWindowTransition();
+
+        // HOROS-20240407準拠: ViewerController.m 7661行目
+        // [self checkEverythingLoaded];
+        checkEverythingLoaded();
+
+        // HOROS-20240407準拠: ViewerController.m 7670行目
+        if (isDataVolumicIn4D(true)) {
+            computeIntervalAsync();
+        }
+
         // HOROS-20240407準拠: ViewerController.m 7715行目
         // toolbarPanel = [[ToolbarPanelController alloc] initForViewer: self
         // withToolbar: toolbar];
@@ -225,6 +278,61 @@ public class ViewerController extends JFrame {
         // HOROS-20240407準拠: ViewerController.m 4876-4884行目 - checkBuiltMatrixPreview
         // サムネイルマトリックスを構築（ウィンドウが表示された後に呼ばれる）
         // ここでは呼ばない（windowDidBecomeMainで呼ぶ）
+    }
+
+    /**
+     * Check if everything is loaded.
+     * HOROS-20240407準拠: ViewerController.m 8928行目 - checkEverythingLoaded
+     */
+    private void checkEverythingLoaded() {
+        // TODO: Implement this method
+    }
+
+    /**
+     * Check if data is volumic in 4D.
+     * HOROS-20240407準拠: ViewerController.h 520行目 - isDataVolumicIn4D
+     * 
+     * @param check4D
+     * @return
+     */
+    private boolean isDataVolumicIn4D(boolean check4D) {
+        // HOROS-20240407準拠: ViewerController.m 7271行目 -
+        // isDataVolumicIn4D:checkEverythingLoaded:tryToCorrect:
+        // A simplified implementation.
+        // TODO: A full implementation should check dimensions, orientation, and slice
+        // spacing for all images.
+        if (pixList[curMovieIndex] != null && !pixList[curMovieIndex].isEmpty()) {
+            Object pix = pixList[curMovieIndex].get(0);
+            if (pix instanceof DicomPix) {
+                // HOROS-20240407準拠: ViewerController.m 7302行目 - [[pixList[ x] objectAtIndex: 1]
+                // orientation: orientation];
+                // DicomPix.getOrientation()はdouble[]を返す
+                double[] orientation = ((DicomPix) pix).getOrientation();
+                return orientation != null && orientation.length == 9;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Compute interval asynchronously.
+     * HOROS-20240407準拠: ViewerController.m 8496行目 - computeIntervalAsync
+     */
+    private void computeIntervalAsync() {
+        // HOROS-20240407準拠: ViewerController.m 8496行目 - computeIntervalAsync
+        new Thread(() -> {
+            computeInterval();
+        }).start();
+    }
+
+    /**
+     * Compute interval between slices.
+     * HOROS-20240407準拠: ViewerController.m 8503行目 - computeInterval
+     */
+    private void computeInterval() {
+        // TODO: Implement this method.
+        // This method should sort slices and calculate the distance between them.
+        System.out.println("ViewerController.computeInterval: would be computing slice interval here.");
     }
 
     /**
@@ -309,6 +417,15 @@ public class ViewerController extends JFrame {
                     // HOROS-20240407準拠: 画像が読み込まれたことを確認
                     System.out.println("ViewerController.changeImageData: setIndex(0) called, curDCM: "
                             + (imageView.curDCM != null ? "not null" : "null"));
+
+                    // HOROS-20240407準拠: 初回表示時はscaleToFitを呼び出す
+                    // DCMView.m updatePresentationStateFromSeriesOnlyImageLevel:scale:offset:
+                    // scale == firstTimeDisplay の場合、保存されたスケール値がなければscaleToFitを呼び出す
+                    // Java実装ではupdatePresentationStateFromSeriesが未実装のため、明示的に呼び出す
+                    if (reset) {
+                        imageView.scaleToFit();
+                        System.out.println("ViewerController.changeImageData: scaleToFit() called for initial display");
+                    }
                 } else {
                     System.out.println("ViewerController.changeImageData: pixListForView is empty, cannot set index");
                 }
@@ -509,7 +626,26 @@ public class ViewerController extends JFrame {
 
         // HOROS-20240407準拠: ViewerController.m 8820-8825行目
         // 画像読み込み処理
-        // TODO: 実装
+        Thread loadingThread = new Thread(() -> {
+            if (pixList[curMovieIndex] != null) {
+                int count = 0;
+                for (Object pix : pixList[curMovieIndex]) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        break;
+                    }
+                    if (pix instanceof DicomPix) {
+                        try {
+                            ((DicomPix) pix).loadImage();
+                            count++;
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                System.out.println("ViewerController.startLoadImageThread: Loaded " + count + " images.");
+            }
+        });
+        loadingThread.start();
     }
 
     /**
@@ -545,448 +681,278 @@ public class ViewerController extends JFrame {
     }
 
     /**
+     * プレビューマトリックスを更新するための事前条件をチェックします。
+     * 
+     * @return 更新可能な場合は true
+     */
+    private boolean isReadyForUpdate() {
+        if (!isVisible()) {
+            System.out.println("ViewerController.updatePreviewMatrix: window is not visible");
+            return false;
+        }
+        if (windowWillClose) {
+            System.out.println("ViewerController.updatePreviewMatrix: windowWillClose is true");
+            return false;
+        }
+        Preferences prefs = Preferences.userNodeForPackage(ViewerController.class);
+        boolean seriesListVisible = prefs.getBoolean("SeriesListVisible", true);
+        if (!seriesListVisible) {
+            System.out.println("ViewerController.updatePreviewMatrix: SeriesListVisible is false");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * プレビューマトリックスをクリアします。
+     */
+    private void clearPreviewMatrix() {
+        previewMatrix.removeAll();
+        previewMatrix.revalidate();
+        previewMatrix.repaint();
+    }
+
+    /**
+     * 現在の患者に関連するすべてのStudyをデータベースから読み込みます。
+     * HOROS-20240407準拠: ViewerController.m 4960-4982行目
+     * 
+     * @return Studyのリスト。失敗した場合はnull。
+     */
+    private List<DicomStudy> loadPatientStudies() {
+        if (fileList[0] == null || fileList[0].isEmpty() || !(fileList[0].get(0) instanceof DicomImage)) {
+            System.out.println("ViewerController.loadPatientStudies: Initial image/fileList is not valid.");
+            return null;
+        }
+
+        DicomImage image = (DicomImage) fileList[0].get(0);
+        DicomSeries series = image.getSeries();
+        if (series == null) {
+            System.out.println("ViewerController.loadPatientStudies: Series is null.");
+            return null;
+        }
+        DicomStudy study = series.getStudy();
+        if (study == null) {
+            System.out.println("ViewerController.loadPatientStudies: Study is null.");
+            return null;
+        }
+
+        com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
+        String searchString = study.getPatientUID();
+        List<DicomStudy> studiesArray;
+
+        if (db == null) {
+            studiesArray = new ArrayList<>();
+            studiesArray.add(study);
+        } else {
+            if (searchString == null || searchString.isEmpty() || searchString.equals("0")) {
+                searchString = study.getName();
+                studiesArray = new ArrayList<>();
+                studiesArray.add(study);
+            } else {
+                studiesArray = db.getStudiesByPatientUID(searchString);
+            }
+        }
+
+        studiesArray.sort((a, b) -> {
+            if (a.getDate() == null && b.getDate() == null)
+                return 0;
+            if (a.getDate() == null)
+                return 1;
+            if (b.getDate() == null)
+                return -1;
+            return b.getDate().compareTo(a.getDate());
+        });
+
+        return studiesArray;
+    }
+
+    /**
+     * 現在のビューアで表示されているSeriesのリストを取得します。
+     * HOROS-20240407準拠: ViewerController.m 4955-4958行目
+     * 
+     * @return DicomSeriesのリスト
+     */
+    private List<DicomSeries> getViewerSeries() {
+        List<DicomSeries> viewerSeries = new ArrayList<>();
+        for (int i = 0; i < maxMovieIndex; i++) {
+            if (fileList[i] != null && !fileList[i].isEmpty()) {
+                Object img = fileList[i].get(0);
+                if (img instanceof DicomImage) {
+                    DicomSeries s = ((DicomImage) img).getSeries();
+                    if (s != null) {
+                        viewerSeries.add(s);
+                    }
+                }
+            }
+        }
+        return viewerSeries;
+    }
+
+    /**
+     * スクロール位置を先頭にリセットします。
+     * HOROS-20240407準拠: ViewerController.m 5486行目
+     */
+    private void resetScrollPosition() {
+        previewMatrixScrollView.getViewport().setViewPosition(new java.awt.Point(0, 0));
+    }
+
+    /**
+     * 現在表示されているSeriesのサムネイルまでスクロールします。
+     * HOROS-20240407準拠: ViewerController.m 5477-5488行目
+     */
+    private void scrollAndHighlightSelectedSeries() {
+        DicomSeries currentDisplayedSeries = getCurrentSeries();
+        if (currentDisplayedSeries == null) {
+            System.out.println(
+                    "ViewerController.scrollAndHighlightSelectedSeries: currentDisplayedSeries is null, cannot scroll.");
+            return;
+        }
+
+        Component[] components = previewMatrix.getComponents();
+        int seriesIndex = -1;
+        String currentUID = currentDisplayedSeries.getSeriesInstanceUID();
+
+        // まず全てのSeriesのハイライトをクリア（Studyの色は維持）
+        for (Component component : components) {
+            if (component instanceof ThumbnailButton) {
+                ThumbnailButton button = (ThumbnailButton) component;
+                Object representedObj = button.getRepresentedObject();
+                if (representedObj instanceof DicomSeries) {
+                    // SELECTED_ITEM_COLOR（オレンジ）だけをクリアし、Studyの色などは維持
+                    if (button.getHighlightColor() != null && button.getHighlightColor().equals(SELECTED_ITEM_COLOR)) {
+                        button.setHighlightColor(null);
+                    }
+                }
+            }
+        }
+
+        // 現在のSeriesをハイライト
+        for (int i = 0; i < components.length; i++) {
+            if (components[i] instanceof ThumbnailButton) {
+                ThumbnailButton button = (ThumbnailButton) components[i];
+                Object representedObj = button.getRepresentedObject();
+                if (representedObj instanceof DicomSeries) {
+                    DicomSeries buttonSeries = (DicomSeries) representedObj;
+                    String buttonUID = buttonSeries.getSeriesInstanceUID();
+                    if (buttonUID != null && currentUID != null && buttonUID.equals(currentUID)) {
+                        seriesIndex = i;
+                        // 選択されたSeriesをハイライト
+                        button.setHighlightColor(SELECTED_ITEM_COLOR);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (seriesIndex != -1) {
+            Component targetComponent = components[seriesIndex];
+            final java.awt.Rectangle rect = targetComponent.getBounds();
+            javax.swing.SwingUtilities.invokeLater(() -> previewMatrix.scrollRectToVisible(rect));
+        } else {
+            System.out.println(
+                    "ViewerController.scrollAndHighlightSelectedSeries: series index not found for UID: " + currentUID);
+        }
+    }
+
+    /**
      * プレビューマトリックスを更新
      * HOROS-20240407準拠: ViewerController.m 4903行目 - buildMatrixPreview:
      *
      * @param showSelected true: 現在選択されているSeriesをハイライト・スクロール, false: スクロールをリセット
      */
     public void updatePreviewMatrix(boolean showSelected) {
-        // HOROS-20240407準拠: ViewerController.m 4905行目
-        // if( [[self window] isVisible] == NO) return;
-        if (!isVisible()) {
-            System.out.println("ViewerController.updatePreviewMatrix: window is not visible");
+        if (!isReadyForUpdate()) {
             return;
         }
-
-        // HOROS-20240407準拠: ViewerController.m 4906行目
-        // if( windowWillClose) return;
-        if (windowWillClose) {
-            System.out.println("ViewerController.updatePreviewMatrix: windowWillClose is true");
-            return;
-        }
-
-        // HOROS-20240407準拠: ViewerController.m 4924行目
-        // if( [self matrixIsVisible] == NO) return;
-        Preferences prefs = Preferences.userNodeForPackage(ViewerController.class);
-        boolean seriesListVisible = prefs.getBoolean("SeriesListVisible", true);
-        if (!seriesListVisible) {
-            System.out.println("ViewerController.updatePreviewMatrix: SeriesListVisible is false");
-            return;
-        }
-
         System.out.println("ViewerController.updatePreviewMatrix: starting update");
         try {
-            // HOROS-20240407準拠: ViewerController.m 4936行目
-            // NSManagedObject *curImage = [fileList[0] objectAtIndex:0];
-            if (fileList[0] == null || fileList[0].isEmpty()) {
-                System.out.println("ViewerController.updatePreviewMatrix: fileList[0] is null or empty");
-                previewMatrix.removeAll();
-                previewMatrix.revalidate();
-                previewMatrix.repaint();
+            List<DicomStudy> studiesArray = loadPatientStudies();
+            if (studiesArray == null || studiesArray.isEmpty()) {
+                clearPreviewMatrix();
                 return;
             }
 
-            System.out.println("ViewerController.updatePreviewMatrix: fileList[0] size = " + fileList[0].size());
-            Object curImage = fileList[0].get(0);
-            if (!(curImage instanceof DicomImage)) {
-                System.out.println("ViewerController.updatePreviewMatrix: curImage is not DicomImage: "
-                        + (curImage != null ? curImage.getClass().getName() : "null"));
-                previewMatrix.removeAll();
-                previewMatrix.revalidate();
-                previewMatrix.repaint();
-                return;
-            }
-
-            DicomImage image = (DicomImage) curImage;
-            DicomSeries series = image.getSeries();
-            if (series == null) {
-                System.out.println("ViewerController.updatePreviewMatrix: series is null");
-                previewMatrix.removeAll();
-                previewMatrix.revalidate();
-                previewMatrix.repaint();
-                return;
-            }
-
-            DicomStudy study = series.getStudy();
-            if (study == null) {
-                System.out.println("ViewerController.updatePreviewMatrix: study is null");
-                previewMatrix.removeAll();
-                previewMatrix.revalidate();
-                previewMatrix.repaint();
-                return;
-            }
-
-            System.out.println("ViewerController.updatePreviewMatrix: study = " + study.getStudyInstanceUID());
-            System.out.println("ViewerController.updatePreviewMatrix: series = " + series.getName());
-
-            // HOROS-20240407準拠: ViewerController.m 4955-4958行目
-            // NSMutableArray *viewerSeries = [NSMutableArray array];
-            // for( int i = 0 ; i < maxMovieIndex; i++)
-            // [viewerSeries addObject: [[fileList[ i] objectAtIndex:0]
-            // valueForKey:@"series"]];
-            List<DicomSeries> viewerSeries = new ArrayList<>();
-            for (int i = 0; i < maxMovieIndex; i++) {
-                if (fileList[i] != null && !fileList[i].isEmpty()) {
-                    Object img = fileList[i].get(0);
-                    if (img instanceof DicomImage) {
-                        DicomSeries s = ((DicomImage) img).getSeries();
-                        if (s != null) {
-                            viewerSeries.add(s);
-                            System.out.println("ViewerController.updatePreviewMatrix: added to viewerSeries: "
-                                    + s.getName() + " (UID: " + s.getSeriesInstanceUID() + ")");
-                        }
-                    }
-                }
-            }
-            System.out.println("ViewerController.updatePreviewMatrix: viewerSeries.size() = " + viewerSeries.size()
-                    + ", curMovieIndex = " + curMovieIndex);
-
-            // HOROS-20240407準拠: 現在表示されているSeriesを取得（自動スクロール用）
-            DicomSeries currentDisplayedSeries = null;
-            if (fileList[curMovieIndex] != null && !fileList[curMovieIndex].isEmpty()) {
-                Object curImg = fileList[curMovieIndex].get(0);
-                if (curImg instanceof DicomImage) {
-                    currentDisplayedSeries = ((DicomImage) curImg).getSeries();
-                    System.out.println("ViewerController.updatePreviewMatrix: currentDisplayedSeries = "
-                            + (currentDisplayedSeries != null
-                                    ? currentDisplayedSeries.getName() + " (UID: "
-                                            + currentDisplayedSeries.getSeriesInstanceUID() + ")"
-                                    : "null"));
-                }
-            }
-
-            // HOROS-20240407準拠: ViewerController.m 4960-4982行目
-            // FIND ALL STUDIES of this patient
-            String searchString = study.getPatientUID();
-            List<DicomStudy> studiesArray;
-
-            // HOROS-20240407準拠: ViewerController.m 4973-4982行目
-            // Use the 'history' array of the browser controller, if available (with the
-            // distant studies)
-            // TODO: comparativeStudiesの実装
-            // 現在はデータベースから直接検索
-            com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
-            if (db == null) {
-                studiesArray = new ArrayList<>();
-                studiesArray.add(study);
-            } else {
-                if (searchString == null || searchString.isEmpty() || searchString.equals("0")) {
-                    // HOROS-20240407準拠: ViewerController.m 4965-4966行目
-                    // searchString = [study valueForKey:@"name"];
-                    // predicate = [NSPredicate predicateWithFormat: @"(name == %@)", searchString];
-                    searchString = study.getName();
-                    // TODO: nameで検索する実装（現在は簡易実装）
-                    studiesArray = new ArrayList<>();
-                    studiesArray.add(study);
-                } else {
-                    // HOROS-20240407準拠: ViewerController.m 4968行目
-                    // predicate = [NSPredicate predicateWithFormat: @"(patientUID BEGINSWITH[cd]
-                    // %@)", searchString];
-                    // HOROS-20240407準拠: patientUID BEGINSWITH[cd]（大文字小文字を区別しない前方一致）
-                    studiesArray = db.getStudiesByPatientUID(searchString);
-                }
-            }
-
-            // HOROS-20240407準拠: ViewerController.m 4981行目
-            // studiesArray = [studiesArray sortedArrayUsingDescriptors: [NSArray
-            // arrayWithObject: [NSSortDescriptor sortDescriptorWithKey: @"date" ascending:
-            // NO]]];
-            studiesArray.sort((a, b) -> {
-                if (a.getDate() == null && b.getDate() == null)
-                    return 0;
-                if (a.getDate() == null)
-                    return 1;
-                if (b.getDate() == null)
-                    return -1;
-                return b.getDate().compareTo(a.getDate());
-            });
-
-            if (studiesArray.isEmpty()) {
-                previewMatrix.removeAll();
-                previewMatrix.revalidate();
-                previewMatrix.repaint();
-                return;
-            }
-
-            // HOROS-20240407準拠: ViewerController.m 4996-5027行目
-            // NSArray *displayedSeries = [ViewerController getDisplayedSeries];
-            // NSMutableArray *seriesArray = [NSMutableArray array];
+            DicomStudy currentStudy = ((DicomImage) fileList[0].get(0)).getSeries().getStudy();
             List<DicomSeries> displayedSeries = ViewerController.getDisplayedSeries();
-            System.out.println(
-                    "ViewerController.updatePreviewMatrix: displayedSeries.size() = " + displayedSeries.size());
-            List<List<DicomSeries>> seriesArray = new ArrayList<>();
+            List<DicomSeries> viewerSeries = getViewerSeries();
 
-            int totalSeriesCount = 0;
-            for (DicomStudy s : studiesArray) {
-                // HOROS-20240407準拠: ViewerController.m 5014行目
-                // [seriesArray addObject: [[BrowserController currentBrowser] childrenArray:
-                // s]];
-                System.out.println(
-                        "ViewerController.updatePreviewMatrix: getting children for study " + s.getStudyInstanceUID());
+            clearPreviewMatrix();
 
-                // HOROS-20240407準拠: Seriesを遅延読み込み
-                com.jj.dicomviewer.model.DicomDatabase studyDb = com.jj.dicomviewer.model.DicomDatabase
-                        .defaultDatabase();
-                if (studyDb != null) {
-                    System.out.println("ViewerController.updatePreviewMatrix: loading series for study");
-                    studyDb.loadSeriesForStudyIfNeeded(s);
-                }
+            com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
+            BrowserController browser = BrowserController.currentBrowser();
 
-                BrowserController browser = BrowserController.currentBrowser();
-                if (browser == null) {
-                    System.out.println(
-                            "ViewerController.updatePreviewMatrix: BrowserController.currentBrowser() is null");
-                    // BrowserControllerがnullの場合、直接allSeries()を使用
-                    List<DicomSeries> seriesList = s.allSeries();
-                    System.out.println(
-                            "ViewerController.updatePreviewMatrix: seriesList.size() (direct) = " + seriesList.size());
-                    seriesArray.add(seriesList);
-                    continue;
-                }
-                List<Object> children = browser.childrenArray(s, false);
-                System.out.println("ViewerController.updatePreviewMatrix: children.size() = " + children.size());
-                List<DicomSeries> seriesList = new ArrayList<>();
-                for (Object child : children) {
-                    if (child instanceof DicomSeries) {
-                        seriesList.add((DicomSeries) child);
-                    }
-                }
-                System.out.println("ViewerController.updatePreviewMatrix: seriesList.size() = " + seriesList.size());
-                seriesArray.add(seriesList);
-
-                // HOROS-20240407準拠: ViewerController.m 5016行目
-                // if( [s isHidden] == NO)
-                // i += [[seriesArray lastObject] count];
-                if (!s.isHidden()) {
-                    totalSeriesCount += seriesList.size();
-                }
-            }
-
-            // HOROS-20240407準拠: ViewerController.m 5059行目
-            // if( [previewMatrix numberOfRows] != i+[studiesArray count])
-            // [previewMatrix renewRows: i+[studiesArray count] columns: 1];
-            // Java Swingでは、コンポーネントを直接追加/削除
-            previewMatrix.removeAll();
-
-            // HOROS-20240407準拠: ViewerController.m 3992行目
-            // NSArray *allStudiesArray = studiesArray;
-            // HOROS-20240407準拠: allStudiesArrayは全てのStudyを含む配列（現在はstudiesArrayと同じ）
-            List<DicomStudy> allStudiesArray = studiesArray;
-
-            // HOROS-20240407準拠: ViewerController.m 5091-5442行目
-            // for( id curStudy in studiesArray)
-            int index = 0;
             for (int studyIdx = 0; studyIdx < studiesArray.size(); studyIdx++) {
                 DicomStudy curStudy = studiesArray.get(studyIdx);
-                List<DicomSeries> curStudySeries = seriesArray.get(studyIdx);
 
-                // HOROS-20240407準拠: データベースから取得したStudyオブジェクトのisHidden状態を確認
-                // データベースから最新のisHidden状態を読み込む
+                // データベースからisHidden状態を読み込む
                 if (db != null) {
                     try {
-                        // データベースからisHidden状態を読み込む
                         db.loadStudyHiddenState(curStudy);
-                        System.out.println("ViewerController.updatePreviewMatrix: loaded isHidden from database: "
-                                + curStudy.isHidden() + " for " + curStudy.getStudyInstanceUID());
                     } catch (Exception e) {
-                        // hiddenカラムが存在しない場合は、デフォルト値（false）を使用
                         System.err
                                 .println("ViewerController.updatePreviewMatrix: failed to load isHidden from database: "
                                         + e.getMessage());
                         curStudy.setHidden(false);
                     }
                 } else {
-                    // データベースが利用できない場合は、デフォルト値（false）を使用
                     curStudy.setHidden(false);
                 }
 
-                // HOROS-20240407準拠: ViewerController.m 5095行目
-                // NSUInteger curStudyIndexAll = [allStudiesArray indexOfObject: curStudy];
-                int curStudyIndexAll = allStudiesArray.indexOf(curStudy);
-
-                // HOROS-20240407準拠: ViewerController.m 5093行目
-                // NSButtonCell* cell = [previewMatrix cellAtRow: index column:0];
-                // Java Swingでは、ThumbnailButtonを直接作成
-                // HOROS-20240407準拠: curStudyIndexAllを使用して番号を表示
-                ThumbnailButton studyButton = createStudyCell(curStudy, study, curStudyIndexAll, allStudiesArray.size(),
-                        curStudySeries.size());
-
-                // HOROS-20240407準拠: ViewerController.m 5099行目
-                // [cell setAction: @selector(matrixPreviewSwitchHidden:)];
-                studyButton.addActionListener(e -> matrixPreviewSwitchHidden(curStudy));
-
-                // HOROS-20240407準拠: ViewerController.m 5098行目
-                // [cell setRepresentedObject:[O2ViewerThumbnailsMatrixRepresentedObject
-                // object:curStudy children:[seriesArray objectAtIndex:curStudyIndex]]];
-                // Java Swingでは、ThumbnailButtonにStudyを直接保持
-                studyButton.setRepresentedObject(curStudy);
-
-                previewMatrix.add(studyButton);
-                index++;
-
-                // HOROS-20240407準拠: ViewerController.m 5307行目
-                // if(![curStudy respondsToSelector:@selector(isHidden)] || [curStudy isHidden]
-                // == NO)
-                System.out
-                        .println("ViewerController.updatePreviewMatrix: curStudy.isHidden() = " + curStudy.isHidden());
-                System.out.println(
-                        "ViewerController.updatePreviewMatrix: curStudySeries.size() = " + curStudySeries.size());
-                if (!curStudy.isHidden()) {
-                    // HOROS-20240407準拠: ViewerController.m 5309-5441行目
-                    // for( i = 0; i < [series count]; i++)
-                    for (int i = 0; i < curStudySeries.size(); i++) {
-                        DicomSeries curSeries = curStudySeries.get(i);
-                        System.out.println("ViewerController.updatePreviewMatrix: creating series cell for "
-                                + curSeries.getName());
-
-                        // HOROS-20240407準拠: ViewerController.m 5313行目
-                        // NSButtonCell *cell = [previewMatrix cellAtRow: index column:0];
-                        ThumbnailButton seriesButton = createSeriesCell(curSeries, curStudy, study, viewerSeries,
-                                displayedSeries);
-
-                        // HOROS-20240407準拠: ViewerController.m 5320行目
-                        // [cell setRepresentedObject: [O2ViewerThumbnailsMatrixRepresentedObject
-                        // object:curSeries]];
-                        // Java Swingでは、ThumbnailButtonにSeriesを直接保持
-                        seriesButton.setRepresentedObject(curSeries);
-
-                        // HOROS-20240407準拠: ViewerController.m 5322行目
-                        // [cell setAction: @selector(matrixPreviewPressed:)];
-                        seriesButton.addActionListener(e -> matrixPreviewPressed(curSeries, false));
-
-                        previewMatrix.add(seriesButton);
-                        System.out.println("ViewerController.updatePreviewMatrix: added series cell to previewMatrix");
-                        index++;
-                    }
+                // Seriesリストを取得
+                List<DicomSeries> seriesList;
+                if (browser == null) {
+                    seriesList = curStudy.allSeries();
                 } else {
-                    System.out.println("ViewerController.updatePreviewMatrix: curStudy is hidden, skipping series");
+                    if (db != null)
+                        db.loadSeriesForStudyIfNeeded(curStudy);
+                    List<Object> children = browser.childrenArray(curStudy, false);
+                    seriesList = new ArrayList<>();
+                    for (Object child : children) {
+                        if (child instanceof DicomSeries) {
+                            seriesList.add((DicomSeries) child);
+                        }
+                    }
+                }
+
+                // Studyセルを作成して追加
+                ThumbnailButton studyButton = createStudyCell(curStudy, currentStudy, studyIdx, studiesArray.size(),
+                        seriesList.size());
+                studyButton.addActionListener(e -> matrixPreviewSwitchHidden(curStudy));
+                studyButton.setRepresentedObject(curStudy);
+                previewMatrix.add(studyButton);
+
+                // Seriesセルを作成して追加 (Studyが非表示でない場合)
+                if (!curStudy.isHidden()) {
+                    for (DicomSeries curSeries : seriesList) {
+                        ThumbnailButton seriesButton = createSeriesCell(curSeries, curStudy, currentStudy, viewerSeries,
+                                displayedSeries);
+                        // ActionListenerはThumbnailButtonのコンストラクタで既に設定されている
+                        seriesButton.setRepresentedObject(curSeries);
+                        previewMatrix.add(seriesButton);
+                    }
                 }
             }
 
-            // HOROS-20240407準拠: ViewerController.m 5475行目
-            // [previewMatrix sizeToCells];
-            // Swingでは、revalidate()でレイアウトを再計算し、validate()で確定させる
             previewMatrix.revalidate();
-            previewMatrix.validate(); // レイアウトを即座に確定
+            previewMatrix.validate();
             previewMatrix.repaint();
 
-            System.out.println(
-                    "ViewerController.updatePreviewMatrix: added " + previewMatrix.getComponentCount() + " components");
-            System.out.println("ViewerController.updatePreviewMatrix: studiesArray.size() = " + studiesArray.size());
-            System.out.println(
-                    "ViewerController.updatePreviewMatrix: previewMatrixScrollView = " + previewMatrixScrollView);
-            System.out.println("ViewerController.updatePreviewMatrix: thumbnailsPanel = " + thumbnailsPanel);
+            // 常に現在選択されているSeriesの背景色を更新（showSelectedの値に関わらず）
+            DicomSeries currentSeries = getCurrentSeries();
+            if (currentSeries != null) {
+                updateSeriesHighlightColors(currentSeries);
+            }
 
-            // HOROS-20240407準拠: ViewerController.m 5477-5488行目
-            // if( showSelected)
-            // HOROS-20240407では、clearAllThumbnailHighlights()は呼ばない
-            // 各Seriesの基本背景色（5315-5318行目で設定）はそのまま保持され、
-            // 5372-5383行目で選択系の色のみ上書きされる
-
-            if (showSelected && currentDisplayedSeries != null) {
-                // HOROS-20240407準拠: ViewerController.m 5479行目
-                // NSInteger index = [[[previewMatrix cells]
-                // valueForKeyPath:@"representedObject.object"] indexOfObject: [[fileList[
-                // curMovieIndex] objectAtIndex:0] valueForKey:@"series"]];
-                // 現在表示されているSeriesのインデックスを見つける
-                int seriesIndex = -1;
-                Component[] components = previewMatrix.getComponents();
-                System.out.println(
-                        "ViewerController.updatePreviewMatrix: searching for currentDisplayedSeries, components.length = "
-                                + components.length);
-                if (currentDisplayedSeries != null) {
-                    String currentUID = currentDisplayedSeries.getSeriesInstanceUID();
-                    System.out.println(
-                            "ViewerController.updatePreviewMatrix: currentDisplayedSeries UID = " + currentUID);
-                    for (int i = 0; i < components.length; i++) {
-                        if (components[i] instanceof ThumbnailButton) {
-                            ThumbnailButton button = (ThumbnailButton) components[i];
-                            // HOROS-20240407準拠: representedObjectからSeriesを取得
-                            Object representedObj = button.getRepresentedObject();
-                            if (representedObj instanceof DicomSeries) {
-                                DicomSeries buttonSeries = (DicomSeries) representedObj;
-                                // HOROS-20240407準拠: seriesInstanceUIDで比較（equalsメソッドが正しく実装されていない可能性があるため）
-                                if (buttonSeries != null) {
-                                    String buttonUID = buttonSeries.getSeriesInstanceUID();
-                                    if (buttonUID != null && currentUID != null && buttonUID.equals(currentUID)) {
-                                        seriesIndex = i;
-                                        System.out.println("ViewerController.updatePreviewMatrix: found series index: "
-                                                + seriesIndex + " for series: " + buttonSeries.getName() + " (UID: "
-                                                + buttonUID + ")");
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    System.out.println(
-                            "ViewerController.updatePreviewMatrix: currentDisplayedSeries is null, cannot find index");
-                }
-
-                // HOROS-20240407準拠: ViewerController.m 5481-5482行目
-                // if( index != NSNotFound)
-                // [previewMatrix scrollCellToVisibleAtRow: index column:0];
-                // Java Swingでは、JScrollPaneのscrollRectToVisibleを使用
-                if (seriesIndex >= 0 && seriesIndex < components.length) {
-                    Component targetComponent = components[seriesIndex];
-
-                    // HOROS-20240407準拠: ThumbnailCell.m 73-91行目 - drawBezelWithFrame:inView:
-                    // ハイライト色を設定（赤色で選択を示す）
-                    if (targetComponent instanceof ThumbnailButton) {
-                        ThumbnailButton thumbnailButton = (ThumbnailButton) targetComponent;
-                        // HOROS-20240407準拠: ViewerController.m 4887行目 - _selectedItemColor
-                        // [NSColor colorWithCalibratedRed:252./255 green:177./255 blue:141./255
-                        // alpha:1]
-                        thumbnailButton.setHighlightColor(SELECTED_ITEM_COLOR); // 赤色でハイライト
-                        System.out.println(
-                                "ViewerController.updatePreviewMatrix: highlighted thumbnail at index: " + seriesIndex);
-                    }
-
-                    // HOROS-20240407準拠: ViewerController.m 5482行目
-                    // [previewMatrix scrollCellToVisibleAtRow: index column:0];
-                    // SwingUtilities.invokeLaterでUIスレッドでスクロールを実行
-                    // レイアウトが確定した後（validate()実行後）にスクロール
-                    final int finalSeriesIndex = seriesIndex;
-                    final Component finalTargetComponent = targetComponent;
-                    javax.swing.SwingUtilities.invokeLater(() -> {
-                        // HOROS-20240407準拠: getBounds()は親コンポーネント内の相対座標を返す
-                        java.awt.Rectangle rect = finalTargetComponent.getBounds();
-
-                        // デバッグ: スクロール情報を出力
-                        javax.swing.JViewport viewport = previewMatrixScrollView.getViewport();
-                        java.awt.Point viewPositionBefore = viewport.getViewPosition();
-                        System.out.println("ViewerController.updatePreviewMatrix: === SCROLL DEBUG ===");
-                        System.out.println("  Series index: " + finalSeriesIndex);
-                        System.out.println("  Target rect: " + rect);
-                        System.out.println("  Viewport position (before): " + viewPositionBefore);
-                        System.out.println("  Viewport size: " + viewport.getExtentSize());
-                        System.out.println("  PreviewMatrix size: " + previewMatrix.getSize());
-
-                        // HOROS-20240407準拠: NSMatrixのscrollCellToVisibleAtRow:column:相当
-                        // scrollRectToVisibleは、コンポーネント自身（previewMatrix）に対して呼び出す
-                        // これにより、JScrollPaneが自動的にスクロール位置を調整する
-                        previewMatrix.scrollRectToVisible(rect);
-
-                        // スクロール後の位置を確認
-                        java.awt.Point viewPositionAfter = viewport.getViewPosition();
-                        System.out.println("  Viewport position (after): " + viewPositionAfter);
-                        System.out.println("ViewerController.updatePreviewMatrix: === END SCROLL DEBUG ===");
-                    });
-                } else {
-                    System.out.println("ViewerController.updatePreviewMatrix: series index not found: " + seriesIndex
-                            + ", components.length: " + components.length);
-                }
+            if (showSelected) {
+                scrollAndHighlightSelectedSeries();
             } else {
-                // HOROS-20240407準拠: ViewerController.m 5486行目
-                // [[previewMatrixScrollView contentView] scrollToPoint: origin];
-                // スクロール位置をリセット（先頭に戻す）
-                previewMatrixScrollView.getViewport().setViewPosition(new java.awt.Point(0, 0));
+                resetScrollPosition();
             }
 
         } catch (Exception ex) {
             System.err.println("ViewerController.updatePreviewMatrix: error occurred");
             ex.printStackTrace();
+            clearPreviewMatrix();
         }
     }
 
@@ -996,7 +962,7 @@ public class ViewerController extends JFrame {
      */
     private ThumbnailButton createStudyCell(DicomStudy study, DicomStudy currentStudy, int studyIndex, int totalStudies,
             int seriesCount) {
-        ThumbnailButton button = new ThumbnailButton();
+        ThumbnailButton button = new ThumbnailButton(this);
 
         // HOROS-20240407準拠: ViewerController.m 5123行目
         // NSString *name = [[curStudy valueForKey:@"studyName"]
@@ -1166,12 +1132,39 @@ public class ViewerController extends JFrame {
     }
 
     /**
+     * Creates a placeholder thumbnail image.
+     * 
+     * @param text   The text to display on the thumbnail.
+     * @param width  The width of the image.
+     * @param height The height of the image.
+     * @return A BufferedImage to be used as a placeholder.
+     */
+    private java.awt.image.BufferedImage createPlaceholderThumbnail(String text, int width, int height) {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(width, height,
+                java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g2d = img.createGraphics();
+        g2d.setColor(java.awt.Color.DARK_GRAY);
+        g2d.fillRect(0, 0, width, height);
+        g2d.setColor(java.awt.Color.WHITE);
+        g2d.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        java.awt.Font font = new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 10);
+        g2d.setFont(font);
+        java.awt.FontMetrics fm = g2d.getFontMetrics();
+        int x = (width - fm.stringWidth(text)) / 2;
+        int y = (fm.getAscent() + (height - (fm.getAscent() + fm.getDescent())) / 2);
+        g2d.drawString(text, x, y);
+        g2d.dispose();
+        return img;
+    }
+
+    /**
      * Seriesセルを作成
      * HOROS-20240407準拠: ViewerController.m 5309-5441行目
      */
     private ThumbnailButton createSeriesCell(DicomSeries series, DicomStudy curStudy, DicomStudy currentStudy,
             List<DicomSeries> viewerSeries, List<DicomSeries> displayedSeries) {
-        ThumbnailButton button = new ThumbnailButton();
+        ThumbnailButton button = new ThumbnailButton(this);
 
         // HOROS-20240407準拠: ViewerController.m 5325行目
         // NSString *name = [curSeries valueForKey:@"name"];
@@ -1329,8 +1322,9 @@ public class ViewerController extends JFrame {
 
         // (2) 次にSeriesの状態によって上書き
         if (isInViewerSeries) {
-            // Red - 選択されている（現在表示されている）
-            // この色はupdatePreviewMatrix()の後半でsetHighlightColor()で設定される
+            // Viewer内で選択されているSeries：初期段階では明るい背景色（デフォルト）
+            // 後でupdateSeriesHighlightColorsで背景色が更新される
+            button.setHighlightColor(null);
             System.out.println("ViewerController.createSeriesCell: series " + series.getName() + " is in viewerSeries");
         } else if (isInDisplayedSeries) {
             // Yellow - 開かれている（他のビューワーで開いている）
@@ -1342,160 +1336,141 @@ public class ViewerController extends JFrame {
 
         // HOROS-20240407準拠: ViewerController.m 5385-5438行目
         // サムネイル画像の設定
-        System.out.println("ViewerController.createSeriesCell: creating thumbnail for series " + series.getName());
-        try {
-            // HOROS-20240407準拠: ViewerController.m 5387行目
-            // NSImage *img = [[[NSImage alloc] initWithData: [curSeries
-            // primitiveValueForKey:@"thumbnail"]] autorelease];
-            java.awt.image.BufferedImage thumbnailImage = null;
-            byte[] thumbnailData = series.getThumbnail();
-            System.out.println("ViewerController.createSeriesCell: thumbnailData = "
-                    + (thumbnailData != null ? thumbnailData.length + " bytes" : "null"));
+        java.awt.image.BufferedImage thumbnailImage = null;
+        int thumbnailHeight = cellSize.height - 40;
+        int thumbnailWidth = cellSize.width - 4;
+        if (thumbnailHeight < 20)
+            thumbnailHeight = 20;
 
+        try {
+            // 1. DBからサムネイルを読み込む
+            byte[] thumbnailData = series.getThumbnail();
             if (thumbnailData != null && thumbnailData.length > 0) {
-                // サムネイルデータから画像を読み込む
                 try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(thumbnailData)) {
                     thumbnailImage = javax.imageio.ImageIO.read(bais);
-                    System.out.println("ViewerController.createSeriesCell: loaded thumbnail from data: "
-                            + (thumbnailImage != null ? thumbnailImage.getWidth() + "x" + thumbnailImage.getHeight()
-                                    : "null"));
                 } catch (Exception e) {
-                    // サムネイルデータの読み込みに失敗した場合、後で生成する
-                    System.out.println(
-                            "ViewerController.createSeriesCell: failed to load thumbnail from data: " + e.getMessage());
-                    thumbnailImage = null;
+                    System.err.println(
+                            "Failed to read thumbnail data for series: " + series.getName() + ", " + e.getMessage());
+                    thumbnailImage = null; // 失敗した場合は次に進む
                 }
             }
 
-            // HOROS-20240407準拠: ViewerController.m 5389-5418行目
-            // サムネイルが存在しない場合、DCMPixから生成
+            // 2. サムネイルがない場合、DicomPixから生成
             if (thumbnailImage == null) {
-                System.out.println("ViewerController.createSeriesCell: generating thumbnail from DicomPix");
                 List<DicomImage> images = series.sortedImages();
-                System.out.println("ViewerController.createSeriesCell: images.size() = "
-                        + (images != null ? images.size() : "null"));
                 if (images != null && !images.isEmpty()) {
                     DicomImage firstImage = images.get(0);
-                    System.out.println("ViewerController.createSeriesCell: firstImage = "
-                            + (firstImage != null ? firstImage.toString() : "null"));
                     try {
-                        // HOROS-20240407準拠: ViewerController.m 5393行目
-                        // DCMPix* dcmPix = [[DCMPix alloc] initWithPath: [[images objectAtIndex: i]
-                        // valueForKey:@"completePath"] :0 :0 :nil :0 :[[[images objectAtIndex: i]
-                        // valueForKeyPath:@"series.id"] intValue] isBonjour:[[BrowserController
-                        // currentBrowser] isCurrentDatabaseBonjour] imageObj:[images objectAtIndex:
-                        // i]];
                         com.jj.dicomviewer.model.DicomPix dcmPix = new com.jj.dicomviewer.model.DicomPix(
                                 firstImage,
                                 firstImage.getFrameID() != null ? firstImage.getFrameID() : 0,
                                 1);
-
-                        // HOROS-20240407準拠: ViewerController.m 5395行目
-                        // [dcmPix CheckLoad];
                         dcmPix.loadImage();
-                        System.out.println(
-                                "ViewerController.createSeriesCell: dcmPix.loadImage() completed, bufferedImage = "
-                                        + (dcmPix.getBufferedImage() != null ? "not null" : "null"));
-
-                        // HOROS-20240407準拠: ViewerController.m 5399行目
-                        // img = [dcmPix generateThumbnailImageWithWW:0 WL:0];
                         if (dcmPix.getBufferedImage() != null) {
-                            // HOROS-20240407準拠: BrowserMatrixのセルサイズと同じサイズでサムネイルを生成
-                            // BrowserMatrixのセルサイズは105x113（固定）
-                            // テキスト領域を確保するため、サムネイル画像は少し小さくする
-                            // テキスト領域（約30-40px）を確保してサムネイルサイズを計算
-                            int thumbnailHeight = cellSize.height - 40; // テキスト領域を確保
-                            int thumbnailWidth = (int) (thumbnailHeight * 1.0); // アスペクト比を維持
-                            if (thumbnailWidth > cellSize.width - 4) {
-                                thumbnailWidth = cellSize.width - 4;
-                                thumbnailHeight = thumbnailWidth;
-                            }
-                            System.out.println("ViewerController.createSeriesCell: generating thumbnail: "
-                                    + thumbnailWidth + "x" + thumbnailHeight);
                             thumbnailImage = dcmPix.generateThumbnail(thumbnailWidth, thumbnailHeight);
-                            System.out.println(
-                                    "ViewerController.createSeriesCell: generated thumbnail: " + (thumbnailImage != null
-                                            ? thumbnailImage.getWidth() + "x" + thumbnailImage.getHeight()
-                                            : "null"));
                         } else {
-                            System.out.println("ViewerController.createSeriesCell: dcmPix.getBufferedImage() is null");
+                            System.err.println("Failed to generate thumbnail, DicomPix buffer is null for series: "
+                                    + series.getName());
+                            thumbnailImage = createPlaceholderThumbnail("No Image", thumbnailWidth, thumbnailHeight);
                         }
                     } catch (Exception e) {
-                        // 画像の読み込みに失敗した場合、デフォルト画像を使用
-                        System.err.println("Failed to load thumbnail for series: " + series.getName());
+                        System.err.println(
+                                "Failed to load DicomPix for thumbnail generation for series: " + series.getName());
                         e.printStackTrace();
+                        thumbnailImage = createPlaceholderThumbnail("Load Error", thumbnailWidth, thumbnailHeight);
                     }
+                } else {
+                    thumbnailImage = createPlaceholderThumbnail("No Images", thumbnailWidth, thumbnailHeight);
                 }
-            }
-
-            // HOROS-20240407準拠: ViewerController.m 5420-5421行目
-            // if( DisplayUseInvertedPolarity)
-            // img = [img imageInverted];
-            boolean displayUseInvertedPolarity = prefs.getBoolean("DisplayUseInvertedPolarity", false);
-            if (displayUseInvertedPolarity && thumbnailImage != null) {
-                // 画像を反転（簡易実装）
-                java.awt.image.BufferedImage inverted = new java.awt.image.BufferedImage(
-                        thumbnailImage.getWidth(), thumbnailImage.getHeight(),
-                        java.awt.image.BufferedImage.TYPE_INT_RGB);
-                java.awt.Graphics2D g2d = inverted.createGraphics();
-                g2d.drawImage(thumbnailImage, 0, 0, null);
-                g2d.dispose();
-                // 簡易反転処理（実際の実装ではより高度な処理が必要）
-                for (int y = 0; y < inverted.getHeight(); y++) {
-                    for (int x = 0; x < inverted.getWidth(); x++) {
-                        int rgb = inverted.getRGB(x, y);
-                        int r = 255 - ((rgb >> 16) & 0xFF);
-                        int g = 255 - ((rgb >> 8) & 0xFF);
-                        int b = 255 - (rgb & 0xFF);
-                        inverted.setRGB(x, y, (r << 16) | (g << 8) | b);
-                    }
-                }
-                thumbnailImage = inverted;
-            }
-
-            // HOROS-20240407準拠: ViewerController.m 5423-5437行目
-            // dbFontSizeに応じて画像をスケーリング
-            if (thumbnailImage != null) {
-                double scale = 1.0;
-                switch (dbFontSize) {
-                    case -1:
-                        scale = 0.6;
-                        break;
-                    case 0:
-                        scale = 1.0;
-                        break;
-                    case 1:
-                        scale = 1.3;
-                        break;
-                }
-
-                if (scale != 1.0) {
-                    int newWidth = (int) (thumbnailImage.getWidth() * scale);
-                    int newHeight = (int) (thumbnailImage.getHeight() * scale);
-                    java.awt.image.BufferedImage scaled = new java.awt.image.BufferedImage(
-                            newWidth, newHeight, java.awt.image.BufferedImage.TYPE_INT_RGB);
-                    java.awt.Graphics2D g2d = scaled.createGraphics();
-                    g2d.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
-                            java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                    g2d.drawImage(thumbnailImage, 0, 0, newWidth, newHeight, null);
-                    g2d.dispose();
-                    thumbnailImage = scaled;
-                }
-
-                // HOROS-20240407準拠: ViewerController.m 5430行目
-                // [cell setImage: img];
-                button.setIcon(new javax.swing.ImageIcon(thumbnailImage));
-            } else {
-                // HOROS-20240407準拠: ViewerController.m 5406, 5409, 5416行目
-                // img = [NSImage imageNamed:@"FileNotFound.tif"];
-                // TODO: デフォルト画像を設定
             }
         } catch (Exception e) {
-            System.err.println("Error loading thumbnail for series: " + series.getName());
+            System.err.println("Unexpected error during thumbnail creation for series: " + series.getName());
             e.printStackTrace();
+            thumbnailImage = createPlaceholderThumbnail("Error", thumbnailWidth, thumbnailHeight);
+        }
+
+        // 3. 必要に応じて画像を反転
+        boolean displayUseInvertedPolarity = prefs.getBoolean("DisplayUseInvertedPolarity", false);
+        if (displayUseInvertedPolarity && thumbnailImage != null) {
+            java.awt.image.RescaleOp op = new java.awt.image.RescaleOp(-1.0f, 255f, null);
+            thumbnailImage = op.filter(thumbnailImage, thumbnailImage);
+        }
+
+        // 4. スケーリングしてアイコンを設定
+        if (thumbnailImage != null) {
+            double scale = 1.0;
+            switch (dbFontSize) {
+                case -1:
+                    scale = 0.6;
+                    break;
+                case 0:
+                    scale = 1.0;
+                    break;
+                case 1:
+                    scale = 1.3;
+                    break;
+            }
+
+            if (scale != 1.0) {
+                int newWidth = (int) (thumbnailImage.getWidth() * scale);
+                int newHeight = (int) (thumbnailImage.getHeight() * scale);
+                if (newWidth > 0 && newHeight > 0) {
+                    java.awt.Image scaled = thumbnailImage.getScaledInstance(newWidth, newHeight,
+                            java.awt.Image.SCALE_SMOOTH);
+                    thumbnailImage = new java.awt.image.BufferedImage(newWidth, newHeight,
+                            java.awt.image.BufferedImage.TYPE_INT_RGB);
+                    thumbnailImage.getGraphics().drawImage(scaled, 0, 0, null);
+                }
+            }
+            button.setIcon(new javax.swing.ImageIcon(thumbnailImage));
+        } else {
+            // 最終的なフォールバック
+            button.setIcon(new javax.swing.ImageIcon(
+                    createPlaceholderThumbnail("Not Found", thumbnailWidth, thumbnailHeight)));
         }
 
         return button;
+    }
+
+    /**
+     * サムネイルクリック時の処理
+     * HOROS-20240407準拠: ViewerController.m 4413行目 - matrixPreviewPressed:
+     */
+    public void matrixPreviewPressed(ThumbnailButton sender) {
+        // HOROS-20240407準拠: ViewerController.m 4415行目
+        // ThumbnailCell *cell = [sender selectedCell];
+        // JavaではsenderがThumbnailButton自体
+
+        // HOROS-20240407準拠: ViewerController.m 4417-4424行目
+        // [cell setLineBreakMode: NSLineBreakByWordWrapping];
+        // [cell setFont:[NSFont boldSystemFontOfSize: [[BrowserController
+        // currentBrowser] fontSize: @"dbSmallMatrixFont"]]];
+        // [cell setImagePosition: NSImageBelow];
+        // [cell setTransparent:NO];
+        // [cell setEnabled:YES];
+        // [cell setButtonType:NSMomentaryPushInButton];
+        // [cell setBezelStyle:NSShadowlessSquareBezelStyle];
+        // [cell setHighlightsBy:NSContentsCellMask];
+        // [cell setImageScaling:NSImageScaleProportionallyDown];
+        // [cell setBordered:YES];
+        // JavaではThumbnailButtonの設定は既にされている
+
+        // HOROS-20240407準拠: ViewerController.m 4426行目
+        // id series = [[[sender selectedCell] representedObject] object];
+        Object representedObj = sender.getRepresentedObject();
+        DicomSeries series = null;
+        if (representedObj instanceof DicomSeries) {
+            series = (DicomSeries) representedObj;
+        }
+
+        // HOROS-20240407準拠: ViewerController.m 4428行目
+        // [self loadSelectedSeries: series rightClick: cell.rightClick];
+        loadSelectedSeries(series, sender.isRightClick());
+
+        // HOROS-20240407準拠: クリックされたSeriesの背景色を更新
+        if (series != null) {
+            updateSeriesHighlightColors(series);
+        }
     }
 
     /**
@@ -1515,6 +1490,60 @@ public class ViewerController extends JFrame {
         };
         Color color = colors[studyIndex % colors.length];
         return String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+    }
+
+    /**
+     * Seriesのハイライト色を更新
+     * HOROS-20240407準拠: クリックされたSeriesをハイライト + Studyの背景色を動的に変更
+     */
+    private void updateSeriesHighlightColors(DicomSeries selectedSeries) {
+        DicomStudy selectedStudy = selectedSeries.getStudy();
+
+        // 全てのボタンを処理
+        for (Component comp : previewMatrix.getComponents()) {
+            if (comp instanceof ThumbnailButton) {
+                ThumbnailButton button = (ThumbnailButton) comp;
+                Object representedObj = button.getRepresentedObject();
+
+                if (representedObj instanceof DicomStudy) {
+                    // Studyボタンの背景色を更新
+                    DicomStudy study = (DicomStudy) representedObj;
+                    if (study.getStudyInstanceUID() != null && selectedStudy.getStudyInstanceUID() != null
+                            && study.getStudyInstanceUID().equals(selectedStudy.getStudyInstanceUID())) {
+                        // 選択されたStudyのみ明るい背景
+                        button.setHighlightColor(null);
+                    } else {
+                        // それ以外は暗いグレーに統一（初期選択が残らないようにする）
+                        button.setHighlightColor(DIFFERENT_STUDY_COLOR);
+                    }
+                } else if (representedObj instanceof DicomSeries) {
+                    // Seriesボタンの背景色を更新
+                    DicomSeries series = (DicomSeries) representedObj;
+                    DicomStudy seriesStudy = series.getStudy();
+
+                    // 選択されたSeriesの場合はオレンジで常にハイライト
+                    if (series.getSeriesInstanceUID() != null && selectedSeries.getSeriesInstanceUID() != null
+                            && series.getSeriesInstanceUID().equals(selectedSeries.getSeriesInstanceUID())) {
+                        button.setHighlightColor(SELECTED_ITEM_COLOR);
+                        continue;
+                    }
+
+                    // Study別の背景色を設定
+                    if (seriesStudy.getStudyInstanceUID() != null && selectedStudy.getStudyInstanceUID() != null
+                            && seriesStudy.getStudyInstanceUID().equals(selectedStudy.getStudyInstanceUID())) {
+                        // 選択されたStudy内のSeries：明るい背景
+                        button.setHighlightColor(null);
+                    } else {
+                        // それ以外は暗いグレー
+                        button.setHighlightColor(DIFFERENT_STUDY_COLOR);
+                    }
+                }
+            }
+        }
+
+        // 再描画
+        previewMatrix.revalidate();
+        previewMatrix.repaint();
     }
 
     /**
@@ -1560,16 +1589,10 @@ public class ViewerController extends JFrame {
         javax.swing.SwingUtilities.invokeLater(() -> {
             updatePreviewMatrix(false);
         });
-    }
 
-    /**
-     * Seriesを選択
-     * HOROS-20240407準拠: ViewerController.m 4413行目 - matrixPreviewPressed:
-     */
-    private void matrixPreviewPressed(DicomSeries series, boolean rightClick) {
-        // HOROS-20240407準拠: ViewerController.m 4433行目
-        // [self loadSelectedSeries: series rightClick: cell.rightClick];
-        loadSelectedSeries(series, rightClick);
+        // HOROS-20240407準拠: ViewerController.m 4867行目
+        // [self syncThumbnails];
+        syncThumbnails();
     }
 
     /**
@@ -1655,9 +1678,20 @@ public class ViewerController extends JFrame {
 
                     for (DicomImage image : images) {
                         newFileList.add(image);
-                        // TODO: DicomPixを作成してpixListに追加
-                        // DicomPix pix = new DicomPix(image, ...);
-                        // newPixList.add(pix);
+                        // HOROS-20240407準拠: DicomPixを作成してpixListに追加
+                        // DCMPix *dcmPix = [[DCMPix alloc] initWithPath:...];
+                        try {
+                            com.jj.dicomviewer.model.DicomPix pix = new com.jj.dicomviewer.model.DicomPix(
+                                    image,
+                                    image.getFrameID() != null ? image.getFrameID() : 0,
+                                    1);
+                            newPixList.add(pix);
+                        } catch (Exception e) {
+                            System.err.println("Failed to create DicomPix for image: " + image.getSopInstanceUID()
+                                    + ", " + e.getMessage());
+                            // エラーの場合でもnullを追加してインデックスを合わせる
+                            newPixList.add(null);
+                        }
                     }
 
                     fileList[maxMovieIndex] = newFileList;
@@ -1681,12 +1715,18 @@ public class ViewerController extends JFrame {
             if (idx >= 0 && idx < maxMovieIndex) {
                 setMovieIndex((short) idx);
                 propagateSettings();
+                // HOROS-20240407準拠: Series切り替え後にハイライトを更新
+                updatePreviewMatrix(true);
             }
         } else {
             // HOROS-20240407準拠: ViewerController.m 4378行目
             // 同じ場合：mouseMovedを呼ぶ
             // TODO: mouseMovedの実装
         }
+
+        // HOROS-20240407準拠: ViewerController.m 4321行目
+        // [self syncThumbnails];
+        syncThumbnails();
     }
 
     /**
@@ -1735,6 +1775,12 @@ public class ViewerController extends JFrame {
             // HOROS-20240407準拠: 最初の画像を表示
             if (!pixListForView.isEmpty()) {
                 imageView.setIndex(0);
+
+                // HOROS-20240407準拠: 異なるシリーズに切り替わったので、scaleToFitを呼び出す
+                // updatePresentationStateFromSeriesが未実装のため、ここで明示的に呼び出す
+                // 理想的には、updatePresentationStateFromSeriesで保存されたスケール値を復元すべき
+                imageView.scaleToFit();
+                System.out.println("ViewerController.setMovieIndex: scaleToFit() called for new series");
             }
 
             System.out.println("ViewerController.setMovieIndex: setting movie index to " + index + ", pixList size: "
@@ -1804,5 +1850,72 @@ public class ViewerController extends JFrame {
 
         System.out.println("ViewerController.getDisplayedSeries: returning " + seriesArray.size() + " series");
         return seriesArray;
+    }
+
+    /**
+     * 現在のサムネイルを表示
+     * HOROS-20240407準拠: ViewerController.m 5560行目 - showCurrentThumbnail:
+     */
+    public void showCurrentThumbnail(Object sender) {
+        // HOROS-20240407準拠: ViewerController.m 5562-5565行目
+        // NSInteger index = [[[previewMatrix cells]
+        // valueForKeyPath:@"representedObject.object"] indexOfObject: [[fileList[
+        // curMovieIndex] objectAtIndex:0] valueForKey:@"series"]];
+        // if( index != NSNotFound)
+        // [previewMatrix scrollCellToVisibleAtRow: index column:0];
+        scrollAndHighlightSelectedSeries();
+    }
+
+    /**
+     * サムネイルを同期
+     * HOROS-20240407準拠: ViewerController.m 4582行目 - syncThumbnails
+     */
+    public void syncThumbnails() {
+        // HOROS-20240407準拠: ViewerController.m 4584行目
+        // ViewBoundsDidChangeProtect = YES;
+        // Javaでは同期処理なので不要
+
+        // HOROS-20240407準拠: ViewerController.m 4586-4610行目
+        for (ViewerController v : getDisplayed2DViewers()) {
+            boolean same = false;
+
+            // HOROS-20240407準拠: ViewerController.m 4589-4593行目
+            // if( [[NSUserDefaults standardUserDefaults] boolForKey:
+            // @"SyncSeriesListForAllComparativeStudies"])
+            // same = [v.currentStudy.patientUID isEqualToString:
+            // self.currentStudy.patientUID];
+            // else
+            // same = [[v studyInstanceUID] isEqualToString: [self studyInstanceUID]];
+            Preferences prefs = Preferences.userNodeForPackage(ViewerController.class);
+            boolean syncForAllComparativeStudies = prefs.getBoolean("SyncSeriesListForAllComparativeStudies", false);
+
+            if (syncForAllComparativeStudies) {
+                // 同じ患者のStudyを同期
+                String thisPatientUID = getCurrentStudy() != null ? getCurrentStudy().getPatientUID() : null;
+                String vPatientUID = v.getCurrentStudy() != null ? v.getCurrentStudy().getPatientUID() : null;
+                same = thisPatientUID != null && vPatientUID != null && thisPatientUID.equals(vPatientUID);
+            } else {
+                // 同じStudyを同期
+                String thisStudyUID = getStudyInstanceUID();
+                String vStudyUID = v.getStudyInstanceUID();
+                same = thisStudyUID != null && vStudyUID != null && thisStudyUID.equals(vStudyUID);
+            }
+
+            if (v != this && same) {
+                // HOROS-20240407準拠: ViewerController.m 4595-4597行目
+                // [[v.previewMatrixScrollView contentView] scrollToPoint:
+                // [[v.previewMatrixScrollView contentView] constrainScrollPoint:
+                // [[previewMatrix superview] bounds].origin]];
+                // [v.previewMatrixScrollView reflectScrolledClipView:
+                // [v.previewMatrixScrollView contentView]];
+                java.awt.Point currentScrollPosition = previewMatrixScrollView.getViewport().getViewPosition();
+                v.previewMatrixScrollView.getViewport().setViewPosition(currentScrollPosition);
+                v.previewMatrixScrollView.revalidate();
+            }
+        }
+
+        // HOROS-20240407準拠: ViewerController.m 4611行目
+        // ViewBoundsDidChangeProtect = NO;
+        // Javaでは同期処理なので不要
     }
 }

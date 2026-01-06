@@ -3242,12 +3242,20 @@ public class BrowserController extends JFrame {
     /**
      * マトリックスがダブルクリックされたときの処理
      * HOROS-20240407準拠: - (IBAction) matrixDoublePressed:(id)sender (9381行目)
+     *
+     * HOROS-20240407準拠: DCMView.m 4319-4322行目
+     * - PreviewView（imageView）でのダブルクリック時にも呼び出される
+     * - if( clickCount == 2 && [self window] == [[BrowserController currentBrowser] window])
+     * - {
+     * -     [[BrowserController currentBrowser] matrixDoublePressed:nil];
+     * - }
      */
     public void matrixDoublePressed(BrowserMatrix sender) {
         // HOROS-20240407準拠: BrowserController.m 9383行目
         // id  theCell = [oMatrix selectedCell];
-        javax.swing.JButton theCell = sender.selectedCell();
-        
+        // HOROS-20240407準拠: senderがnullの場合（PreviewViewからの呼び出し）はoMatrixから選択されたセルを取得
+        javax.swing.JButton theCell = (sender != null) ? sender.selectedCell() : (oMatrix != null ? oMatrix.selectedCell() : null);
+
         // HOROS-20240407準拠: BrowserController.m 9385-9387行目
         // if( [theCell tag] >= 0)
         // {
