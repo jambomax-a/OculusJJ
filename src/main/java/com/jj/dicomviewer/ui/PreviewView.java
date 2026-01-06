@@ -90,7 +90,8 @@ public class PreviewView extends DCMView {
      * BrowserControllerに委譲
      * HOROS-20240407準拠: PreviewView.m のscrollWheel実装
      */
-    private void scrollWheel(MouseWheelEvent e) {
+    @Override
+    protected void scrollWheel(MouseWheelEvent e) {
         if (browserController != null) {
             // HOROS-20240407準拠: BrowserControllerのscrollWheelメソッドに委譲
             // wheelRotationは通常、上にスクロールで負の値、下にスクロールで正の値

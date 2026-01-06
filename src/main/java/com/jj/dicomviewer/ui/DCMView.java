@@ -638,10 +638,20 @@ public class DCMView extends JPanel {
 
         int newImage = curImage + inc;
 
-        // HOROS-20240407準拠: DCMView.m scrollWheel: の画像インデックス範囲チェック
-        // loopScrollWheel設定は現時点では未実装（常にfalseとして扱う）
-        if (newImage < 0) newImage = 0;
-        if (newImage >= dcmPixList.size()) newImage = dcmPixList.size() - 1;
+        // HOROS-20240407準拠: DCMView.m scrollWheel: 5019-5023行目の画像インデックス範囲チェック
+        // loopScrollWheel設定でループするかクランプするかを制御
+        // デフォルトはtrue（ループする）
+        boolean loopScrollWheel = true; // TODO: ユーザー設定から取得
+
+        if (dcmPixList.size() > 3 && loopScrollWheel) {
+            // HOROS-20240407準拠: 画像数が3より多く、loopScrollWheelが有効な場合はループ
+            if (newImage < 0) newImage = dcmPixList.size() - 1;
+            if (newImage >= dcmPixList.size()) newImage = 0;
+        } else {
+            // HOROS-20240407準拠: それ以外はクランプ（端で止まる）
+            if (newImage < 0) newImage = 0;
+            if (newImage >= dcmPixList.size()) newImage = dcmPixList.size() - 1;
+        }
 
         // HOROS-20240407準拠: setIndexを呼び出して画像を切り替える
         setIndex(newImage);

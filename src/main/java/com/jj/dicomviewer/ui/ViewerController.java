@@ -1758,11 +1758,11 @@ public class ViewerController extends JFrame {
      * HOROS-20240407準拠: ViewerController.m setMovieIndex:
      */
     private void setMovieIndex(short index) {
-        if (index < 0 || index >= maxMovieIndex) {
-            return;
-        }
-
+        // HOROS-20240407準拠: ViewerController.m 17502-17512行目
+        // シリーズインデックスのループ処理
         curMovieIndex = index;
+        if (curMovieIndex < 0) curMovieIndex = (short) (maxMovieIndex - 1);
+        if (curMovieIndex >= maxMovieIndex) curMovieIndex = 0;
 
         // HOROS-20240407準拠: 画像を更新
         if (imageView != null && pixList[curMovieIndex] != null && !pixList[curMovieIndex].isEmpty()
