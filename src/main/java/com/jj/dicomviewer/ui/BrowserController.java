@@ -31,6 +31,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 
 import com.jj.dicomviewer.model.DicomDatabase;
+import com.jj.dicomviewer.model.DicomSeries;
 import com.jj.dicomviewer.threads.ThreadsManager;
 
 /**
@@ -5339,7 +5340,33 @@ public class BrowserController extends JFrame {
             viewerDICOMInt(false, java.util.Arrays.asList(item), null);
         }
     }
-    
+
+    /**
+     * Seriesに対して新しいViewerControllerを開く
+     * HOROS-20240407準拠: ViewerController.m 4301行目
+     * ViewerController *newViewer = [[BrowserController currentBrowser] loadSeries :series :nil :YES keyImagesOnly: displayOnlyKeyImages];
+     */
+    public void openViewerForSeries(DicomSeries series) {
+        if (series == null) {
+            return;
+        }
+
+        // HOROS-20240407準拠: BrowserController.loadSeriesを呼び出して新しいViewerControllerを作成
+        // loadSeriesは内部でviewerDICOMIntを呼び出す
+        List<Object> selectedLines = new java.util.ArrayList<>();
+        selectedLines.add(series);
+
+        // viewerDICOMIntを呼び出して新しいViewerControllerを作成
+        // 第1引数: movieViewer (false)
+        // 第2引数: selectedLines (選択されたSeries)
+        // 第3引数: viewer (null = 新しいウィンドウを作成)
+        // 第4引数: tileWindows (true)
+        // 第5引数: protocol (null)
+        viewerDICOMInt(false, selectedLines, null, true, null);
+
+        System.out.println("BrowserController.openViewerForSeries: opened new viewer for series: " + series.getName());
+    }
+
     /**
      * ビューワーを開く
      * HOROS-20240407準拠: - (void) viewerDICOM: (id)sender (13372行目)

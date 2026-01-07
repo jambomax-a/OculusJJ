@@ -15,25 +15,28 @@ import java.util.prefs.Preferences;
  * サムネイル画像とテキストを表示するボタン
  */
 public class ThumbnailButton extends JButton {
-    
+
     // HOROS-20240407準拠: ThumbnailCell.m 41-43行目
     private static final int FULLSIZEHEIGHT = 120;
     private static final int HALFSIZEHEIGHT = 60;
     private static final int SIZEWIDTH = 100;
-    
+
     // HOROS-20240407準拠: ThumbnailCell.h 43行目
     // BOOL rightClick;
     private boolean rightClick = false;
-    
+
     // HOROS-20240407準拠: ThumbnailCell.h 44行目
     // BOOL invertedSet, invertedColors;
     private boolean invertedSet = false;
     private boolean invertedColors = false;
-    
+
     // HOROS-20240407準拠: ThumbnailCell.h representedObject
     // O2ViewerThumbnailsMatrixRepresentedObject *representedObject;
     // Java Swingでは、SeriesまたはStudyを直接保持
     private Object representedObject = null;
+
+    // HOROS-20240407準拠: ViewerControllerへの参照（クリック時に使用）
+    private ViewerController viewer = null;
 
     // HOROS-20240407準拠: ThumbnailCell.m 73-91行目 - drawBezelWithFrame:inView:
     // ハイライト表示用の背景色
@@ -44,7 +47,7 @@ public class ThumbnailButton extends JButton {
     public boolean isRightClick() {
         return rightClick;
     }
-    
+
     /**
      * representedObjectを設定
      * HOROS-20240407準拠: ThumbnailCell.h representedObject
@@ -52,7 +55,7 @@ public class ThumbnailButton extends JButton {
     public void setRepresentedObject(Object obj) {
         this.representedObject = obj;
     }
-    
+
     /**
      * representedObjectを取得
      * HOROS-20240407準拠: ThumbnailCell.h representedObject
@@ -60,7 +63,7 @@ public class ThumbnailButton extends JButton {
     public Object getRepresentedObject() {
         return this.representedObject;
     }
-    
+
     /**
      * サムネイルセルの幅を取得
      * HOROS-20240407準拠: ThumbnailCell.m 49行目 - thumbnailCellWidth
@@ -68,7 +71,7 @@ public class ThumbnailButton extends JButton {
     public static float getThumbnailCellWidth() {
         Preferences prefs = Preferences.userNodeForPackage(ThumbnailButton.class);
         int dbFontSize = prefs.getInt("dbFontSize", 0);
-        
+
         float width = SIZEWIDTH;
         switch (dbFontSize) {
             case -1:
@@ -83,12 +86,14 @@ public class ThumbnailButton extends JButton {
         }
         return width;
     }
-    
+
     /**
      * コンストラクタ
      */
-    public ThumbnailButton() {
+    public ThumbnailButton(ViewerController viewer) {
         super();
+
+        this.viewer = viewer;
 
         // HOROS-20240407準拠: ViewerController.m 5072-5081行目
         // [cell setImagePosition: NSImageBelow];
@@ -122,8 +127,37 @@ public class ThumbnailButton extends JButton {
         // HOROS-20240407準拠: ViewerController.m 5085行目
         // [cell setImage: nil];
         setIcon(null);
+
+        // HOROS-20240407準拠: クリック時にmatrixPreviewPressedを呼び出す
+        addActionListener(e -> {
+            if (viewer != null) {
+                viewer.matrixPreviewPressed(this);
+            }
+        });
+
+        // HOROS-20240407準拠: 右クリック検出用のMouseListener
+        // ThumbnailCell.m では rightClick プロパティがマウスイベントで設定される
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                // HOROS-20240407準拠: 右クリック（MouseEvent.BUTTON3）を検出
+                if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
+                    rightClick = true;
+                } else {
+                    rightClick = false;
+                }
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                // クリック終了後にrightClickフラグをリセット
+                // （次のクリックに影響しないように）
+                // ※ただし、ActionListenerが先に呼ばれるため、
+                // ActionListener内でrightClickの値を使用できる
+            }
+        });
     }
-    
+
     /**
      * セルのサイズを取得
      * HOROS-20240407準拠: ThumbnailCell.m 97行目 - cellSize
@@ -132,19 +166,20 @@ public class ThumbnailButton extends JButton {
         // HOROS-20240407準拠: ThumbnailCell.m 99-106行目
         // O2ViewerThumbnailsMatrixRepresentedObject* oro = [self representedObject];
         // float h = 0;
-        // if ([oro.object isKindOfClass:[NSManagedObject class]] || oro.children.count || oro == nil)
-        //     h = FULLSIZEHEIGHT;
+        // if ([oro.object isKindOfClass:[NSManagedObject class]] || oro.children.count
+        // || oro == nil)
+        // h = FULLSIZEHEIGHT;
         // else
-        //     h = HALFSIZEHEIGHT;
+        // h = HALFSIZEHEIGHT;
         // 簡易実装: 常にFULLSIZEHEIGHTを使用
         float h = FULLSIZEHEIGHT;
-        
+
         Preferences prefs = Preferences.userNodeForPackage(ThumbnailButton.class);
         int dbFontSize = prefs.getInt("dbFontSize", 0);
-        
+
         float width = getThumbnailCellWidth();
         float height = h;
-        
+
         switch (dbFontSize) {
             case -1:
                 height = h * 0.8f;
@@ -156,10 +191,10 @@ public class ThumbnailButton extends JButton {
                 height = h * 1.3f;
                 break;
         }
-        
-        return new Dimension((int)width, (int)height);
+
+        return new Dimension((int) width, (int) height);
     }
-    
+
     /**
      * 推奨サイズを取得
      */
@@ -167,7 +202,7 @@ public class ThumbnailButton extends JButton {
     public Dimension getPreferredSize() {
         return getCellSize();
     }
-    
+
     /**
      * 最小サイズを取得
      */
@@ -175,7 +210,7 @@ public class ThumbnailButton extends JButton {
     public Dimension getMinimumSize() {
         return getCellSize();
     }
-    
+
     /**
      * 最大サイズを取得
      */
@@ -198,11 +233,10 @@ public class ThumbnailButton extends JButton {
         if (color != null) {
             // HOROS-20240407準拠: 背景色を半透明にする
             Color transparentColor = new Color(
-                color.getRed(),
-                color.getGreen(),
-                color.getBlue(),
-                (int)(255 * 0.75)
-            );
+                    color.getRed(),
+                    color.getGreen(),
+                    color.getBlue(),
+                    (int) (255 * 0.75));
             setOpaque(false);
             setContentAreaFilled(false);
             setBackground(transparentColor);
@@ -212,7 +246,8 @@ public class ThumbnailButton extends JButton {
             setOpaque(false);
             setContentAreaFilled(false);
             setBackground(new Color(220, 220, 220)); // 明るいグレー
-            System.out.println("ThumbnailButton.setHighlightColor: clearing color, setting to light gray (220,220,220)");
+            System.out
+                    .println("ThumbnailButton.setHighlightColor: clearing color, setting to light gray (220,220,220)");
         }
 
         repaint();

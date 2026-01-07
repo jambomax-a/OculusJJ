@@ -1650,19 +1650,23 @@ public class ViewerController extends JFrame {
             // HOROS-20240407準拠: ViewerController.m 4301行目
             // ViewerController *newViewer = [[BrowserController currentBrowser] loadSeries
             // :series :nil :YES keyImagesOnly: displayOnlyKeyImages];
-            // HOROS-20240407準拠: ViewerController.m 4301行目
-            // ViewerController *newViewer = [[BrowserController currentBrowser] loadSeries
-            // :series :nil :YES keyImagesOnly: displayOnlyKeyImages];
-            // TODO: 新しいViewerControllerを作成する実装（現在は簡易実装）
+            // 右クリック時は新しいViewerControllerウィンドウを作成
             BrowserController browser = BrowserController.currentBrowser();
             if (browser != null) {
-                List<DicomImage> images = targetSeries.sortedImages();
-                if (images != null && !images.isEmpty()) {
-                    // TODO: viewerDICOMIntを使用して新しいViewerControllerを作成
-                    System.out.println("ViewerController.loadSelectedSeries: creating new viewer for series: "
-                            + targetSeries.getName());
-                    // TODO: 実装
-                }
+                System.out.println("ViewerController.loadSelectedSeries: creating new viewer for series (right-click): "
+                        + targetSeries.getName());
+
+                // HOROS-20240407準拠: BrowserController.loadSeriesを呼び出す
+                // loadSeriesは内部でviewerDICOMIntを呼び出して新しいViewerControllerを作成する
+                // 現在、loadSeriesメソッドがないため、viewerDICOMIntを直接呼び出す
+                List<Object> selectedLines = new java.util.ArrayList<>();
+                selectedLines.add(targetSeries);
+
+                // viewerDICOMIntを呼び出して新しいViewerControllerを作成
+                // 第1引数: movieViewer (false)
+                // 第2引数: selectedLines (選択されたSeries)
+                // 第3引数: viewer (null = 新しいウィンドウを作成)
+                browser.openViewerForSeries(targetSeries);
             }
             return;
         }
