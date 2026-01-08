@@ -198,11 +198,12 @@ public class ViewerController extends JFrame {
                 }
             }
 
-            // HOROS-20240407準拠: 最適化 - 不要な行列を削除
-            if (rows * columns > viewerCount && rows * (columns - 1) >= viewerCount) {
+            // HOROS-20240407準拠: AppController.m 5196-5200行目 - 最適化（不要な行列を削除）
+            // 厳密に == で比較（>= ではない）
+            if (rows * columns > viewerCount && rows * (columns - 1) == viewerCount) {
                 columns--;
             }
-            if (rows * columns > viewerCount && (rows - 1) * columns >= viewerCount) {
+            if (rows * columns > viewerCount && (rows - 1) * columns == viewerCount) {
                 rows--;
             }
         }
