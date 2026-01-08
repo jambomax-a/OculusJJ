@@ -140,7 +140,7 @@ public class ViewerController extends JFrame {
 
     /**
      * 複数のViewerControllerウィンドウを自動的にタイル状に配置
-     * HOROS-20240407準拠: AppController.m tileWindows: メソッド
+     * HOROS-20240407準拠: AppController.m tileWindows: (4915-5549行目) displayViewers: (4518-4591行目)
      */
     public static void tileWindows() {
         List<ViewerController> viewers = getDisplayed2DViewers();
@@ -148,7 +148,7 @@ public class ViewerController extends JFrame {
             return;
         }
 
-        // HOROS-20240407準拠: 画面サイズを取得
+        // HOROS-20240407準拠: 画面サイズを取得 (AppController.m usefullRectForScreen: 4836-4855行目)
         java.awt.GraphicsEnvironment ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
         java.awt.GraphicsDevice gd = ge.getDefaultScreenDevice();
         java.awt.Rectangle screenBounds = gd.getDefaultConfiguration().getBounds();
@@ -162,19 +162,69 @@ public class ViewerController extends JFrame {
         int screenWidth = screenBounds.width - insets.left - insets.right;
         int screenHeight = screenBounds.height - insets.top - insets.bottom;
 
-        // HOROS-20240407準拠: ウィンドウ数に応じてグリッドレイアウトを計算
         int viewerCount = viewers.size();
-        int columns = (int) Math.ceil(Math.sqrt(viewerCount));
-        int rows = (int) Math.ceil((double) viewerCount / columns);
+
+        // HOROS-20240407準拠: AppController.m 5101-5156行目 - 画面の縦横比を判定
+        boolean landscape = (screenWidth / (double) screenHeight > 1.0);
+        float landscapeRatio = (screenWidth / (double) screenHeight > 1.7) ? 2.0f : 1.5f;
+        float portraitRatio = (screenHeight / (double) screenWidth > 1.7) ? 0.49f : 0.9f;
+
+        // HOROS-20240407準拠: AppController.m 5138-5150行目 - デフォルトの行列を設定
+        int rows, columns;
+        if (landscape) {
+            // 横長スクリーン: 2列×1行から開始
+            columns = 2;
+            rows = 1;
+        } else {
+            // 縦長スクリーン: 1列×2行から開始
+            columns = 1;
+            rows = 2;
+        }
+
+        // HOROS-20240407準拠: AppController.m 5159-5203行目 - ウィンドウ数に応じて行列を調整
+        if (viewerCount > (rows * columns)) {
+            float ratioValue = landscape ? landscapeRatio : portraitRatio;
+
+            // アスペクト比を維持しながらグリッドを拡大
+            while (viewerCount > (rows * columns)) {
+                float ratio = (float) columns / (float) rows;
+
+                if (ratio > ratioValue) {
+                    // 比率が大きすぎる → 行を増やす
+                    rows++;
+                } else {
+                    // 比率が小さすぎる → 列を増やす
+                    columns++;
+                }
+            }
+
+            // HOROS-20240407準拠: 最適化 - 不要な行列を削除
+            if (rows * columns > viewerCount && rows * (columns - 1) >= viewerCount) {
+                columns--;
+            }
+            if (rows * columns > viewerCount && (rows - 1) * columns >= viewerCount) {
+                rows--;
+            }
+        }
+
+        System.out.println("ViewerController.tileWindows: tiling " + viewerCount + " windows in " + rows + "x" + columns + " grid (landscape=" + landscape + ")");
+        System.out.println("ViewerController.tileWindows: screen=" + screenWidth + "x" + screenHeight);
+
+        // HOROS-20240407準拠: AppController.m displayViewers: 4567-4578行目 - 端数を削除して隙間なく配置
+        int temp;
+        temp = screenWidth / columns;
+        screenWidth = temp * columns;  // 端数を削除
+
+        temp = screenHeight / rows;
+        screenHeight = temp * rows;    // 端数を削除
 
         // ウィンドウのサイズを計算
         int windowWidth = screenWidth / columns;
         int windowHeight = screenHeight / rows;
 
-        System.out.println("ViewerController.tileWindows: tiling " + viewerCount + " windows in " + rows + "x" + columns + " grid");
-        System.out.println("ViewerController.tileWindows: screen=" + screenWidth + "x" + screenHeight + ", window=" + windowWidth + "x" + windowHeight);
+        System.out.println("ViewerController.tileWindows: adjusted screen=" + screenWidth + "x" + screenHeight + ", window=" + windowWidth + "x" + windowHeight);
 
-        // HOROS-20240407準拠: 各ウィンドウを配置
+        // HOROS-20240407準拠: AppController.m displayViewers: 4563-4589行目 - 各ウィンドウを配置
         int index = 0;
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < columns; col++) {
@@ -183,15 +233,24 @@ public class ViewerController extends JFrame {
                 }
 
                 ViewerController viewer = viewers.get(index);
+
+                // HOROS-20240407準拠: 位置とサイズを計算
                 int x = screenX + col * windowWidth;
+                // Javaは上から下なので、rowをそのまま使用（macOSは下から上なので反転が必要）
                 int y = screenY + row * windowHeight;
 
+                // HOROS-20240407準拠: ViewerController.m setWindowFrame: 3054-3057行目 - 端数を四捨五入
+                x = Math.round(x);
+                y = Math.round(y);
+                int width = Math.round(windowWidth);
+                int height = Math.round(windowHeight);
+
                 // ウィンドウを配置
-                viewer.setBounds(x, y, windowWidth, windowHeight);
+                viewer.setBounds(x, y, width, height);
                 viewer.setVisible(true);
                 viewer.toFront();
 
-                System.out.println("ViewerController.tileWindows: viewer[" + index + "] at (" + x + "," + y + ") size=" + windowWidth + "x" + windowHeight);
+                System.out.println("ViewerController.tileWindows: viewer[" + index + "] row=" + row + " col=" + col + " at (" + x + "," + y + ") size=" + width + "x" + height);
 
                 index++;
             }
