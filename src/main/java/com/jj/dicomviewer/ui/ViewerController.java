@@ -59,6 +59,10 @@ public class ViewerController extends JFrame {
     // #define MAX4D 500
     private static final int MAX4D = 500;
 
+    // HOROS-20240407準拠: ViewerController.m 全てのViewerControllerインスタンスを管理
+    // + (NSMutableArray*) getDisplayed2DViewers
+    private static final List<ViewerController> displayedViewers = new java.util.concurrent.CopyOnWriteArrayList<>();
+
     // HOROS-20240407準拠: ViewerController.h 279-283行目
     // NSMutableArray *fileList[ MAX4D];
     // NSMutableArray<DCMPix *> *pixList[MAX4D];
@@ -118,6 +122,82 @@ public class ViewerController extends JFrame {
         return true;
     }
 
+    /**
+     * 表示されている全ての2D ViewerControllerを取得
+     * HOROS-20240407準拠: ViewerController.m getDisplayed2DViewers
+     */
+    public static List<ViewerController> getDisplayed2DViewers() {
+        // HOROS-20240407準拠: 2Dビューワーのみをフィルタリングしてリストを返す
+        // CopyOnWriteArrayListなので、新しいリストを作成して返す
+        List<ViewerController> result = new java.util.ArrayList<>();
+        for (ViewerController viewer : displayedViewers) {
+            if (viewer.is2DViewer() && viewer.isVisible()) {
+                result.add(viewer);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 複数のViewerControllerウィンドウを自動的にタイル状に配置
+     * HOROS-20240407準拠: AppController.m tileWindows: メソッド
+     */
+    public static void tileWindows() {
+        List<ViewerController> viewers = getDisplayed2DViewers();
+        if (viewers.isEmpty()) {
+            return;
+        }
+
+        // HOROS-20240407準拠: 画面サイズを取得
+        java.awt.GraphicsEnvironment ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
+        java.awt.GraphicsDevice gd = ge.getDefaultScreenDevice();
+        java.awt.Rectangle screenBounds = gd.getDefaultConfiguration().getBounds();
+
+        // タスクバーやメニューバーを考慮した実際の作業領域を取得
+        java.awt.Toolkit toolkit = java.awt.Toolkit.getDefaultToolkit();
+        java.awt.Insets insets = toolkit.getScreenInsets(gd.getDefaultConfiguration());
+
+        int screenX = screenBounds.x + insets.left;
+        int screenY = screenBounds.y + insets.top;
+        int screenWidth = screenBounds.width - insets.left - insets.right;
+        int screenHeight = screenBounds.height - insets.top - insets.bottom;
+
+        // HOROS-20240407準拠: ウィンドウ数に応じてグリッドレイアウトを計算
+        int viewerCount = viewers.size();
+        int columns = (int) Math.ceil(Math.sqrt(viewerCount));
+        int rows = (int) Math.ceil((double) viewerCount / columns);
+
+        // ウィンドウのサイズを計算
+        int windowWidth = screenWidth / columns;
+        int windowHeight = screenHeight / rows;
+
+        System.out.println("ViewerController.tileWindows: tiling " + viewerCount + " windows in " + rows + "x" + columns + " grid");
+        System.out.println("ViewerController.tileWindows: screen=" + screenWidth + "x" + screenHeight + ", window=" + windowWidth + "x" + windowHeight);
+
+        // HOROS-20240407準拠: 各ウィンドウを配置
+        int index = 0;
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < columns; col++) {
+                if (index >= viewerCount) {
+                    break;
+                }
+
+                ViewerController viewer = viewers.get(index);
+                int x = screenX + col * windowWidth;
+                int y = screenY + row * windowHeight;
+
+                // ウィンドウを配置
+                viewer.setBounds(x, y, windowWidth, windowHeight);
+                viewer.setVisible(true);
+                viewer.toFront();
+
+                System.out.println("ViewerController.tileWindows: viewer[" + index + "] at (" + x + "," + y + ") size=" + windowWidth + "x" + windowHeight);
+
+                index++;
+            }
+        }
+    }
+
     // HOROS-20240407準拠: ViewerController.h 101行目
     // IBOutlet NSMatrix *previewMatrix;
     // IBOutlet NSScrollView *previewMatrixScrollView;
@@ -153,9 +233,7 @@ public class ViewerController extends JFrame {
         super("DICOM Viewer");
 
         // HOROS-20240407準拠: 開いているViewerControllerのリストに追加
-        synchronized (allViewers) {
-            allViewers.add(this);
-        }
+        displayedViewers.add(this);
 
         // HOROS-20240407準拠: ViewerController.m 7637行目
         // self = [super initWithWindowNibName:@"Viewer"];
@@ -230,6 +308,8 @@ public class ViewerController extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                // HOROS-20240407準拠: リストから削除
+                displayedViewers.remove(ViewerController.this);
                 processWindowEvent(e);
             }
         });
@@ -1646,6 +1726,7 @@ public class ViewerController extends JFrame {
         // HOROS-20240407準拠: ViewerController.m 4293-4323行目
         // rightClickまたはCommandキーの場合：新しいViewerControllerを作成
         // TODO: Commandキーの検出（現在はrightClickのみ対応）
+        System.out.println("ViewerController.loadSelectedSeries: rightClick=" + rightClick + ", series=" + targetSeries.getName());
         if (rightClick) {
             // HOROS-20240407準拠: ViewerController.m 4301行目
             // ViewerController *newViewer = [[BrowserController currentBrowser] loadSeries
@@ -1861,23 +1942,6 @@ public class ViewerController extends JFrame {
 
         // 画像インデックスを変更
         imageView.setIndex(sliderValue);
-    }
-
-    /**
-     * HOROS-20240407準拠: ViewerController.m getDisplayed2DViewers
-     * 開いているすべての2D ViewerControllerを取得
-     */
-    private static List<ViewerController> getDisplayed2DViewers() {
-        // HOROS-20240407準拠: ViewerController.m 560-577行目
-        List<ViewerController> viewersList = new ArrayList<>();
-        synchronized (allViewers) {
-            for (ViewerController w : allViewers) {
-                if (w != null && !w.windowWillClose && w.isDisplayable()) {
-                    viewersList.add(w);
-                }
-            }
-        }
-        return viewersList;
     }
 
     /**

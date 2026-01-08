@@ -5365,6 +5365,18 @@ public class BrowserController extends JFrame {
         viewerDICOMInt(false, selectedLines, null, true, null);
 
         System.out.println("BrowserController.openViewerForSeries: opened new viewer for series: " + series.getName());
+
+        // HOROS-20240407準拠: ViewerController.m 4301-4306行目
+        // AUTOTILINGが有効な場合は自動的にタイル配置
+        // if( [[NSUserDefaults standardUserDefaults] boolForKey: @"AUTOTILING"])
+        //     [NSApp sendAction: @selector(tileWindows:) to:nil from: self];
+        boolean autoTiling = true; // TODO: ユーザー設定から取得
+        if (autoTiling) {
+            // タイル配置を少し遅延させて、ウィンドウが完全に表示されるのを待つ
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                ViewerController.tileWindows();
+            });
+        }
     }
 
     /**

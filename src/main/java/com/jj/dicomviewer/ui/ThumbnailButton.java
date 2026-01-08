@@ -130,6 +130,7 @@ public class ThumbnailButton extends JButton {
 
         // HOROS-20240407準拠: クリック時にmatrixPreviewPressedを呼び出す
         addActionListener(e -> {
+            System.out.println("ThumbnailButton.actionPerformed: rightClick=" + rightClick);
             if (viewer != null) {
                 viewer.matrixPreviewPressed(this);
             }
@@ -139,21 +140,21 @@ public class ThumbnailButton extends JButton {
         // ThumbnailCell.m では rightClick プロパティがマウスイベントで設定される
         addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
-            public void mousePressed(java.awt.event.MouseEvent e) {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
                 // HOROS-20240407準拠: 右クリック（MouseEvent.BUTTON3）を検出
                 if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
                     rightClick = true;
+                    System.out.println("ThumbnailButton.mouseClicked: RIGHT CLICK detected, calling matrixPreviewPressed");
+
+                    // 右クリック時はActionListenerが発火しないため、直接matrixPreviewPressedを呼び出す
+                    if (viewer != null) {
+                        viewer.matrixPreviewPressed(ThumbnailButton.this);
+                    }
                 } else {
                     rightClick = false;
+                    System.out.println("ThumbnailButton.mouseClicked: LEFT CLICK detected");
+                    // 左クリックはActionListenerに任せる
                 }
-            }
-
-            @Override
-            public void mouseReleased(java.awt.event.MouseEvent e) {
-                // クリック終了後にrightClickフラグをリセット
-                // （次のクリックに影響しないように）
-                // ※ただし、ActionListenerが先に呼ばれるため、
-                // ActionListener内でrightClickの値を使用できる
             }
         });
     }
