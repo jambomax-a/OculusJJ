@@ -6,6 +6,9 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Dimension;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Stroke;
 import javax.swing.JPanel;
 
 import com.jj.dicomviewer.model.DicomPix;
@@ -36,6 +39,10 @@ public class DCMView extends JPanel {
     // HOROS-20240407準拠: DCMView.h 180行目 - short curImage, startImage;
     protected short curImage = 0;
     protected short startImage = 0;
+
+    public short getCurImage() {
+        return curImage;
+    }
 
     // HOROS-20240407準拠: DCMView.h 147行目 - BOOL volumicSeries;
     protected boolean volumicSeries = false;
@@ -86,6 +93,22 @@ public class DCMView extends JPanel {
     // annotationType = [[NSUserDefaults standardUserDefaults]
     // integerForKey:@"ANNOTATIONS"];
     private int annotationType = annotBase; // デフォルトはannotBase（定規とアノテーションを表示）
+
+    // HOROS-20240407準拠: DCMView.h 198行目 - BOOL isKeyView;
+    protected boolean isKeyView = false;
+
+    // HOROS-20240407準拠: DCMView.m 8944行目相当 - BOOL frontMost;
+    protected boolean frontMost = false;
+
+    public void setFrontMost(boolean b) {
+        if (this.frontMost != b) {
+            this.frontMost = b;
+            repaint();
+        }
+    }
+
+    // HOROS-20240407準拠: DCMView.m 6931行目 - avoidRecursiveSync
+    protected static int avoidRecursiveSync = 0;
 
     /**
      * ToolMode - ツールモード
@@ -204,6 +227,35 @@ public class DCMView extends JPanel {
                 scrollWheel(e);
             }
         });
+
+        // HOROS-20240407準拠: フォーカスリスナーを追加（isKeyViewの管理）
+        setFocusable(true);
+        // デフォルトのフォーカス枠（点線など）が表示されないようにする
+        setFocusTraversalKeysEnabled(false);
+        addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent e) {
+                becomeFirstResponder();
+            }
+
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                // Focus lost does not mean it's no longer the "Key View" in Horos logic.
+                // Key View status is only surrendered when another view becomes Key.
+                // resignFirstResponder(); // Removed to prevent accidental border disappearance
+            }
+        });
+
+        // HOROS-20240407準拠: 通知センターに登録
+        NotificationCenter.defaultCenter().addObserver(NotificationCenter.OsirixDCMViewSyncNotification,
+                (name, object, userInfo) -> {
+                    onSyncNotification(name, object, userInfo);
+                });
+
+        NotificationCenter.defaultCenter().addObserver(
+                NotificationCenter.OsirixDCMViewDidBecomeFirstResponderNotification, (name, object, userInfo) -> {
+                    newImageViewisKey(object);
+                });
     }
 
     /**
@@ -328,7 +380,7 @@ public class DCMView extends JPanel {
             // HOROS-20240407準拠: DCMView.m 2140-2144行目
             // if( sizeToFit && [self is2DViewer] == NO)
             // {
-            //     [self scaleToFit];
+            // [self scaleToFit];
             // }
             if (sizeToFit && !is2DViewer()) {
                 scaleToFit();
@@ -382,16 +434,8 @@ public class DCMView extends JPanel {
                         // DicomPixの画像が読み込まれていることを確認
                         if (this.curDCM != null) {
                             // CheckLoadは画像の読み込みを確認するメソッド
-                            // Javaでは、getBufferedImage()を呼び出すことで画像が読み込まれる
-                            // ただし、既に読み込まれている場合は何もしない
-                            java.awt.image.BufferedImage img = this.curDCM.getBufferedImage();
-                            System.out.println("[DEBUG] DCMView.setIndex() - getBufferedImage() returned: "
-                                    + (img != null ? "not null (" + img.getWidth() + "x" + img.getHeight() + ")"
-                                            : "null"));
-
-                            // HOROS-20240407準拠: DCMView.m 2564行目以降では、scaleToFitを呼び出していない
-                            // setIndexはスケール値を変更せず、現在のスケール値を保持する
-                            // 画像のサイズが変わってもscaleToFitを自動的に呼び出さない
+                            // Javaでは、非同期読み込みを待たずに現在の状態のみを確認する
+                            // スケール値の計算などはwidth/heightがあれば可能 (readHeader済み)
                         } else {
                             System.out.println("[DEBUG] DCMView.setIndex() - curDCM is null at index " + this.curImage);
                         }
@@ -440,7 +484,7 @@ public class DCMView extends JPanel {
     public boolean is2DViewer() {
         // HOROS-20240407準拠: DCMView.m 566-567行目
         // if( is2DViewerCached)
-        //     return is2DViewerValue;
+        // return is2DViewerValue;
         if (is2DViewerCached) {
             return is2DViewerValue;
         }
@@ -448,8 +492,8 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: DCMView.m 569-573行目
         // if( [self window])
         // {
-        //     is2DViewerCached = YES;
-        //     is2DViewerValue = [[self windowController] is2DViewer];
+        // is2DViewerCached = YES;
+        // is2DViewerValue = [[self windowController] is2DViewer];
         // }
         javax.swing.JFrame window = (javax.swing.JFrame) javax.swing.SwingUtilities.getWindowAncestor(this);
         if (window != null) {
@@ -507,16 +551,16 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: DCMView.m 2063-2067行目
         // if( d.shutterEnabled)
         // {
-        //     w = d.shutterRect.size.width;
-        //     h = d.shutterRect.size.height;
+        // w = d.shutterRect.size.width;
+        // h = d.shutterRect.size.height;
         // }
         // TODO: shutterEnabledとshutterRectの処理（現時点ではスキップ）
 
         // HOROS-20240407準拠: DCMView.m 2069-2072行目
         // if( sizeView.size.width / w < sizeView.size.height / h / d.pixelRatio )
-        //     return sizeView.size.width / w;
+        // return sizeView.size.width / w;
         // else
-        //     return sizeView.size.height / h / d.pixelRatio;
+        // return sizeView.size.height / h / d.pixelRatio;
         double pixelRatio = d.getPixelRatio();
 
         float scaleX = (float) viewWidth / w;
@@ -525,11 +569,11 @@ public class DCMView extends JPanel {
         float result = Math.min(scaleX, scaleY);
 
         System.out.println("[DEBUG] scaleToFitForDCMPix: viewSize=" + viewWidth + "x" + viewHeight
-            + ", imageSize=" + w + "x" + h
-            + ", pixelRatio=" + pixelRatio
-            + ", scaleX=" + scaleX
-            + ", scaleY=" + scaleY
-            + ", result=" + result);
+                + ", imageSize=" + w + "x" + h
+                + ", pixelRatio=" + pixelRatio
+                + ", scaleX=" + scaleX
+                + ", scaleY=" + scaleY
+                + ", result=" + result);
 
         return result;
     }
@@ -614,15 +658,13 @@ public class DCMView extends JPanel {
      */
     protected void scrollWheel(java.awt.event.MouseWheelEvent e) {
         // HOROS-20240407準拠: DCMView.m scrollWheel: 行番号不明
-        if (curImage < 0) return;
-        if (dcmPixList == null || dcmPixList.isEmpty()) return;
+        if (curImage < 0)
+            return;
+        if (dcmPixList == null || dcmPixList.isEmpty())
+            return;
 
         // HOROS-20240407準拠: マウスホイールの回転量を取得
         int rotation = e.getWheelRotation();
-
-        // HOROS-20240407準拠: reverseScrollWheel（ユーザー設定で反転可能）
-        // 現時点では常に1.0として扱う
-        float reverseScrollWheel = 1.0f;
 
         // HOROS-20240407準拠: DCMView.m scrollWheel: の基本的なスクロール処理
         // modifierキーのチェックは省略し、基本的な画像スクロールのみ実装
@@ -645,12 +687,16 @@ public class DCMView extends JPanel {
 
         if (dcmPixList.size() > 3 && loopScrollWheel) {
             // HOROS-20240407準拠: 画像数が3より多く、loopScrollWheelが有効な場合はループ
-            if (newImage < 0) newImage = dcmPixList.size() - 1;
-            if (newImage >= dcmPixList.size()) newImage = 0;
+            if (newImage < 0)
+                newImage = dcmPixList.size() - 1;
+            if (newImage >= dcmPixList.size())
+                newImage = 0;
         } else {
-            // HOROS-20240407準拠: それ以外はクランプ（端で止まる）
-            if (newImage < 0) newImage = 0;
-            if (newImage >= dcmPixList.size()) newImage = dcmPixList.size() - 1;
+            // HOROS-20240407準拠: それ以外はシリーズの境界チェック
+            if (newImage < 0 || newImage >= dcmPixList.size()) {
+                scrollThroughSeriesIfNecessary(inc);
+                return;
+            }
         }
 
         // HOROS-20240407準拠: setIndexを呼び出して画像を切り替える
@@ -663,6 +709,39 @@ public class DCMView extends JPanel {
                 ((ViewerController) window).adjustSlider();
             }
         }
+
+        // HOROS-20240407準拠: DCMView.m scrollWheel: 5122行目
+        sendSyncMessage(0);
+    }
+
+    /**
+     * scrollThroughSeriesIfNecessary - シリーズを跨いだスクロール
+     * HOROS-20240407準拠: DCMView.m scrollThroughSeriesIfNecessary:
+     */
+    protected void scrollThroughSeriesIfNecessary(int delta) {
+        // HOROS-20240407準拠: DCMView.m 5016行目 - scrollThroughSeries 設定を確認
+        boolean scrollThroughSeries = true; // TODO: ユーザー設定から取得
+
+        if (scrollThroughSeries) {
+            javax.swing.JFrame window = (javax.swing.JFrame) javax.swing.SwingUtilities.getWindowAncestor(this);
+            if (window instanceof ViewerController) {
+                ViewerController controller = (ViewerController) window;
+                if (delta > 0) {
+                    controller.loadSeriesDown();
+                } else {
+                    controller.loadSeriesUp();
+                }
+            }
+        }
+    }
+
+    /**
+     * BufferedImageを取得 (読み込み中の場合はnullを返す)
+     */
+    public java.awt.image.BufferedImage getBufferedImageNoLoad() {
+        return dcmPixList != null && curImage >= 0 && curImage < dcmPixList.size()
+                ? dcmPixList.get(curImage).getBufferedImage()
+                : null;
     }
 
     /**
@@ -673,13 +752,7 @@ public class DCMView extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // HOROS-20240407準拠: 初期起動時はプレビュー画面を真っ黒にする
-        // clearPreviewメソッド（9424行目）でsetPixels:nilが呼ばれる
-        // BrowserController.m 9424行目: [imageView setPixels:nil files:nil rois:nil
-        // firstImage:0 level:0 reset:YES];
         if (curDCM == null || dcmPixList == null || dcmPixList.isEmpty()) {
-            // HOROS-20240407準拠: DCMView.m 8997-9000行目
-            // 画像がない場合は背景を描画（whiteBackgroundがtrueの場合は白、falseの場合は黒）
             if (whiteBackground) {
                 g.setColor(java.awt.Color.WHITE);
             } else {
@@ -689,15 +762,30 @@ public class DCMView extends JPanel {
             return;
         }
 
+        // 背景を先に塗りつぶす (読み込み中でも黒い画面を見せるため)
+        if (whiteBackground) {
+            g.setColor(java.awt.Color.WHITE);
+        } else {
+            g.setColor(java.awt.Color.BLACK);
+        }
+        g.fillRect(0, 0, getWidth(), getHeight());
+
         Graphics2D g2d = (Graphics2D) g.create();
         try {
+            // DEBUG: フォーカス状態の確認
+            if (isKeyView || frontMost) {
+                // System.out.println("[DEBUG] DCMView.paintComponent - isKeyView: " + isKeyView
+                // + ", frontMost: " + frontMost);
+            }
+
             // アンチエイリアスを有効化
             g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            // HOROS-20240407準拠: curDCMから画像を取得して描画
-            java.awt.image.BufferedImage image = curDCM.getBufferedImage();
+            // 画像の読み込み状態を確認 (非同期読み込みを待たない)
+            java.awt.image.BufferedImage image = curDCM.getBufferedImageNoLoad();
+
             if (image != null) {
                 int panelWidth = getWidth();
                 int panelHeight = getHeight();
@@ -706,7 +794,6 @@ public class DCMView extends JPanel {
 
                 if (imageWidth > 0 && imageHeight > 0) {
                     // HOROS-20240407準拠: scaleValueとoriginを使用して描画
-                    // pixelRatioを考慮した高さの計算
                     float pixelRatio = (float) curDCM.getPixelRatio();
                     int scaledWidth = (int) (imageWidth * scaleValue);
                     int scaledHeight = (int) (imageHeight * scaleValue * pixelRatio);
@@ -715,8 +802,7 @@ public class DCMView extends JPanel {
                     int x = (panelWidth - scaledWidth) / 2 + origin.x;
                     int y = (panelHeight - scaledHeight) / 2 + origin.y;
 
-                    // HOROS-20240407準拠: DCMView.m 8997-9000行目
-                    // 背景色を設定（whiteBackgroundがtrueの場合は白、falseの場合は黒）
+                    // 背景色を設定
                     if (whiteBackground) {
                         g2d.setColor(java.awt.Color.WHITE);
                     } else {
@@ -727,35 +813,79 @@ public class DCMView extends JPanel {
                     // 画像を描画
                     g2d.drawImage(image, x, y, scaledWidth, scaledHeight, null);
 
-                    // HOROS-20240407準拠: DCMView.m 9273-9691行目 - アノテーションと定規の描画
-                    // HOROS-20240407準拠: DCMView.m 9273行目 - if (annotations != annotNone)
+                    // HOROS-20240407準拠: 境界線の描画 (DCMView.m 9290行目付近および9309行目付近)
+                    // 注意: 赤色の選択枠はビュー自体の境界に、緑色の点線は画像のはみ出し境界に描画されます。
+                    drawBorders(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
+
+                    // HOROS-20240407準拠: アノテーションと定規の描画
                     if (annotationType != annotNone) {
-                        // HOROS-20240407準拠: DCMView.m 9622-9689行目 - 定規（Ruler）の描画
-                        // HOROS-20240407準拠: DCMView.m 9622行目 - if( annotations >= annotBase)
                         if (annotationType >= annotBase) {
                             drawRuler(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
                         }
-
-                        // HOROS-20240407準拠: DCMView.m 9695行目 - アノテーションテキストの描画
-                        // HOROS-20240407準拠: DCMView.m 9695行目 - [self drawTextualData: drawingFrameRect
-                        // :annotations];
-                        // annotations != annotNoneの場合にdrawTextualDataを呼ぶ（drawTextualData内でannotations >
-                        // annotGraphicsをチェック）
                         drawTextualData(g2d, panelWidth, panelHeight);
                     }
                 }
             } else {
-                // HOROS-20240407準拠: 画像が読み込まれていない場合は背景を描画
-                // DCMView.m 8997-9000行目: whiteBackgroundに応じて背景色を設定
+                // 画像が読み込まれていない場合でも背景と「選択枠(赤)」は描画する
+                int panelWidth = getWidth();
+                int panelHeight = getHeight();
                 if (whiteBackground) {
                     g2d.setColor(java.awt.Color.WHITE);
                 } else {
                     g2d.setColor(java.awt.Color.BLACK);
                 }
-                g2d.fillRect(0, 0, getWidth(), getHeight());
+                g2d.fillRect(0, 0, panelWidth, panelHeight);
+
+                // 画像がない場合の境界線描画 (x, yなどは0扱いで赤枠のみ描画される)
+                drawBorders(g2d, panelWidth, panelHeight, 0, 0, 0, 0);
             }
         } finally {
             g2d.dispose();
+        }
+    }
+
+    /**
+     * 選択枠を描画
+     * HOROS-20240407準拠: DCMView.m 9290-9324行目相当
+     */
+    private void drawBorders(Graphics2D g2d, int panelWidth, int panelHeight, int imageX, int imageY, int scaledWidth,
+            int scaledHeight) {
+        // HOROS-20240407準拠: DCMView.m 9280行目付近 - [ViewerController numberOf2DViewer] >
+        // 1
+        // 注意: 2Dビューワーが1枚のみの場合は赤枠を表示しません。
+        if (ViewerController.getDisplayedViewersCount() > 1 && isKeyView && frontMost) {
+            // [[NSColor colorWithCalibratedRed: 1.0 green: 0 blue: 0 alpha: 0.8] set];
+            // glLineWidth( 8.0 * sf);
+            g2d.setColor(new Color(1.0f, 0.0f, 0.0f, 0.8f));
+            Stroke oldStroke = g2d.getStroke();
+            g2d.setStroke(new BasicStroke(8.0f));
+            // ビューの境界（全体）に沿って描画
+            g2d.drawRect(4, 4, panelWidth - 8, panelHeight - 8);
+            g2d.setStroke(oldStroke);
+        }
+
+        // HOROS-20240407準拠: DCMView.m 9309行目付近 - OVERFLOWLINES
+        // 黄緑の点線枠を表示（画像がはみ出している場合のみ）
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(DCMView.class);
+        boolean overflowLines = prefs.getBoolean("OVERFLOWLINES", true);
+
+        if (overflowLines) {
+            boolean isOverflow = imageX < 0 || imageY < 0 || (imageX + scaledWidth) > panelWidth
+                    || (imageY + scaledHeight) > panelHeight;
+
+            if (isOverflow) {
+                // [[NSColor colorWithCalibratedRed: 0 green: 1.0 blue: 0 alpha: 0.8] set];
+                // glLineWidth( 3.0 * sf);
+                // glLineStipple(4 * sf, 0xAAAA);
+                g2d.setColor(new Color(0.0f, 1.0f, 0.0f, 0.8f));
+
+                Stroke oldStroke = g2d.getStroke();
+                float[] dash = { 4.0f, 4.0f };
+                g2d.setStroke(new BasicStroke(3.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dash, 0.0f));
+                // こちらは画像の外枠に対して点線を描画
+                g2d.drawRect(imageX, imageY, scaledWidth, scaledHeight);
+                g2d.setStroke(oldStroke);
+            }
         }
     }
 
@@ -1601,6 +1731,168 @@ public class DCMView extends JPanel {
         // TODO: 通知を送信して他のビューを更新する必要がある場合はここに追加
 
         System.out.println("[DEBUG] DCMView.annotMenu() - annotationType set to: " + annotationType);
+    }
+
+    /**
+     * becomeMainWindow - ウィンドウがメインになったときの処理
+     * HOROS-20240407準拠: DCMView.m 12543行目
+     */
+    public void becomeMainWindow() {
+        // HOROS-20240407準拠: DCMView.m 12550行目
+        sendSyncMessage(0);
+    }
+
+    /**
+     * becomeKeyWindow - ウィンドウがキーになったときの処理
+     * HOROS-20240407準拠: DCMView.m 12555行目
+     */
+    public void becomeKeyWindow() {
+        // HOROS-20240407準拠: isKeyViewの設定はbecomeFirstResponderに任せ、ここでは同期のみ行う
+        // (通知を介して他をオフにする処理を確実に通すため)
+
+        // HOROS-20240407準拠: 交線をリセットするなどの処理
+        // TODO: 交線リセットの実装
+
+        // HOROS-20240407準拠: DCMView.m 12567行目
+        sendSyncMessage(0);
+    }
+
+    /**
+     * becomeFirstResponder - フォーカスを得たときの処理
+     * HOROS-20240407準拠: DCMView.m 12574行目
+     */
+    public boolean becomeFirstResponder() {
+        // HOROS-20240407準拠: 既にisKeyViewであっても、通知を送信して他を確実にオフにする
+        isKeyView = true;
+        System.out.println("[DEBUG] DCMView.becomeFirstResponder() - isKeyView set to TRUE");
+
+        // HOROS-20240407準拠: 通知を送信
+        NotificationCenter.defaultCenter().postNotification(
+                NotificationCenter.OsirixDCMViewDidBecomeFirstResponderNotification,
+                this);
+
+        // HOROS-20240407準拠: 画面更新
+        repaint();
+        return true;
+    }
+
+    /**
+     * resignFirstResponder - フォーカスを失ったときの処理
+     * HOROS-20240407準拠: DCMView.m 12790行目
+     */
+    public boolean resignFirstResponder() {
+        if (isKeyView) {
+            isKeyView = false;
+            System.out.println("[DEBUG] DCMView.resignFirstResponder() - isKeyView set to FALSE");
+
+            // HOROS-20240407準拠: 同期メッセージを送信 (DCMView.m 12793行目)
+            sendSyncMessage(0);
+
+            repaint();
+        }
+        return true;
+    }
+
+    /**
+     * newImageViewisKey - 他のビューがキーになったときの処理
+     * HOROS-20240407準拠: DCMView.m 12810行目
+     */
+    public void newImageViewisKey(Object object) {
+        if (object != this && isKeyView) {
+            isKeyView = false;
+            System.out.println(
+                    "[DEBUG] DCMView.newImageViewisKey() - isKeyView set to FALSE because another view became key");
+            repaint();
+        }
+    }
+
+    /**
+     * sendSyncMessage - 同期メッセージを送信
+     * HOROS-20240407準拠: DCMView.m 6721-6780行目
+     */
+    public void sendSyncMessage(int image) {
+        // HOROS-20240407準拠: DCMView.m 6725行目 - isKeyView && matrix == 0 && [self
+        // is2DViewer]
+        if (isKeyView && is2DViewer()) {
+            System.out.println("[DEBUG] DCMView.sendSyncMessage() - image: " + image);
+
+            java.util.Map<String, Object> userInfo = new java.util.HashMap<>();
+            // HOROS-20240407準拠: userInfoに必要な情報を詰め込む
+            userInfo.put("image", image);
+            userInfo.put("sender", this);
+
+            // HOROS-20240407準拠: 通知を送信
+            NotificationCenter.defaultCenter().postNotification(
+                    NotificationCenter.OsirixDCMViewSyncNotification,
+                    this,
+                    userInfo);
+        }
+    }
+
+    /**
+     * onSyncNotification - 同期通知を受信したときの処理
+     * HOROS-20240407準拠: DCMView.m 6916-7265行目 (sync:)
+     */
+    public void onSyncNotification(String name, Object object, java.util.Map<String, Object> userInfo) {
+        // HOROS-20240407準拠: DCMView.m 6918行目
+        // if( gDontListenToSyncMessage) return;
+
+        // 1. 初期チェック (DCMView.m 6923行目)
+        // superviewのチェックは省略（Java Swingの構造に合わせる）
+        if (is2DViewer()) {
+            // 2. 再帰防止 (DCMView.m 6931-6932行目)
+            if (avoidRecursiveSync > 1)
+                return;
+            avoidRecursiveSync++;
+
+            try {
+                // 3. メイン条件チェック (DCMView.m 6934行目)
+                // isKeyView == YES かつ matrix == 0 かつ newImage > -1 の場合に同期
+                if (object != this && isKeyView) {
+                    if (userInfo == null)
+                        return;
+
+                    // HOROS-20240407準拠: syncroLOC (スライス位置同期) のロジック
+                    // ここでは簡易版として、インデックス同期を実装
+                    if (userInfo.containsKey("image")) {
+                        int otherImageIndex = (int) userInfo.get("image");
+
+                        // 送信側のビューアとウィンドウコントローラーを取得
+                        DCMView otherView = (DCMView) object;
+                        javax.swing.JFrame selfFrame = (javax.swing.JFrame) javax.swing.SwingUtilities
+                                .getWindowAncestor(this);
+                        javax.swing.JFrame otherFrame = (javax.swing.JFrame) javax.swing.SwingUtilities
+                                .getWindowAncestor(otherView);
+
+                        ViewerController selfViewer = (selfFrame instanceof ViewerController)
+                                ? (ViewerController) selfFrame
+                                : null;
+                        ViewerController otherViewer = (otherFrame instanceof ViewerController)
+                                ? (ViewerController) otherFrame
+                                : null;
+                        ViewerController frontMostViewer = ViewerController.frontMostDisplayed2DViewer();
+
+                        // 画像更新処理 (DCMView.m 7192-7207行目)
+                        // 条件: (self != frontMost && other == frontMost)
+                        if (selfViewer != frontMostViewer && otherViewer == frontMostViewer) {
+                            if (otherImageIndex >= 0 && dcmPixList != null && otherImageIndex < dcmPixList.size()) {
+                                if (otherImageIndex != curImage) {
+                                    System.out.println("[DEBUG] DCMView.onSyncNotification() - Synced to index: "
+                                            + otherImageIndex);
+                                    setIndex(otherImageIndex);
+
+                                    if (selfViewer != null) {
+                                        selfViewer.adjustSlider();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } finally {
+                avoidRecursiveSync--;
+            }
+        }
     }
 
     /**
