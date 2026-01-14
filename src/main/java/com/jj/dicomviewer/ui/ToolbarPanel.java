@@ -50,7 +50,8 @@ public class ToolbarPanel extends JFrame {
 
         // HOROS-20240407準拠: ToolbarPanel.m 122-123行目
         // [[AppController hasMacOSXSnowLeopard])
-        // [[self window] setCollectionBehavior: 1 << 6]; //NSWindowCollectionBehaviorIgnoresCycle
+        // [[self window] setCollectionBehavior: 1 << 6];
+        // //NSWindowCollectionBehaviorIgnoresCycle
         setFocusableWindowState(false);
 
         // HOROS-20240407準拠: ToolbarPanel.m 128行目
@@ -82,6 +83,7 @@ public class ToolbarPanel extends JFrame {
         // ツールバーを作成
         toolbar = new JToolBar();
         toolbar.setFloatable(false);
+
         add(toolbar, BorderLayout.CENTER);
 
         // 背景色を設定
@@ -122,7 +124,8 @@ public class ToolbarPanel extends JFrame {
 
     /**
      * 画面パラメータ変更時の処理
-     * HOROS-20240407準拠: ToolbarPanel.m 87-99行目 - applicationDidChangeScreenParameters:
+     * HOROS-20240407準拠: ToolbarPanel.m 87-99行目 -
+     * applicationDidChangeScreenParameters:
      */
     public void applicationDidChangeScreenParameters() {
         if (viewer == null || viewer.getGraphicsConfiguration() == null) {
@@ -139,7 +142,8 @@ public class ToolbarPanel extends JFrame {
         // dstframe.size.height = [self fixedHeight];
         // dstframe.size.width = screenRect.size.width;
         // dstframe.origin.x = screenRect.origin.x;
-        // dstframe.origin.y = screenRect.origin.y + screenRect.size.height - dstframe.size.height + [ToolbarPanelController hiddenHeight];
+        // dstframe.origin.y = screenRect.origin.y + screenRect.size.height -
+        // dstframe.size.height + [ToolbarPanelController hiddenHeight];
         int x = screenBounds.x + screenInsets.left;
         int width = screenBounds.width - screenInsets.left - screenInsets.right;
         int height = FIXED_HEIGHT;
@@ -174,7 +178,8 @@ public class ToolbarPanel extends JFrame {
 
     /**
      * ViewerControllerを取得
-     * HOROS-20240407準拠: ToolbarPanel.h 49行目 - @property (readonly) ViewerController *viewer;
+     * HOROS-20240407準拠: ToolbarPanel.h 49行目 - @property (readonly) ViewerController
+     * *viewer;
      */
     public ViewerController getViewer() {
         return viewer;

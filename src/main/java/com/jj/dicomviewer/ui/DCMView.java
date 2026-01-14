@@ -44,6 +44,14 @@ public class DCMView extends JPanel {
         return curImage;
     }
 
+    public List<DicomPix> getDcmPixList() {
+        return dcmPixList;
+    }
+
+    public float getScaleValue() {
+        return scaleValue;
+    }
+
     // HOROS-20240407準拠: DCMView.h 147行目 - BOOL volumicSeries;
     protected boolean volumicSeries = false;
 
@@ -81,6 +89,10 @@ public class DCMView extends JPanel {
     private boolean is2DViewerCached = false;
     private boolean is2DViewerValue = false;
 
+    // HOROS-20240407準拠: 左右反転(Left-Right), 上下反転(Horizontal-Vertical)
+    protected boolean xFlipped = false;
+    protected boolean yFlipped = false;
+
     // HOROS-20240407準拠: DCMView.h 112行目 - annotationType
     // enum { annotNone = 0, annotGraphics, annotBase, annotFull };
     public static final int annotNone = 0;
@@ -107,8 +119,30 @@ public class DCMView extends JPanel {
         }
     }
 
+    // HOROS-20240407準拠: 同期モード定数 (DCMView.h 72行目付近相当)
+    public static final int syncroOFF = 0;
+    public static final int syncroABS = 1;
+    public static final int syncroREL = 2;
+    public static final int syncroLOC = 3;
+    public static final int syncroRatio = 4;
+
+    // HOROS-20240407準拠: グローバル同期変数 (DCMView.m 285行目付近相当)
+    public static int syncro = syncroOFF; // デフォルトはOFF。ユーザーが必要に応じて同期をオンにする（Horos準拠）
+    public static boolean SYNCSERIES = true; // デフォルトはTRUE (シリーズ間同期)
+    public static boolean gDontListenToSyncMessage = false;
+
     // HOROS-20240407準拠: DCMView.m 6931行目 - avoidRecursiveSync
     protected static int avoidRecursiveSync = 0;
+
+    // HOROS-20240407準拠: DCMView.h - sliceFromTo lines
+    protected float[][] sliceFromTo = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
+    protected float[][] sliceFromToS = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
+    protected float[][] sliceFromToE = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
+    protected float[][] sliceFromTo2 = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
+    protected double sliceFromToThickness = 0.0;
+    protected double[] sliceVector = new double[3];
+    // 3Dカーソル位置（スライスローカル座標）
+    protected float[] slicePoint3D = { Float.POSITIVE_INFINITY, 0, 0 };
 
     /**
      * ToolMode - ツールモード
@@ -206,16 +240,41 @@ public class DCMView extends JPanel {
         addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
             @Override
             public void mouseMoved(java.awt.event.MouseEvent e) {
+                // HOROS-20240407準拠: マウスが動いても勝手にフォーカスを奪わない
+                // becomeFirstResponder は mousePressed または scrollWheel で行う
+
                 // HOROS-20240407準拠: DCMView.m 3769-3772行目
-                // NSPoint imageLocation = [self ConvertFromNSView2GL: eventLocationInView];
-                // mouseXPos = imageLocation.x;
-                // mouseYPos = imageLocation.y;
-                // HOROS-20240407準拠: DCMView.m 7590-7637行目 - ConvertFromNSView2GLの実装
                 java.awt.Point viewPoint = new java.awt.Point(e.getX(), e.getY());
                 java.awt.Point imageLocation = convertFromNSView2GL(viewPoint);
                 mouseXPos = imageLocation.x;
                 mouseYPos = imageLocation.y;
+
+                // HOROS-20240407準拠: 3D位置を同期 (DCMView.m 4070-4112行目相当)
+                // isKeyViewの場合のみ同期メッセージを送信 (DCMView.m 6725行目相当)
+                if (isKeyView) {
+                    sync3DPosition(mouseXPos, mouseYPos);
+
+                    // マウスを動かした際、自分がKeyViewなら他のビューの交差線を更新するために再描画を促す
+                    for (ViewerController vc : ViewerController.getDisplayedViewers()) {
+                        if (vc.getImageView() != DCMView.this) {
+                            vc.getImageView().repaint();
+                        }
+                    }
+                }
+
                 repaint(); // マウス位置が変わったら再描画
+            }
+        });
+
+        // HOROS-20240407準拠: クリックリスナーを追加（フォーカス制御）
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                // クリックされたら常にフォーカスを要求する（スライダーなどから奪い返す）
+                requestFocusInWindow();
+                if (!isKeyView) {
+                    becomeFirstResponder();
+                }
             }
         });
 
@@ -232,6 +291,7 @@ public class DCMView extends JPanel {
         setFocusable(true);
         // デフォルトのフォーカス枠（点線など）が表示されないようにする
         setFocusTraversalKeysEnabled(false);
+
         addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
             public void focusGained(java.awt.event.FocusEvent e) {
@@ -336,6 +396,11 @@ public class DCMView extends JPanel {
                         + (this.dcmPixList != null ? this.dcmPixList.size() : "null") + ", curDCM: "
                         + (this.curDCM != null ? "not null" : "null"));
                 repaint();
+
+                // HOROS-20240407準拠: 画像ロード直後に同期を促す
+                // isKeyViewでなくても、新しくロードされたビューは既存のKeyViewに同期される必要がある。
+                // ここでは単に再描画と同期ライン更新のためにメッセージを送信する(inc=0)
+                sendSyncMessage(0);
             } catch (Exception e) {
                 System.out.println("[DEBUG] DCMView.setPixels() - exception: " + e.getMessage());
                 e.printStackTrace();
@@ -378,11 +443,8 @@ public class DCMView extends JPanel {
             this.scaleValue = 1.0f;
 
             // HOROS-20240407準拠: DCMView.m 2140-2144行目
-            // if( sizeToFit && [self is2DViewer] == NO)
-            // {
-            // [self scaleToFit];
-            // }
-            if (sizeToFit && !is2DViewer()) {
+            // 注意: 2Dビューワーであっても、明示的にsizeToFitが要求された場合はFITを行う
+            if (sizeToFit) {
                 scaleToFit();
             }
 
@@ -394,11 +456,23 @@ public class DCMView extends JPanel {
         }
     }
 
+    public void setScaleValue(float s) {
+        if (s < 0.01f)
+            s = 0.01f;
+        if (s > 100.0f)
+            s = 100.0f;
+        this.scaleValue = s;
+        repaint();
+    }
+
     /**
      * setIndex - インデックスを設定
      * HOROS-20240407準拠: DCMView.m 2536-2580行目
      */
     public void setIndex(int index) {
+        if (index == curImage) {
+            return;
+        }
         System.out.println("[DEBUG] DCMView.setIndex() called - index: " + index + ", dcmPixList: "
                 + (this.dcmPixList != null ? this.dcmPixList.size() : "null"));
         synchronized (drawLock) {
@@ -446,6 +520,11 @@ public class DCMView extends JPanel {
                         // Java Swingでは、repaint()を呼び出す
                         System.out.println("[DEBUG] DCMView.setIndex() - calling repaint()");
                         repaint();
+
+                        // HOROS-20240407準拠: インデックス変更時に同期メッセージを送信 (DCMView.m 2582行目相当)
+                        if (isKeyView && is2DViewer()) {
+                            sendSyncMessage(0);
+                        }
                     } else {
                         System.out.println("[DEBUG] DCMView.setIndex() - curImage out of range: " + this.curImage
                                 + ", dcmPixList.size(): " + this.dcmPixList.size());
@@ -529,20 +608,21 @@ public class DCMView extends JPanel {
         }
 
         // HOROS-20240407準拠: DCMView.m 2058行目
-        // NSRect sizeView = [self convertRectToBacking: [self bounds]]; // Retina
         java.awt.Rectangle bounds = getBounds();
         int viewWidth = bounds.width > 0 ? bounds.width : getWidth();
         int viewHeight = bounds.height > 0 ? bounds.height : getHeight();
+
+        System.out.println("[DEBUG] DCMView.scaleToFitForDCMPix() - viewSize: " + viewWidth + "x" + viewHeight);
 
         if (viewWidth <= 0 || viewHeight <= 0) {
             return 1.0f;
         }
 
         // HOROS-20240407準拠: DCMView.m 2060-2061行目
-        // int w = d.pwidth;
-        // int h = d.pheight;
         int w = d.getPwidth();
         int h = d.getPheight();
+
+        System.out.println("[DEBUG] DCMView.scaleToFitForDCMPix() - imageSize: " + w + "x" + h);
 
         if (w <= 0 || h <= 0) {
             return 1.0f;
@@ -583,48 +663,63 @@ public class DCMView extends JPanel {
      * HOROS-20240407準拠: DCMView.m 7590-7637行目
      */
     private java.awt.Point convertFromNSView2GL(java.awt.Point viewPoint) {
-        // HOROS-20240407準拠: DCMView.m 7592行目 - convertPointToBacking（retina対応）
-        // Java Swingではバッキングスケールは1.0として扱う
         float aX = viewPoint.x;
         float aY = viewPoint.y;
 
-        // HOROS-20240407準拠: DCMView.m 7595行目 - inverse Y scaling system
-        int panelHeight = getHeight();
-        aY = panelHeight - aY;
-
-        // HOROS-20240407準拠: DCMView.m 7608-7636行目 - ConvertFromUpLeftView2GL
         int panelWidth = getWidth();
-        int panelHeight2 = getHeight();
+        int panelHeight = getHeight();
 
-        // HOROS-20240407準拠: DCMView.m 7612-7613行目 - xFlipped, yFlipped（現時点では未実装のためスキップ）
-        // if( xFlipped) a.x = size.size.width - a.x;
-        // if( yFlipped) a.y = size.size.height - a.y;
+        // 中心基準の相対座標に変換（スケール適用前）
+        float centerX = panelWidth / 2.0f + origin.x;
+        float centerY = panelHeight / 2.0f + origin.y;
 
-        // HOROS-20240407準拠: DCMView.m 7615-7619行目
-        aX -= panelWidth / 2.0f;
-        aX /= scaleValue;
+        float aX_rel = (aX - centerX) / scaleValue;
+        float aY_rel = (aY - centerY) / scaleValue;
 
-        aY -= panelHeight2 / 2.0f;
-        aY /= scaleValue;
+        // フリップの適用
+        if (xFlipped)
+            aX_rel = -aX_rel;
+        if (yFlipped)
+            aY_rel = -aY_rel;
 
-        // HOROS-20240407準拠: DCMView.m 7621-7625行目 - rotation（現時点では未実装のためスキップ）
-        // float xx = a.x*cos(rotation*deg2rad) + a.y*sin(rotation*deg2rad);
-        // float yy = -a.x*sin(rotation*deg2rad) + a.y*cos(rotation*deg2rad);
-        // a.y = yy;
-        // a.x = xx;
+        // 画像の左上基準（ピクセル座標）に変換
+        float pixX = aX_rel + (curDCM != null ? curDCM.getPwidth() / 2.0f : 0);
+        float pixY = aY_rel + (curDCM != null ? (float) (curDCM.getPheight() * curDCM.getPixelRatio() / 2.0) : 0);
 
-        // HOROS-20240407準拠: DCMView.m 7627-7628行目
-        aX -= origin.x / scaleValue;
-        aY += origin.y / scaleValue;
-
-        // HOROS-20240407準拠: DCMView.m 7630-7635行目
+        // アスペクト比の補正
         if (curDCM != null) {
-            aX += curDCM.getPwidth() * 0.5f;
-            aY += curDCM.getPheight() * curDCM.getPixelRatio() * 0.5f;
-            aY /= curDCM.getPixelRatio();
+            pixY /= curDCM.getPixelRatio();
         }
 
-        return new java.awt.Point((int) aX, (int) aY);
+        return new java.awt.Point((int) pixX, (int) pixY);
+    }
+
+    /**
+     * ConvertFromGL2NSView - 画像のピクセル座標をビュー座標系（UI）に変換
+     */
+    private java.awt.Point convertFromGL2NSView(float pixX, float pixY) {
+        int panelWidth = getWidth();
+        int panelHeight = getHeight();
+
+        // 画像の中心基準の相対座標（ピクセル）
+        float aX_rel = pixX - (curDCM != null ? curDCM.getPwidth() / 2.0f : 0);
+        float aY_rel = (pixY * (curDCM != null ? (float) curDCM.getPixelRatio() : 1.0f))
+                - (curDCM != null ? (float) (curDCM.getPheight() * curDCM.getPixelRatio() / 2.0) : 0);
+
+        // フリップの逆適用
+        if (xFlipped)
+            aX_rel = -aX_rel;
+        if (yFlipped)
+            aY_rel = -aY_rel;
+
+        // UI座標に戻す
+        float centerX = panelWidth / 2.0f + origin.x;
+        float centerY = panelHeight / 2.0f + origin.y;
+
+        float uiX = aX_rel * scaleValue + centerX;
+        float uiY = aY_rel * scaleValue + centerY;
+
+        return new java.awt.Point((int) uiX, (int) uiY);
     }
 
     /**
@@ -657,6 +752,12 @@ public class DCMView extends JPanel {
      * HOROS-20240407準拠: DCMView.m scrollWheel: メソッド
      */
     protected void scrollWheel(java.awt.event.MouseWheelEvent e) {
+        // HOROS-20240407準拠: 操作したビューをアクティブにする
+        if (!isKeyView) {
+            becomeFirstResponder();
+            requestFocusInWindow();
+        }
+
         // HOROS-20240407準拠: DCMView.m scrollWheel: 行番号不明
         if (curImage < 0)
             return;
@@ -666,19 +767,42 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: マウスホイールの回転量を取得
         int rotation = e.getWheelRotation();
 
-        // HOROS-20240407準拠: DCMView.m scrollWheel: の基本的なスクロール処理
-        // modifierキーのチェックは省略し、基本的な画像スクロールのみ実装
-        int inc = 0;
-
-        if (rotation > 0) {
-            // 下にスクロール（次の画像へ）
-            inc = 1;
-        } else if (rotation < 0) {
-            // 上にスクロール（前の画像へ）
-            inc = -1;
+        // HOROS-20240407準拠: DCMView.m scrollWheel: 修飾キーによる挙動の分岐
+        if (e.isAltDown()) {
+            // ALTキー (macOSではOptionキー相当): ズーム処理
+            // Horosではマウス位置へのズームを試みるが、ここではシンプルにスケール値を変更
+            float incValue = -rotation * (scaleValue * 0.1f); // 現在のスケールに対して10%ずつ増減
+            setScaleValue(scaleValue + incValue);
+            return;
         }
 
+        // HOROS-20240407準拠: DCMView.m scrollWheel: の基本的なスクロール処理
+        int inc = 0;
+
+        if (e.isShiftDown()) {
+            // SHIFTキーが押されている場合は5倍速で移動（高速スクロール）
+            inc = (rotation > 0) ? 5 : -5;
+        } else {
+            if (rotation > 0) {
+                // 下にスクロール（次の画像へ）
+                inc = 1;
+            } else if (rotation < 0) {
+                // 上にスクロール（前の画像へ）
+                inc = -1;
+            }
+        }
+
+        if (inc == 0)
+            return;
+
         int newImage = curImage + inc;
+
+        // ホイールを回した際、他のビューに交差線の更新を促す
+        for (ViewerController vc : ViewerController.getDisplayedViewers()) {
+            if (vc.getImageView() != this) {
+                vc.getImageView().repaint();
+            }
+        }
 
         // HOROS-20240407準拠: DCMView.m scrollWheel: 5019-5023行目の画像インデックス範囲チェック
         // loopScrollWheel設定でループするかクランプするかを制御
@@ -711,7 +835,8 @@ public class DCMView extends JPanel {
         }
 
         // HOROS-20240407準拠: DCMView.m scrollWheel: 5122行目
-        sendSyncMessage(0);
+        // inc（移動量）を渡すことで、相対同期（REL）などが正しく動作するようにする
+        sendSyncMessage(inc);
     }
 
     /**
@@ -740,8 +865,24 @@ public class DCMView extends JPanel {
      */
     public java.awt.image.BufferedImage getBufferedImageNoLoad() {
         return dcmPixList != null && curImage >= 0 && curImage < dcmPixList.size()
-                ? dcmPixList.get(curImage).getBufferedImage()
+                ? dcmPixList.get(curImage).getBufferedImageNoLoad()
                 : null;
+    }
+
+    /**
+     * 左右反転を切り替え
+     */
+    public void toggleXFlipped() {
+        xFlipped = !xFlipped;
+        repaint();
+    }
+
+    /**
+     * 上下反転を切り替え
+     */
+    public void toggleYFlipped() {
+        yFlipped = !yFlipped;
+        repaint();
     }
 
     /**
@@ -810,12 +951,39 @@ public class DCMView extends JPanel {
                     }
                     g2d.fillRect(0, 0, panelWidth, panelHeight);
 
-                    // 画像を描画
-                    g2d.drawImage(image, x, y, scaledWidth, scaledHeight, null);
+                    // --- 画像の反転・描画処理 ---
+                    int dx1 = x;
+                    int dy1 = y;
+                    int dx2 = x + scaledWidth;
+                    int dy2 = y + scaledHeight;
 
-                    // HOROS-20240407準拠: 境界線の描画 (DCMView.m 9290行目付近および9309行目付近)
-                    // 注意: 赤色の選択枠はビュー自体の境界に、緑色の点線は画像のはみ出し境界に描画されます。
+                    int sx1 = 0;
+                    int sy1 = 0;
+                    int sx2 = imageWidth;
+                    int sy2 = imageHeight;
+
+                    if (xFlipped) {
+                        // 左右反転: 描画先のX座標の開始と終了を入れ替える
+                        int tmp = dx1;
+                        dx1 = dx2;
+                        dx2 = tmp;
+                    }
+                    if (yFlipped) {
+                        // 上下反転: 描画先のY座標の開始と終了を入れ替える
+                        int tmp = dy1;
+                        dy1 = dy2;
+                        dy2 = tmp;
+                    }
+
+                    // 画像を描画 (反転対応版)
+                    g2d.drawImage(image, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2, null);
+
+                    // HOROS-20240407準拠: 境界線の描画
                     drawBorders(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
+
+                    // HOROS-20240407準拠: 同期ラインの描画 (drawCrossLines)
+                    // アノテーション設定に関わらず同期ラインは表示する (交差線を表示するため)
+                    drawSyncLines(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
 
                     // HOROS-20240407準拠: アノテーションと定規の描画
                     if (annotationType != annotNone) {
@@ -1481,28 +1649,21 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: DCMView.m 11697-11698行目
         // float yRot = -1, xRot = -1;
         // float rot = rotation;
-        // 簡易版: rotation、xFlipped、yFlippedが未実装のため、デフォルト値を使用
-        // double yRot = -1.0;
-        // double xRot = -1.0;
         double rot = 0.0; // TODO: rotation変数を実装
 
         // HOROS-20240407準拠: DCMView.m 11702-11727行目
         // yFlippedとxFlippedの処理
-        // 簡易版: xFlipped、yFlippedが未実装のため、デフォルト値を使用
-        boolean xFlipped = false; // TODO: xFlipped変数を実装
-        boolean yFlipped = false; // TODO: yFlipped変数を実装
-
-        if (yFlipped && xFlipped) {
+        if (this.yFlipped && this.xFlipped) {
             rot = rot + 180.0;
         } else {
-            if (yFlipped) {
+            if (this.yFlipped) {
                 // xRot *= -1.0;
                 // yRot *= -1.0;
                 o[3] *= -1.0;
                 o[4] *= -1.0;
                 o[5] *= -1.0;
             }
-            if (xFlipped) {
+            if (this.xFlipped) {
                 // xRot *= -1.0;
                 // yRot *= -1.0;
                 o[0] *= -1.0;
@@ -1764,12 +1925,17 @@ public class DCMView extends JPanel {
     public boolean becomeFirstResponder() {
         // HOROS-20240407準拠: 既にisKeyViewであっても、通知を送信して他を確実にオフにする
         isKeyView = true;
+        // キービュー（操作主体）になったら、以前に受信した同期ポインタをクリア
+        slicePoint3D[0] = Float.POSITIVE_INFINITY;
         System.out.println("[DEBUG] DCMView.becomeFirstResponder() - isKeyView set to TRUE");
 
         // HOROS-20240407準拠: 通知を送信
         NotificationCenter.defaultCenter().postNotification(
                 NotificationCenter.OsirixDCMViewDidBecomeFirstResponderNotification,
                 this);
+
+        // 同期メッセージを送信して他のビューのラインを更新させる
+        sendSyncMessage(0);
 
         // HOROS-20240407準拠: 画面更新
         repaint();
@@ -1810,16 +1976,25 @@ public class DCMView extends JPanel {
      * sendSyncMessage - 同期メッセージを送信
      * HOROS-20240407準拠: DCMView.m 6721-6780行目
      */
-    public void sendSyncMessage(int image) {
+    public void sendSyncMessage(int inc) {
         // HOROS-20240407準拠: DCMView.m 6725行目 - isKeyView && matrix == 0 && [self
         // is2DViewer]
         if (isKeyView && is2DViewer()) {
-            System.out.println("[DEBUG] DCMView.sendSyncMessage() - image: " + image);
+            System.out.println("[DEBUG] DCMView.sendSyncMessage() - inc: " + inc);
 
             java.util.Map<String, Object> userInfo = new java.util.HashMap<>();
-            // HOROS-20240407準拠: userInfoに必要な情報を詰め込む
-            userInfo.put("image", image);
+            // HOROS-20240407準拠: DCMView.m 6695-6710行目付近
+            userInfo.put("Direction", inc);
+            userInfo.put("Pos", (int) curImage);
             userInfo.put("sender", this);
+
+            // 同期に必要な情報を追加 (DCMView.m 6701行目付近)
+            if (curDCM != null) {
+                userInfo.put("studyID", curDCM.getStudyInstanceUID());
+                userInfo.put("frameOfReferenceUID", curDCM.getFrameOfReferenceUID());
+                userInfo.put("location", (float) curDCM.getSliceLocation());
+                userInfo.put("DCMPix", curDCM); // HOROS-20240407: Crosshair計算に必要
+            }
 
             // HOROS-20240407準拠: 通知を送信
             NotificationCenter.defaultCenter().postNotification(
@@ -1835,10 +2010,11 @@ public class DCMView extends JPanel {
      */
     public void onSyncNotification(String name, Object object, java.util.Map<String, Object> userInfo) {
         // HOROS-20240407準拠: DCMView.m 6918行目
-        // if( gDontListenToSyncMessage) return;
+        if (gDontListenToSyncMessage) {
+            return;
+        }
 
         // 1. 初期チェック (DCMView.m 6923行目)
-        // superviewのチェックは省略（Java Swingの構造に合わせる）
         if (is2DViewer()) {
             // 2. 再帰防止 (DCMView.m 6931-6932行目)
             if (avoidRecursiveSync > 1)
@@ -1847,46 +2023,136 @@ public class DCMView extends JPanel {
 
             try {
                 // 3. メイン条件チェック (DCMView.m 6934行目)
-                // isKeyView == YES かつ matrix == 0 かつ newImage > -1 の場合に同期
-                if (object != this && isKeyView) {
-                    if (userInfo == null)
-                        return;
+                // 送信者が自分以外であることを確認
+                if (object != this && userInfo != null) {
+                    int prevImage = curImage;
+                    int newImage = curImage;
 
-                    // HOROS-20240407準拠: syncroLOC (スライス位置同期) のロジック
-                    // ここでは簡易版として、インデックス同期を実装
-                    if (userInfo.containsKey("image")) {
-                        int otherImageIndex = (int) userInfo.get("image");
+                    String oStudyId = (String) userInfo.get("studyID");
+                    String oFrameofReferenceUID = (String) userInfo.get("frameOfReferenceUID");
+                    float oLocation = userInfo.containsKey("location") ? (float) userInfo.get("location") : 0.0f;
+                    int oPos = userInfo.containsKey("Pos") ? (int) userInfo.get("Pos") : -1;
+                    DCMView otherView = (DCMView) userInfo.get("sender");
+                    int diff = userInfo.containsKey("Direction") ? (int) userInfo.get("Direction") : 0;
 
-                        // 送信側のビューアとウィンドウコントローラーを取得
-                        DCMView otherView = (DCMView) object;
-                        javax.swing.JFrame selfFrame = (javax.swing.JFrame) javax.swing.SwingUtilities
-                                .getWindowAncestor(this);
-                        javax.swing.JFrame otherFrame = (javax.swing.JFrame) javax.swing.SwingUtilities
-                                .getWindowAncestor(otherView);
+                    boolean same3DReferenceWorld = false;
+                    String myStudyId = curDCM != null ? curDCM.getStudyInstanceUID() : null;
 
-                        ViewerController selfViewer = (selfFrame instanceof ViewerController)
-                                ? (ViewerController) selfFrame
-                                : null;
-                        ViewerController otherViewer = (otherFrame instanceof ViewerController)
-                                ? (ViewerController) otherFrame
-                                : null;
-                        ViewerController frontMostViewer = ViewerController.frontMostDisplayed2DViewer();
+                    // 同期条件を判定 (DCMView.m 7020行目付近)
+                    if (oStudyId != null && myStudyId != null && oStudyId.equals(myStudyId)) {
+                        // HOROS-20240407準拠: UseFrameofReferenceUIDのチェック（簡易版: 常にtrue相当）
+                        if (curDCM.getFrameOfReferenceUID() != null && oFrameofReferenceUID != null) {
+                            if (oFrameofReferenceUID.equals(curDCM.getFrameOfReferenceUID())) {
+                                same3DReferenceWorld = true;
+                            }
+                        } else {
+                            same3DReferenceWorld = true;
+                        }
+                    }
 
-                        // 画像更新処理 (DCMView.m 7192-7207行目)
-                        // 条件: (self != frontMost && other == frontMost)
-                        if (selfViewer != frontMostViewer && otherViewer == frontMostViewer) {
-                            if (otherImageIndex >= 0 && dcmPixList != null && otherImageIndex < dcmPixList.size()) {
-                                if (otherImageIndex != curImage) {
-                                    System.out.println("[DEBUG] DCMView.onSyncNotification() - Synced to index: "
-                                            + otherImageIndex);
-                                    setIndex(otherImageIndex);
+                    // 同期処理の実行 (DCMView.m 7044行目以降)
+                    if (same3DReferenceWorld || SYNCSERIES) {
 
-                                    if (selfViewer != null) {
-                                        selfViewer.adjustSlider();
+                        // --- 3Dカーソル(点)の同期 ---
+                        if (userInfo.containsKey("point3DX")) {
+                            double[] destPoint3D = {
+                                    (double) userInfo.get("point3DX"),
+                                    (double) userInfo.get("point3DY"),
+                                    (double) userInfo.get("point3DZ")
+                            };
+
+                            if (same3DReferenceWorld) {
+                                double[] resultPoint = new double[3];
+                                int hitIndex = findPlaneAndPoint(destPoint3D, resultPoint);
+
+                                // HOROS-20240407準拠: 単なるマウス移動(Hover)ではスライスを遷移させない。
+                                // ツールがtCrossの場合や、ドラッグ中の通知（isDrag=true）の場合のみ遷移させる。
+                                // ここでは一旦、ポイント同期による自動スライス遷移を無効化し、交差線の表示更新のみに留める。
+                                /*
+                                 * if (hitIndex != -1 && syncro != syncroOFF) {
+                                 * newImage = hitIndex;
+                                 * }
+                                 */
+
+                                // 2D座標に変換して保存 (緑色の十字描画用)
+                                if (hitIndex != -1) {
+                                    if (dcmPixList != null && hitIndex < dcmPixList.size()) {
+                                        dcmPixList.get(hitIndex).convertDICOMToSlice(destPoint3D, resultPoint, true);
+                                        slicePoint3D[0] = (float) resultPoint[0];
+                                        slicePoint3D[1] = (float) resultPoint[1];
+                                        slicePoint3D[2] = (float) resultPoint[2];
                                     }
+                                } else {
+                                    slicePoint3D[0] = Float.POSITIVE_INFINITY;
                                 }
                             }
                         }
+
+                        // --- スクロール同期 (syncroモード) ---
+                        if (syncro != syncroOFF && !userInfo.containsKey("point3DX")) {
+                            // 同期対象の画像と自分の画像が平行かチェック
+                            // 直交する断面（Axial vs Sagittalなど）でLocation同期が動くと画像が飛ぶため
+                            boolean isParallel = false;
+                            if (curDCM != null && otherView != null && otherView.getCurDCM() != null) {
+                                double[] nA = getOrientation(); // [6,7,8] が法線
+                                double[] nB = otherView.getOrientation();
+                                double dot = nA[6] * nB[6] + nA[7] * nB[7] + nA[8] * nB[8];
+                                if (Math.abs(Math.abs(dot) - 1.0) < 0.01) {
+                                    isParallel = true;
+                                }
+                            }
+
+                            if (syncro == syncroABS && isParallel) {
+                                newImage = oPos;
+                            } else if (syncro == syncroRatio && isParallel && otherView != null
+                                    && otherView.dcmPixList != null) {
+                                float ratio = (float) oPos / (float) otherView.dcmPixList.size();
+                                newImage = Math.round(ratio * (float) (dcmPixList != null ? dcmPixList.size() : 0));
+                            } else if (syncro == syncroLOC && isParallel && userInfo.containsKey("location")
+                                    && dcmPixList != null) {
+                                float smallestDiff = Float.MAX_VALUE;
+                                int bestIndex = -1;
+                                for (int i = 0; i < dcmPixList.size(); i++) {
+                                    float fdiff = Math.abs((float) dcmPixList.get(i).getSliceLocation() - oLocation);
+                                    if (fdiff < smallestDiff) {
+                                        smallestDiff = fdiff;
+                                        bestIndex = i;
+                                    }
+                                }
+                                if (bestIndex != -1)
+                                    newImage = bestIndex;
+                            } else if (syncro == syncroREL && isParallel) {
+                                // 相対同期(REL)は枚数移動なので平行チェックなしでも動かせるが、通常は平行なものに使う
+                                // ユーザーの要望により平行な場合に限定する
+                                newImage = curImage + diff;
+                            }
+                        }
+
+                        if (dcmPixList != null) {
+                            if (newImage < 0)
+                                newImage = 0;
+                            if (newImage >= dcmPixList.size())
+                                newImage = dcmPixList.size() - 1;
+                        }
+
+                        // インデックスが変更された場合の反映
+                        if (newImage != prevImage) {
+                            System.out.println("[DEBUG] DCMView.onSyncNotification() - Slice changing from " + prevImage
+                                    + " to " + newImage + " (mode=" + syncro + ")");
+                            final int finalImage = newImage;
+                            javax.swing.SwingUtilities.invokeLater(() -> {
+                                setIndex(finalImage);
+                                // スライダーの更新
+                                javax.swing.JFrame frame = (javax.swing.JFrame) javax.swing.SwingUtilities
+                                        .getWindowAncestor(this);
+                                if (frame instanceof ViewerController) {
+                                    ((ViewerController) frame).adjustSlider();
+                                }
+                            });
+                        }
+
+                        // --- 交線(Crosshair)の計算は drawSyncLines で動的に行うため、ここでは再描画のみ ---
+                        repaint();
                     }
                 }
             } finally {
@@ -1907,5 +2173,489 @@ public class DCMView extends JPanel {
             }
         }
         return new Dimension(512, 512); // デフォルトサイズ
+    }
+
+    // --- HOROS-20240407準拠: 同期ライン（クロスリファレンスライン）の実装 ---
+
+    /**
+     * 同一Studyの別シリーズとの交線を計算
+     */
+    public boolean computeSlice(DicomPix oPix, DicomPix oPix2) {
+        if (curDCM == null || oPix == null)
+            return false;
+
+        // 同一シリーズの場合はラインを表示しない
+        if (curDCM.getSeriesId() == oPix.getSeriesId() && curDCM.getStudyInstanceUID() != null
+                && curDCM.getStudyInstanceUID().equals(oPix.getStudyInstanceUID())) {
+            sliceFromTo[0][0] = Float.POSITIVE_INFINITY;
+            sliceFromToS[0][0] = Float.POSITIVE_INFINITY;
+            sliceFromToE[0][0] = Float.POSITIVE_INFINITY;
+            return false;
+        }
+
+        double[] vectorA = oPix.getOrientation();
+        double[] originA = { oPix.getOriginX(), oPix.getOriginY(), oPix.getOriginZ() };
+        double[] vectorB = getOrientation();
+        double[] originB = { curDCM.getOriginX(), curDCM.getOriginY(), curDCM.getOriginZ() };
+
+        double[] normalA = { vectorA[6], vectorA[7], vectorA[8] };
+        double[] normalB = { vectorB[6], vectorB[7], vectorB[8] };
+
+        // 平行判定 (内積が 1.0 に近い場合は平行)
+        double dotNormals = normalA[0] * normalB[0] + normalA[1] * normalB[1] + normalA[2] * normalB[2];
+        if (Math.abs(Math.abs(dotNormals) - 1.0) < 0.001) {
+            sliceFromTo[0][0] = Float.POSITIVE_INFINITY;
+            return false;
+        }
+
+        if (intersect3D_2Planes(normalA, originA, normalB, originB, sliceVector, new double[3]) == 0) {
+            computeSliceIntersection(oPix, sliceFromTo, vectorB, originB);
+            sliceFromToThickness = oPix.getSliceThickness();
+
+            if (sliceFromTo[0][0] == Float.POSITIVE_INFINITY) {
+                // 交差が見つからなかった場合
+                return false;
+            }
+
+            // オレンジ線（シリーズの範囲）の計算
+            if (oPix.getImageObj() != null && oPix.getImageObj().getSeries() != null) {
+                List<com.jj.dicomviewer.model.DicomImage> images = oPix.getImageObj().getSeries().sortedImages();
+                if (images != null && images.size() > 1) {
+                    // Start image
+                    com.jj.dicomviewer.model.DicomImage startImg = images.get(0);
+                    DicomPix cachedStart = startImg.getCachedDicomPix();
+                    if (cachedStart != null) {
+                        computeSliceIntersection(cachedStart, sliceFromToS, vectorB, originB);
+                    } else {
+                        // キャッシュがない場合は計算をスキップするか、必要時のみ計算（今回はスキップ）
+                        sliceFromToS[0][0] = Float.POSITIVE_INFINITY;
+                    }
+
+                    // End image
+                    com.jj.dicomviewer.model.DicomImage endImg = images.get(images.size() - 1);
+                    DicomPix cachedEnd = endImg.getCachedDicomPix();
+                    if (cachedEnd != null) {
+                        computeSliceIntersection(cachedEnd, sliceFromToE, vectorB, originB);
+                    } else {
+                        sliceFromToE[0][0] = Float.POSITIVE_INFINITY;
+                    }
+                }
+            }
+
+            if (oPix2 != null) {
+                computeSliceIntersection(oPix2, sliceFromTo2, vectorB, originB);
+            } else {
+                sliceFromTo2[0][0] = Float.POSITIVE_INFINITY;
+            }
+            return true;
+        } else {
+            sliceFromTo[0][0] = Float.POSITIVE_INFINITY;
+            sliceFromToS[0][0] = Float.POSITIVE_INFINITY;
+            sliceFromToE[0][0] = Float.POSITIVE_INFINITY;
+            sliceFromTo2[0][0] = Float.POSITIVE_INFINITY;
+            return false;
+        }
+    }
+
+    private void computeSliceIntersection(DicomPix oPix, float[][] sft, double[] vectorB, double[] originB) {
+        double[] c1 = new double[3];
+        double[] c2 = new double[3];
+        double[] r = new double[3];
+        double[] sc = new double[3];
+        double[] normalB = { vectorB[6], vectorB[7], vectorB[8] };
+
+        sft[0][0] = Float.POSITIVE_INFINITY;
+        sft[1][0] = Float.POSITIVE_INFINITY;
+
+        int xCount = 0;
+        int width = oPix.getPwidth();
+        int height = oPix.getPheight();
+
+        // 4つのエッジをチェック
+        double[][] edges = {
+                { 0, 0, width, 0 },
+                { 0, height, 0, 0 },
+                { width, height, 0, height },
+                { width, 0, width, height }
+        };
+
+        for (int i = 0; i < 4; i++) {
+            oPix.convertPixToDICOM(edges[i][0], edges[i][1], c1, true);
+            oPix.convertPixToDICOM(edges[i][2], edges[i][3], c2, true);
+
+            int v = intersect3D_SegmentPlane(c1, c2, normalB, originB, r);
+            if (xCount < 2 && v != 0) {
+                curDCM.convertDICOMToSlice(r, sc, true);
+                sft[xCount][0] = (float) sc[0];
+                sft[xCount][1] = (float) sc[1];
+                sft[xCount][2] = (float) sc[2];
+                xCount++;
+            }
+        }
+
+        if (xCount != 2) {
+            sft[0][0] = Float.POSITIVE_INFINITY;
+            sft[1][0] = Float.POSITIVE_INFINITY;
+        }
+    }
+
+    private int intersect3D_SegmentPlane(double[] P0, double[] P1, double[] normal, double[] Ppoint,
+            double[] resultPt) {
+        double[] u = { P1[0] - P0[0], P1[1] - P0[1], P1[2] - P0[2] };
+        double[] w = { P0[0] - Ppoint[0], P0[1] - Ppoint[1], P0[2] - Ppoint[2] };
+
+        double D = dot(normal, u);
+        double N = -dot(normal, w);
+
+        if (Math.abs(D) < 0.000001) {
+            return 0;
+        }
+
+        double sI = N / D;
+        if (sI < 0 || sI > 1)
+            return 0;
+
+        resultPt[0] = P0[0] + sI * u[0];
+        resultPt[1] = P0[1] + sI * u[1];
+        resultPt[2] = P0[2] + sI * u[2];
+
+        return (D > 0) ? 1 : 2;
+    }
+
+    private int intersect3D_2Planes(double[] Pn1, double[] Pv1, double[] Pn2, double[] Pv2, double[] u, double[] iP) {
+        u[0] = Pn1[1] * Pn2[2] - Pn1[2] * Pn2[1];
+        u[1] = Pn1[2] * Pn2[0] - Pn1[0] * Pn2[2];
+        u[2] = Pn1[0] * Pn2[1] - Pn1[1] * Pn2[0];
+
+        double ax = Math.abs(u[0]);
+        double ay = Math.abs(u[1]);
+        double az = Math.abs(u[2]);
+
+        // 平行判定
+        double dotNormals = dot(Pn1, Pn2);
+        if (Math.abs(Math.abs(dotNormals) - 1.0) < 0.001) {
+            return -1;
+        }
+
+        int maxc;
+        if (ax > ay) {
+            maxc = (ax > az) ? 1 : 3;
+        } else {
+            maxc = (ay > az) ? 2 : 3;
+        }
+
+        double d1 = -dot(Pn1, Pv1);
+        double d2 = -dot(Pn2, Pv2);
+
+        switch (maxc) {
+            case 1:
+                iP[0] = 0;
+                iP[1] = (d2 * Pn1[2] - d1 * Pn2[2]) / u[0];
+                iP[2] = (d1 * Pn2[1] - d2 * Pn1[1]) / u[0];
+                break;
+            case 2:
+                iP[0] = (d1 * Pn2[2] - d2 * Pn1[2]) / u[1];
+                iP[1] = 0;
+                iP[2] = (d2 * Pn1[0] - d1 * Pn2[0]) / u[1];
+                break;
+            case 3:
+                iP[0] = (d2 * Pn1[1] - d1 * Pn2[1]) / u[2];
+                iP[1] = (d1 * Pn2[0] - d2 * Pn1[0]) / u[2];
+                iP[2] = 0;
+                break;
+        }
+        return 0;
+    }
+
+    private double dot(double[] a, double[] b) {
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    }
+
+    /**
+     * 点を平面に投影した距離と座標を計算
+     * HOROS-20240407: pbase_Plane:planeOrigin:planeVector:pointProjection:
+     */
+    public static double pbase_Plane(double[] point, double[] planeOrigin, double[] planeNormal,
+            double[] pointProjection) {
+        double[] sub = new double[3];
+        sub[0] = point[0] - planeOrigin[0];
+        sub[1] = point[1] - planeOrigin[1];
+        sub[2] = point[2] - planeOrigin[2];
+
+        double sn = -(planeNormal[0] * sub[0] + planeNormal[1] * sub[1] + planeNormal[2] * sub[2]);
+        double sd = planeNormal[0] * planeNormal[0] + planeNormal[1] * planeNormal[1] + planeNormal[2] * planeNormal[2];
+        if (sd == 0)
+            sd = 1.0;
+        double sb = sn / sd;
+
+        pointProjection[0] = point[0] + sb * planeNormal[0];
+        pointProjection[1] = point[1] + sb * planeNormal[1];
+        pointProjection[2] = point[2] + sb * planeNormal[2];
+
+        double dx = point[0] - pointProjection[0];
+        double dy = point[1] - pointProjection[1];
+        double dz = point[2] - pointProjection[2];
+
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /**
+     * 指定された点に最も近いスライスインデックスを検索
+     * HOROS-20240407:
+     * findPlaneForPoint:preferParallelTo:localPoint:distanceWithPlane:
+     */
+    public int findPlaneForPoint(double[] pt, double[] preferParallelTo, double[] location) {
+        int bestIndex = -1;
+        double minDistance = Double.MAX_VALUE;
+        double[] locationTemp = new double[3];
+        double[] vectors;
+        double[] origin = new double[3];
+
+        if (dcmPixList == null)
+            return -1;
+
+        for (int i = 0; i < dcmPixList.size(); i++) {
+            DicomPix pix = dcmPixList.get(i);
+            vectors = pix.getOrientation();
+            origin[0] = pix.getOriginX();
+            origin[1] = pix.getOriginY();
+            origin[2] = pix.getOriginZ();
+
+            double[] normal = { vectors[6], vectors[7], vectors[8] };
+            double tempDistance = pbase_Plane(pt, origin, normal, locationTemp);
+
+            if (tempDistance < minDistance) {
+                minDistance = tempDistance;
+                bestIndex = i;
+                if (location != null) {
+                    location[0] = locationTemp[0];
+                    location[1] = locationTemp[1];
+                    location[2] = locationTemp[2];
+                }
+            }
+        }
+
+        // 距離がスライス厚の2倍以上離れている場合は無効とする(Horos 8003行目)
+        if (bestIndex != -1 && curDCM != null && curDCM.getSliceThickness() != 0) {
+            if (minDistance > curDCM.getSliceThickness() * 2.0)
+                bestIndex = -1;
+        }
+
+        return bestIndex;
+    }
+
+    public int findPlaneAndPoint(double[] pt, double[] location) {
+        return findPlaneForPoint(pt, null, location);
+    }
+
+    /**
+     * 3D位置を同期
+     */
+    public void sync3DPosition(double mouseX, double mouseY) {
+        if (curDCM == null)
+            return;
+
+        double[] location = new double[3];
+        curDCM.convertPixToDICOM(mouseX, mouseY, location, true);
+
+        java.util.Map<String, Object> userInfo = new java.util.HashMap<>();
+        userInfo.put("studyID", curDCM.getStudyInstanceUID());
+        userInfo.put("frameOfReferenceUID", curDCM.getFrameOfReferenceUID());
+        userInfo.put("point3DX", location[0]);
+        userInfo.put("point3DY", location[1]);
+        userInfo.put("point3DZ", location[2]);
+        userInfo.put("location", (float) curDCM.getSliceLocation());
+        userInfo.put("DCMPix", curDCM);
+        userInfo.put("Pos", (int) curImage);
+        userInfo.put("sender", this);
+        userInfo.put("view", this); // DCMView.m では "view" キーも使われる
+        userInfo.put("offsetsync", 0.0f); // DCMView.m で必要とされる場合がある
+
+        NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixDCMViewSyncNotification, this,
+                userInfo);
+    }
+
+    /**
+     * getOrientation - 現在の画像の向きを取得
+     * HOROS-20240407準拠: フリップ状態を反映したベクトルを返す
+     */
+    public double[] getOrientation() {
+        if (curDCM == null)
+            return new double[3 * 3];
+
+        // オリジナルの向きを取得
+        double[] ori = curDCM.getOrientation().clone();
+
+        // フリップ状態をベクトルに反映 (ラベル表示や交点計算に影響)
+        if (xFlipped) {
+            ori[0] = -ori[0];
+            ori[1] = -ori[1];
+            ori[2] = -ori[2];
+        }
+        if (yFlipped) {
+            ori[3] = -ori[3];
+            ori[4] = -ori[4];
+            ori[5] = -ori[5];
+        }
+
+        // 法線ベクトルも再計算（外積）
+        if (xFlipped || yFlipped) {
+            ori[6] = ori[1] * ori[5] - ori[2] * ori[4];
+            ori[7] = ori[2] * ori[3] - ori[0] * ori[5];
+            ori[8] = ori[0] * ori[4] - ori[1] * ori[3];
+        }
+
+        return ori;
+    }
+
+    /**
+     * isKeyView - キービューかどうかを返す
+     */
+    public boolean isKeyView() {
+        return isKeyView;
+    }
+
+    protected void drawSyncLines(Graphics2D g2d, int panelWidth, int panelHeight, int x, int y, int scaledWidth,
+            int scaledHeight) {
+        if (curDCM == null)
+            return;
+
+        // 自分が操作中のビュー（KeyView）である場合は、他者の面（断面線）を表示しない
+        // これにより、操作しているビューには線が出ず、操作していないビューに断面線が表示される（Horosの挙動）
+        if (isKeyView) {
+            // 3Dカーソルの点は自分に出したい場合があるので、ここでは完全に抜けない
+        }
+
+        // 1. 緑色の十字（3Dカーソル位置）
+        if (slicePoint3D[0] != Float.POSITIVE_INFINITY) {
+            g2d.setColor(Color.GREEN);
+            double spX = curDCM.getPixelSpacingX();
+            double spY = curDCM.getPixelSpacingY();
+
+            java.awt.Point p = convertFromGL2NSView((float) (slicePoint3D[0] / spX), (float) (slicePoint3D[1] / spY));
+            int sx = p.x;
+            int sy = p.y;
+
+            int len = 10;
+            g2d.setStroke(new BasicStroke(1.5f));
+            g2d.drawLine(sx - len, sy, sx + len, sy);
+            g2d.drawLine(sx, sy - len, sx, sy + len);
+        }
+
+        // 2. 他のビューアーとの交線（オレンジ色）を計算して描画
+        // HOROS-20240407準拠: 全ての開いている2Dビューアーに対して交差をチェックする
+        for (ViewerController vc : ViewerController.getDisplayedViewers()) {
+            DCMView otherView = vc.getImageView();
+            // 自分以外、かつ相手がKeyView（操作中）である場合のみ、相手の面を描画する
+            if (otherView != null && otherView != this && otherView.curDCM != null && otherView.isKeyView) {
+                // 同一スタディかチェック
+                String myStudyId = curDCM.getStudyInstanceUID();
+                String otherStudyId = otherView.curDCM.getStudyInstanceUID();
+
+                if (SYNCSERIES || (myStudyId != null && myStudyId.equals(otherStudyId))) {
+                    // 同一シリーズは除外 (SeriesInstanceUIDで比較)
+                    String mySeriesId = curDCM.getSeriesInstanceUID();
+                    String otherSeriesId = otherView.curDCM.getSeriesInstanceUID();
+
+                    if (mySeriesId != null && !mySeriesId.equals(otherSeriesId)) {
+
+                        float[][] tempSft = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
+
+                        double[] vectorA = otherView.getOrientation();
+                        double[] originA = { otherView.curDCM.getOriginX(), otherView.curDCM.getOriginY(),
+                                otherView.curDCM.getOriginZ() };
+                        double[] vectorB = getOrientation();
+                        double[] originB = { curDCM.getOriginX(), curDCM.getOriginY(), curDCM.getOriginZ() };
+
+                        double[] normalA = { vectorA[6], vectorA[7], vectorA[8] };
+                        double[] normalB = { vectorB[6], vectorB[7], vectorB[8] };
+
+                        // 平行判定
+                        double dotNormals = normalA[0] * normalB[0] + normalA[1] * normalB[1] + normalA[2] * normalB[2];
+                        if (Math.abs(Math.abs(dotNormals) - 1.0) < 0.001)
+                            continue;
+
+                        double[] u = new double[3];
+                        if (intersect3D_2Planes(normalA, originA, normalB, originB, u, new double[3]) == 0) {
+                            computeSliceIntersection(otherView.curDCM, tempSft, vectorB, originB);
+
+                            if (tempSft[0][0] != Float.POSITIVE_INFINITY) {
+                                // メインの交線を描画 (現在のスライス位置は緑色)
+                                g2d.setColor(Color.GREEN);
+                                g2d.setStroke(new BasicStroke(1.2f));
+                                drawCrossLines(g2d, tempSft, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
+
+                                // シリーズの範囲（開始・終了スライス）の計算と描画 (範囲はオレンジ色)
+                                if (otherView.dcmPixList != null && otherView.dcmPixList.size() > 1) {
+                                    DicomPix startPix = otherView.dcmPixList.get(0);
+                                    DicomPix endPix = otherView.dcmPixList.get(otherView.dcmPixList.size() - 1);
+
+                                    float[][] tempSftS = { { Float.POSITIVE_INFINITY, 0, 0 },
+                                            { Float.POSITIVE_INFINITY, 0, 0 } };
+                                    float[][] tempSftE = { { Float.POSITIVE_INFINITY, 0, 0 },
+                                            { Float.POSITIVE_INFINITY, 0, 0 } };
+
+                                    computeSliceIntersection(startPix, tempSftS, vectorB, originB);
+                                    computeSliceIntersection(endPix, tempSftE, vectorB, originB);
+
+                                    g2d.setColor(Color.ORANGE);
+                                    g2d.setStroke(new BasicStroke(0.8f));
+                                    if (tempSftS[0][0] != Float.POSITIVE_INFINITY) {
+                                        drawCrossLines(g2d, tempSftS, panelWidth, panelHeight, x, y, scaledWidth,
+                                                scaledHeight);
+                                    }
+                                    if (tempSftE[0][0] != Float.POSITIVE_INFINITY) {
+                                        drawCrossLines(g2d, tempSftE, panelWidth, panelHeight, x, y, scaledWidth,
+                                                scaledHeight);
+                                    }
+                                }
+
+                                // 厚みがある場合の前後の線
+                                double thickness = otherView.curDCM.getSliceThickness();
+                                if (thickness > 0.1) {
+                                    float dx = tempSft[1][0] - tempSft[0][0];
+                                    float dy = tempSft[1][1] - tempSft[0][1];
+                                    float lineLen = (float) Math.sqrt(dx * dx + dy * dy);
+                                    if (lineLen > 0) {
+                                        float vx = -dy / lineLen;
+                                        float vy = dx / lineLen;
+                                        float shift = (float) (thickness / 2.0);
+
+                                        float[][] sftFront = {
+                                                { tempSft[0][0] + vx * shift, tempSft[0][1] + vy * shift, 0 },
+                                                { tempSft[1][0] + vx * shift, tempSft[1][1] + vy * shift, 0 }
+                                        };
+                                        float[][] sftBack = {
+                                                { tempSft[0][0] - vx * shift, tempSft[0][1] - vy * shift, 0 },
+                                                { tempSft[1][0] - vx * shift, tempSft[1][1] - vy * shift, 0 }
+                                        };
+                                        g2d.setColor(Color.GREEN); // 現在のスライスの厚み境界も緑色
+                                        g2d.setStroke(new BasicStroke(0.7f));
+                                        drawCrossLines(g2d, sftFront, panelWidth, panelHeight, x, y, scaledWidth,
+                                                scaledHeight);
+                                        drawCrossLines(g2d, sftBack, panelWidth, panelHeight, x, y, scaledWidth,
+                                                scaledHeight);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void drawCrossLines(Graphics2D g2d, float[][] sft, int panelWidth, int panelHeight, int imageX, int imageY,
+            int scaledWidth, int scaledHeight) {
+        if (sft[0][0] == Float.POSITIVE_INFINITY)
+            return;
+
+        double spX = curDCM.getPixelSpacingX();
+        double spY = curDCM.getPixelSpacingY();
+
+        java.awt.Point p1 = convertFromGL2NSView(sft[0][0] / (float) spX, sft[0][1] / (float) spY);
+        java.awt.Point p2 = convertFromGL2NSView(sft[1][0] / (float) spX, sft[1][1] / (float) spY);
+
+        g2d.drawLine(p1.x, p1.y, p2.x, p2.y);
     }
 }

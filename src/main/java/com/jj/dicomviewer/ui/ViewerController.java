@@ -42,6 +42,108 @@ public class ViewerController extends JFrame {
     private static final ExecutorService backgroundLoader = Executors
             .newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() / 2));
 
+    // HOROS-20240407準拠: サムネイル生成用の制限されたスレッドプール
+    private static final ExecutorService thumbnailLoader = Executors.newFixedThreadPool(2);
+
+    static {
+        // Global key interceptor for Horos shortcuts (H, V, Tab, Arrows, etc.)
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .addKeyEventDispatcher(new java.awt.KeyEventDispatcher() {
+                    @Override
+                    public boolean dispatchKeyEvent(java.awt.event.KeyEvent e) {
+                        if (e.getID() == java.awt.event.KeyEvent.KEY_PRESSED) {
+                            int keyCode = e.getKeyCode();
+                            if (keyCode == java.awt.event.KeyEvent.VK_H || keyCode == java.awt.event.KeyEvent.VK_V
+                                    || keyCode == java.awt.event.KeyEvent.VK_TAB
+                                    || keyCode == java.awt.event.KeyEvent.VK_LEFT
+                                    || keyCode == java.awt.event.KeyEvent.VK_RIGHT
+                                    || keyCode == java.awt.event.KeyEvent.VK_UP
+                                    || keyCode == java.awt.event.KeyEvent.VK_DOWN
+                                    || keyCode == java.awt.event.KeyEvent.VK_PAGE_UP
+                                    || keyCode == java.awt.event.KeyEvent.VK_PAGE_DOWN
+                                    || keyCode == java.awt.event.KeyEvent.VK_HOME
+                                    || keyCode == java.awt.event.KeyEvent.VK_END) {
+
+                                // Find the active ViewerController
+                                ViewerController vc = null;
+                                Window activeWindow = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                                        .getActiveWindow();
+
+                                // Debug log to see what window is active
+                                // if (activeWindow != null) System.out.println("[DEBUG] Active Window: " +
+                                // activeWindow.getClass().getSimpleName());
+
+                                if (activeWindow instanceof ViewerController) {
+                                    vc = (ViewerController) activeWindow;
+                                } else if (activeWindow instanceof ToolbarPanel) {
+                                    vc = ((ToolbarPanel) activeWindow).getViewer();
+                                }
+
+                                if (vc == null) {
+                                    // Robust search
+                                    for (ViewerController v : getDisplayedViewers()) {
+                                        if (v.isActive() || v.isFocused()) {
+                                            vc = v;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // Final fallback: use the first displayed viewer if there's only one
+                                if (vc == null) {
+                                    List<ViewerController> viewers = getDisplayedViewers();
+                                    if (viewers.size() == 1) {
+                                        vc = viewers.get(0);
+                                    }
+                                }
+
+                                if (vc != null) {
+                                    DCMView view = vc.getImageView();
+                                    if (view != null) {
+                                        // System.out.println("[DEBUG] Key Triggered: " +
+                                        // java.awt.event.KeyEvent.getKeyText(keyCode));
+                                        if (keyCode == java.awt.event.KeyEvent.VK_H) {
+                                            // Horos: 'H' is Horizontal Flip
+                                            view.toggleXFlipped();
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_V) {
+                                            // Horos: 'V' is Vertical Flip
+                                            view.toggleYFlipped();
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_TAB) {
+                                            // Horos: 'Tab' cycles annotations
+                                            int currentIdx = view.getAnnotationType();
+                                            int nextIdx = currentIdx + 1;
+                                            if (nextIdx > 3)
+                                                nextIdx = 0;
+                                            view.setAnnotationType(nextIdx);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_LEFT) {
+                                            view.setIndex(view.getCurImage() - 1);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_RIGHT) {
+                                            view.setIndex(view.getCurImage() + 1);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_UP) {
+                                            view.setScaleValue(view.getScaleValue() + 0.02f);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_DOWN) {
+                                            view.setScaleValue(view.getScaleValue() - 0.02f);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_PAGE_UP) {
+                                            view.setIndex(view.getCurImage() - 10);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_PAGE_DOWN) {
+                                            view.setIndex(view.getCurImage() + 10);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_HOME) {
+                                            view.setIndex(0);
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_END) {
+                                            if (view.getDcmPixList() != null) {
+                                                view.setIndex(view.getDcmPixList().size() - 1);
+                                            }
+                                        }
+                                        return true; // Consume event
+                                    }
+                                }
+                            }
+                        }
+                        return false;
+                    }
+                });
+    }
+
     // HOROS-20240407準拠: ViewerController.h 239-242行目
     private DCMView imageView;
     private List<List<DicomPix>> pixList = new ArrayList<>();
@@ -74,6 +176,14 @@ public class ViewerController extends JFrame {
 
     // HOROS-20240407準拠: 開いているViewerControllerのリスト
     private static final List<ViewerController> displayedViewers = Collections.synchronizedList(new ArrayList<>());
+
+    public static List<ViewerController> getDisplayedViewers() {
+        return new ArrayList<>(displayedViewers);
+    }
+
+    public DCMView getImageView() {
+        return imageView;
+    }
 
     /**
      * コンストラクタ
@@ -125,7 +235,16 @@ public class ViewerController extends JFrame {
                     int index = imageSlider.getValue();
                     if (index != currentImageIndex) {
                         currentImageIndex = index;
+                        // HOROS-20240407準拠: 操作したビューをアクティブにする
+                        imageView.becomeFirstResponder();
                         imageView.setIndex(currentImageIndex);
+
+                        // 交差線を描画するために、他のビューアーも再描画を促す
+                        for (ViewerController vc : ViewerController.getDisplayedViewers()) {
+                            if (vc != ViewerController.this) {
+                                vc.getImageView().repaint();
+                            }
+                        }
                     }
                 }
             }
@@ -245,11 +364,17 @@ public class ViewerController extends JFrame {
      * HOROS-20240407準拠: ViewerController.m startLoadImageThread
      */
     public void startLoadImageThread() {
+        System.out.println("[DEBUG] ViewerController.startLoadImageThread() - submitting task");
         backgroundLoader.submit(() -> {
+            System.out.println("[DEBUG] ViewerController.startLoadImageThread() - worker started");
             // 現在の画像を最優先でロード
             if (imageView != null && imageView.getCurDCM() != null) {
+                System.out.println("[DEBUG] ViewerController.startLoadImageThread() - loading current image");
                 imageView.getCurDCM().loadImage();
-                SwingUtilities.invokeLater(() -> imageView.repaint());
+                SwingUtilities.invokeLater(() -> {
+                    System.out.println("[DEBUG] ViewerController.startLoadImageThread() - repainting imageView");
+                    imageView.repaint();
+                });
             }
 
             // 残りの画像をロード
@@ -276,8 +401,10 @@ public class ViewerController extends JFrame {
      */
     public void changeImageData(List<List<Object>> f, List<List<Object>> d, byte[] v, boolean firstTime) {
         if (f == null || f.isEmpty() || d == null || d.isEmpty()) {
+            System.out.println("[DEBUG] ViewerController.changeImageData() - data is empty");
             return;
         }
+        System.out.println("[DEBUG] ViewerController.changeImageData() - rows: " + f.size());
 
         // pixListとfileListをクリア
         pixList.clear();
@@ -307,6 +434,8 @@ public class ViewerController extends JFrame {
         // currentSeriesをセット (Horos準拠: 代表的なイメージから取得)
         if (!fileList.isEmpty() && !fileList.get(0).isEmpty()) {
             this.currentSeries = fileList.get(0).get(0).getSeries();
+            System.out.println("[DEBUG] changeImageData: currentSeries set to "
+                    + (currentSeries != null ? currentSeries.getSeriesDescription() : "null"));
         }
 
         // 最初の画像を表示
@@ -377,9 +506,14 @@ public class ViewerController extends JFrame {
         Object representedObject = button.getRepresentedObject();
         boolean rightClick = button.isRightClick();
 
+        System.out.println("[DEBUG] matrixPreviewPressed: object="
+                + (representedObject != null ? representedObject.getClass().getSimpleName() : "null")
+                + ", rightClick=" + rightClick);
+
         // HOROS-20240407準拠: スタディセルの場合、開閉を切り替える
         if (representedObject instanceof com.jj.dicomviewer.model.DicomStudy) {
             com.jj.dicomviewer.model.DicomStudy study = (com.jj.dicomviewer.model.DicomStudy) representedObject;
+            System.out.println("[DEBUG] Toggling study collapse: " + study.getStudyName());
             if (collapsedStudies.contains(study)) {
                 collapsedStudies.remove(study);
             } else {
@@ -399,6 +533,8 @@ public class ViewerController extends JFrame {
      * HOROS-20240407準拠: ViewerController.m 4272行目 - loadSelectedSeries:rightClick:
      */
     private void loadSelectedSeries(Object series, boolean rightClick) {
+        System.out.println("[DEBUG] ViewerController.loadSelectedSeries() - series: "
+                + (series != null ? series.getClass().getSimpleName() : "null") + ", rightClick: " + rightClick);
         if (series == null) {
             return;
         }
@@ -460,6 +596,17 @@ public class ViewerController extends JFrame {
             return;
         }
 
+        // HOROS-20240407準拠: ウィンドウを左上から順にソート (AppController.m 4913-4958行目相当)
+        // Javaでは画面上の位置(Y, X)でソートする
+        viewers.sort((v1, v2) -> {
+            int y1 = v1.getY();
+            int y2 = v2.getY();
+            if (Math.abs(y1 - y2) > 50) { // 同じ行とみなすしきい値
+                return Integer.compare(y1, y2);
+            }
+            return Integer.compare(v1.getX(), v2.getX());
+        });
+
         // スクリーン領域（タスクバーを除いた有効領域）を取得
         GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
         GraphicsDevice gd = ge.getDefaultScreenDevice();
@@ -481,68 +628,111 @@ public class ViewerController extends JFrame {
         int availHeight = screenBounds.height - insets.top - insets.bottom - toolbarHeight;
 
         // HOROS-20240407準拠: 画面比率を考慮したタイル配置ロジック
-        // AppController.m 5153-5188行目
-        int count = viewers.size();
-        int cols = 1;
+        // AppController.m 5110-5188行目
+        int viewerCount = viewers.size();
+
+        System.out.println("[DEBUG] tileWindows: START count=" + viewerCount);
+
+        boolean landscape = (availWidth > availHeight);
+
+        // HOROS-20240407準拠: 比率の計算 (1.5 または 2.0)
+        float landscapeRatio = 1.5f;
+        if ((float) screenBounds.width / screenBounds.height > 1.7f)
+            landscapeRatio = 2.0f;
+
+        float portraitRatio = 0.9f;
+        if ((float) screenBounds.height / screenBounds.width > 1.7f)
+            portraitRatio = 0.49f;
+
         int rows = 1;
+        int cols = 1;
 
-        double screenRatio = (double) availWidth / availHeight;
-        double landscapeRatio = screenRatio > 1.7 ? 2.0 : 1.5;
+        // HOROS-20240407準拠: 2枚以上の場合は初期値を2x1または1x2にする
+        if (viewerCount > 1) {
+            if (landscape) {
+                cols = 2;
+                rows = 1;
 
-        // HOROS-20240407準拠: 奇数枚数（3枚, 5枚, 7枚...）の時の特徴的な配置
-        // 最初のウィンドウを右端に縦長で配置し、残りを左側にグリッド状に配置
-        if (count % 2 != 0 && count > 1) {
-            rows = 2;
-            cols = (count + 1) / 2;
-        } else {
-            // ウィンドウ数に合わせてグリッドを拡大
-            while (rows * cols < count) {
-                if ((double) cols / rows < landscapeRatio) {
-                    cols++;
-                } else {
-                    rows++;
+                // HOROS-20240407特例: 3枚の場合は2x2グリッドに強制して、
+                // 後続のStrechWindowsロジックで2+1(縦)を実現する
+                if (viewerCount == 3) {
+                    rows = 2;
                 }
-            }
+            } else {
+                cols = 1;
+                rows = 2;
 
-            // 垂直方向の余裕がある場合に調整
-            if (rows * cols > count && rows * (cols - 1) >= count) {
-                cols--;
-            }
-            if (rows * cols > count && (rows - 1) * cols >= count) {
-                rows--;
+                // 縦画面で3枚の場合は1x3ではなく2x2のほうがHorosらしい配置になる
+                if (viewerCount == 3) {
+                    cols = 2;
+                }
             }
         }
 
+        // ウィンドウ数が多い場合にグリッドを拡張
+        if (viewerCount > (rows * cols)) {
+            // HOROS-20240407準拠: 比率の計算 (1.5 または 2.0)
+            // 9枚表示で3x3を優先するため、ratioValueを少し厳しめ(1.5以下)に調整
+            float ratioValue = landscape ? landscapeRatio : portraitRatio;
+            if (viewerCount == 9) {
+                ratioValue = 1.4f; // 9枚の場合は3x3(ratio=1.0)になりやすくする
+            }
+
+            while (viewerCount > (rows * cols)) {
+                float actualRatio = (float) cols / (float) rows;
+                if (actualRatio > ratioValue) {
+                    rows++;
+                } else {
+                    cols++;
+                }
+            }
+
+            // HOROS-20240407準拠: 補正処理 (AppController.m 5198-5202行目)
+            while (rows * cols > viewerCount) {
+                if (rows * (cols - 1) >= viewerCount) {
+                    cols--;
+                } else if ((rows - 1) * cols >= viewerCount) {
+                    rows--;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        System.out.println("[DEBUG] tileWindows: FINAL count=" + viewerCount + ", grid=" + cols + "x" + rows);
+
+        // グリッド配置
         int cellWidth = availWidth / cols;
         int cellHeight = availHeight / rows;
 
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < viewerCount; i++) {
             ViewerController v = viewers.get(i);
+            int row = i / cols;
+            int col = i % cols;
 
-            if (count % 2 != 0 && count > 1) {
-                if (i == 0) {
-                    // HOROS-20240407準拠: 最初に選んだウィンドウを右端で縦長にスパン
-                    v.setBounds(availX + (cols - 1) * cellWidth, availY, cellWidth, availHeight);
-                } else {
-                    // 残りのウィンドウは左側のグリッドに配置
-                    int col = (i - 1) % (cols - 1);
-                    int row = (i - 1) / (cols - 1);
-                    v.setBounds(availX + col * cellWidth, availY + row * cellHeight, cellWidth, cellHeight);
-                }
-            } else {
-                int row = i / cols;
-                int col = i % cols;
-                int x = availX + col * cellWidth;
-                int y = availY + row * cellHeight;
-                v.setBounds(x, y, cellWidth, cellHeight);
+            int x = availX + col * cellWidth;
+            int y = availY + row * cellHeight;
+            int w = cellWidth;
+            int h = cellHeight;
+
+            // HOROS-20240407準拠: StrechWindowsロジック (AppController.m 4582行目相当)
+            // 下にウィンドウがない場合、垂直方向に引き伸ばして隙間を埋める
+            // これにより、3枚表示(2x2グリッド)などで1枚が縦長になる挙動を再現
+            if (i + cols >= viewerCount) {
+                h = availHeight - (y - availY);
             }
+
+            v.setBounds(x, y, w, h);
 
             // HOROS-20240407準拠: ウィンドウサイズ確定後に画像をフィットさせる
-            if (v.imageView != null) {
-                v.imageView.scaleToFit();
-            }
-
-            // HOROS-20240407準拠: ウィンドウを前面に
+            // Swingのレイアウト更新を待つためにinvokeLaterを使用
+            final ViewerController finalV = v;
+            SwingUtilities.invokeLater(() -> {
+                if (finalV.imageView != null) {
+                    finalV.imageView.scaleToFit();
+                    finalV.imageView.repaint();
+                }
+            });
             v.toFront();
         }
 
@@ -554,10 +744,11 @@ public class ViewerController extends JFrame {
      * 全てのオープンされているビューワーのサムネイル表示を更新
      */
     public static void refreshAllThumbnails() {
-        synchronized (displayedViewers) {
-            for (ViewerController v : displayedViewers) {
-                v.buildMatrixPreview();
-            }
+        // HOROS-20240407準拠: 全てのビューワーを更新すると重いため、最前面のビューワーのみ更新する
+        // サムネイルリストパネルは共有されているため、これで十分
+        ViewerController front = frontMostDisplayed2DViewer();
+        if (front != null) {
+            front.buildMatrixPreview();
         }
     }
 
@@ -605,8 +796,10 @@ public class ViewerController extends JFrame {
      */
     public void loadSeries(com.jj.dicomviewer.model.DicomSeries series) {
         if (series == null) {
+            System.out.println("[DEBUG] ViewerController.loadSeries() - series is null");
             return;
         }
+        System.out.println("[DEBUG] ViewerController.loadSeries() - series: " + series.getSeriesDescription());
         this.currentSeries = series;
 
         BrowserController browser = BrowserController.currentBrowser();
@@ -658,6 +851,26 @@ public class ViewerController extends JFrame {
         fileList2D.add(new ArrayList<>(correspondingObjects));
 
         changeImageData(pixList2D, fileList2D, null, false);
+
+        // HOROS-20240407準拠: ImageViewにフォーカスを設定
+        // (ViewDidBecomeFirstResponderNotification相当)
+        if (imageView != null) {
+            imageView.becomeFirstResponder();
+        }
+
+        // HOROS-20240407準拠: 画像の非同期読み込みを開始
+        startLoadImageThread();
+
+        // 描画を強制更新とFITの実行
+        // HOROS-20240407準拠: シリーズ切り替え時も確実にフィットさせる
+        SwingUtilities.invokeLater(() -> {
+            if (imageView != null) {
+                imageView.scaleToFit();
+                imageView.revalidate();
+                imageView.repaint();
+                System.out.println("[DEBUG] loadSeries (after change): scaleToFit called");
+            }
+        });
 
         // HOROS-20240407準拠: サムネイルを更新 (選択ハイライト等の反映のため)
         buildMatrixPreview();
@@ -1012,7 +1225,7 @@ public class ViewerController extends JFrame {
                                 com.jj.dicomviewer.model.DicomImage firstImage = images.iterator().next();
                                 if (firstImage != null) {
                                     final ThumbnailButton btn = button;
-                                    backgroundLoader.submit(() -> {
+                                    thumbnailLoader.submit(() -> {
                                         try {
                                             com.jj.dicomviewer.model.DicomPix pix = new com.jj.dicomviewer.model.DicomPix(
                                                     firstImage);

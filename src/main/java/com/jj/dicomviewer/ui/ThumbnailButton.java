@@ -156,7 +156,8 @@ public class ThumbnailButton extends JButton {
 
         // HOROS-20240407準拠: 左クリック時にmatrixPreviewPressedを呼び出す
         addActionListener(e -> {
-            System.out.println("ThumbnailButton.actionPerformed: LEFT CLICK");
+            System.out.println("ThumbnailButton.actionPerformed: LEFT CLICK - "
+                    + (representedObject != null ? representedObject.toString() : "null"));
             if (viewer != null) {
                 viewer.matrixPreviewPressed(this);
             }

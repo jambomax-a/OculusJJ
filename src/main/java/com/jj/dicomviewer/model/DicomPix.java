@@ -55,6 +55,11 @@ public class DicomPix {
     private double sliceThickness = 0.0;
     private double sliceLocation = 0.0;
 
+    // HOROS-20240407準拠: DCMPix.h 146行目 - originX, originY, originZ
+    private double originX = 0.0;
+    private double originY = 0.0;
+    private double originZ = 0.0;
+
     // HOROS-20240407準拠: DCMPix.h 93行目 - orientation[9]
     // Image Orientation (Patient) (0020,0037) - 6つの値（行方向ベクトル3つ、列方向ベクトル3つ）
     private double[] orientation = new double[9]; // デフォルトは単位行列
@@ -66,6 +71,15 @@ public class DicomPix {
     // HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
     // Modality (0008,0060) - モダリティ（CT, MR, CR, USなど）
     private String modality = null;
+
+    // Study Instance UID
+    private String studyInstanceUID = null;
+
+    // Series Instance UID
+    private String seriesInstanceUID = null;
+
+    // Frame of Reference UID
+    private String frameOfReferenceUID = null;
 
     /**
      * ヘッダー情報を読み込む（ピクセルデータは読み込まない）
@@ -88,11 +102,88 @@ public class DicomPix {
             this.width = attrs.getInt(org.dcm4che3.data.Tag.Columns, 0);
             this.height = attrs.getInt(org.dcm4che3.data.Tag.Rows, 0);
             this.modality = attrs.getString(org.dcm4che3.data.Tag.Modality);
+            this.studyInstanceUID = attrs.getString(org.dcm4che3.data.Tag.StudyInstanceUID);
+            this.seriesInstanceUID = attrs.getString(org.dcm4che3.data.Tag.SeriesInstanceUID);
+            this.frameOfReferenceUID = attrs.getString(org.dcm4che3.data.Tag.FrameOfReferenceUID);
+            this.sliceLocation = attrs.getDouble(org.dcm4che3.data.Tag.SliceLocation, 0.0);
+            this.sliceThickness = attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0);
 
-            double[] spacing = attrs.getDoubles(org.dcm4che3.data.Tag.PixelSpacing);
-            if (spacing != null && spacing.length >= 2) {
-                this.pixelSpacingX = spacing[1];
-                this.pixelSpacingY = spacing[0];
+            // HOROS-20240407準拠: Image Position (Patient)
+            double[] imagePosition = attrs.getDoubles(org.dcm4che3.data.Tag.ImagePositionPatient);
+            if (imagePosition != null && imagePosition.length >= 3) {
+                this.originX = imagePosition[0];
+                this.originY = imagePosition[1];
+                this.originZ = imagePosition[2];
+            }
+
+            // HOROS-20240407準拠: Image Orientation (Patient)
+            double[] imageOrientation = attrs.getDoubles(org.dcm4che3.data.Tag.ImageOrientationPatient);
+            if (imageOrientation != null && imageOrientation.length >= 6) {
+                this.orientation[0] = imageOrientation[0];
+                this.orientation[1] = imageOrientation[1];
+                this.orientation[2] = imageOrientation[2];
+                this.orientation[3] = imageOrientation[3];
+                this.orientation[4] = imageOrientation[4];
+                this.orientation[5] = imageOrientation[5];
+                // 法線ベクトル（外積で計算）
+                this.orientation[6] = this.orientation[1] * this.orientation[5]
+                        - this.orientation[2] * this.orientation[4];
+                this.orientation[7] = this.orientation[2] * this.orientation[3]
+                        - this.orientation[0] * this.orientation[5];
+                this.orientation[8] = this.orientation[0] * this.orientation[4]
+                        - this.orientation[1] * this.orientation[3];
+            }
+
+            // HOROS-20240407準拠: Pixel Spacing/Ratio robust logic
+            double[] pixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.PixelSpacing);
+            if (pixelSpacing != null && pixelSpacing.length >= 2) {
+                this.pixelSpacingY = pixelSpacing[0];
+                this.pixelSpacingX = pixelSpacing[1];
+            } else {
+                double[] imagerPixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.ImagerPixelSpacing);
+                if (imagerPixelSpacing != null && imagerPixelSpacing.length >= 2) {
+                    this.pixelSpacingY = imagerPixelSpacing[0];
+                    this.pixelSpacingX = imagerPixelSpacing[1];
+                }
+            }
+
+            // SequenceOfUltrasoundRegions (US)
+            org.dcm4che3.data.Sequence seq = attrs.getSequence(org.dcm4che3.data.Tag.SequenceOfUltrasoundRegions);
+            if (seq != null && !seq.isEmpty()) {
+                for (org.dcm4che3.data.Attributes seqItem : seq) {
+                    int physicalUnitsX = seqItem.getInt(org.dcm4che3.data.Tag.PhysicalUnitsXDirection, 0);
+                    int physicalUnitsY = seqItem.getInt(org.dcm4che3.data.Tag.PhysicalUnitsYDirection, 0);
+                    int regionSpatialFormat = seqItem.getInt(org.dcm4che3.data.Tag.RegionSpatialFormat, 0);
+                    if (physicalUnitsX == 3 && physicalUnitsY == 3 && regionSpatialFormat == 1) {
+                        double physicalDeltaX = seqItem.getDouble(org.dcm4che3.data.Tag.PhysicalDeltaX, 0.0);
+                        double physicalDeltaY = seqItem.getDouble(org.dcm4che3.data.Tag.PhysicalDeltaY, 0.0);
+                        if (physicalDeltaX != 0.0 && physicalDeltaY != 0.0) {
+                            this.pixelSpacingX = Math.abs(physicalDeltaX) * 10.0;
+                            this.pixelSpacingY = Math.abs(physicalDeltaY) * 10.0;
+                            this.pixelSpacingFromUltrasoundRegions = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Pixel Aspect Ratio
+            boolean hasPixelAspectRatio = false;
+            double[] pixelAspectRatio = attrs.getDoubles(org.dcm4che3.data.Tag.PixelAspectRatio);
+            if (pixelAspectRatio != null && pixelAspectRatio.length >= 2) {
+                double ratiox = pixelAspectRatio[0];
+                double ratioy = pixelAspectRatio[1];
+                if (ratioy != 0.0) {
+                    this.pixelRatio = ratiox / ratioy;
+                    hasPixelAspectRatio = true;
+                }
+            }
+
+            // Fallback for Pixel Ratio
+            if (!hasPixelAspectRatio && !pixelSpacingFromUltrasoundRegions) {
+                if (pixelSpacingY != 0.0 && pixelSpacingX != 0.0 && pixelSpacingX != pixelSpacingY) {
+                    this.pixelRatio = pixelSpacingY / pixelSpacingX;
+                }
             }
 
             this.transferSyntaxUID = attrs.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
@@ -239,6 +330,7 @@ public class DicomPix {
         if (bufferedImage != null) {
             return; // 既に読み込み済み
         }
+        System.out.println("[DEBUG] DicomPix.loadImage() - loading: " + (path != null ? path.toString() : "null"));
 
         if (path == null) {
             logger.warn("loadImage: path is null");
@@ -393,7 +485,7 @@ public class DicomPix {
                             double ratiox = pixelAspectRatio[0];
                             double ratioy = pixelAspectRatio[1];
                             if (ratioy != 0.0) {
-                                this.pixelRatio = ratiox;
+                                this.pixelRatio = ratiox / ratioy;
                                 logger.debug("Pixel Ratio from PixelAspectRatio: {}", pixelRatio);
                             }
                         }
@@ -870,6 +962,9 @@ public class DicomPix {
      * HOROS-20240407準拠: DCMPix.h 281行目 - @property double sliceLocation;
      */
     public double getSliceLocation() {
+        if (width == 0 && height == 0) {
+            readHeader();
+        }
         return sliceLocation;
     }
 
@@ -904,6 +999,135 @@ public class DicomPix {
 
     public int getPheight() {
         return height;
+    }
+
+    /**
+     * DicomImageオブジェクトを取得
+     */
+    public DicomImage getImageObj() {
+        return imageObj;
+    }
+
+    /**
+     * Series Instance UIDを取得
+     */
+    public String getSeriesInstanceUID() {
+        if (seriesInstanceUID == null && width == 0 && height == 0) {
+            readHeader();
+        }
+        if (seriesInstanceUID != null) {
+            return seriesInstanceUID;
+        }
+        if (imageObj != null && imageObj.getSeries() != null) {
+            return imageObj.getSeries().getSeriesInstanceUID();
+        }
+        return null;
+    }
+
+    /**
+     * Study Instance UIDを取得
+     */
+    public String getStudyInstanceUID() {
+        if (studyInstanceUID == null && width == 0 && height == 0) {
+            readHeader();
+        }
+        if (studyInstanceUID != null) {
+            return studyInstanceUID;
+        }
+        if (imageObj != null && imageObj.getSeries() != null && imageObj.getSeries().getStudy() != null) {
+            return imageObj.getSeries().getStudy().getStudyInstanceUID();
+        }
+        return null;
+    }
+
+    /**
+     * Frame of Reference UIDを取得
+     */
+    public String getFrameOfReferenceUID() {
+        if (frameOfReferenceUID != null) {
+            return frameOfReferenceUID;
+        }
+        // TODO: imageObjからの取得も検討
+        return null;
+    }
+
+    public double getRatio() {
+        return pixelRatio;
+    }
+
+    public double getOriginX() {
+        return originX;
+    }
+
+    public double getOriginY() {
+        return originY;
+    }
+
+    public double getOriginZ() {
+        return originZ;
+    }
+
+    /**
+     * ピクセル座標をDICOM座標（Patient空間）に変換
+     * HOROS-20240407: convertPixX:y:toDICOMCoords:
+     */
+    public void convertPixToDICOM(double x, double y, double[] dicomCoords, boolean pixelCenter) {
+        if (pixelCenter) {
+            x -= 0.5;
+            y -= 0.5;
+        }
+
+        if (orientation != null && (orientation[6] != 0 || orientation[7] != 0 || orientation[8] != 0)) {
+            dicomCoords[0] = originX + y * orientation[3] * pixelSpacingY + x * orientation[0] * pixelSpacingX;
+            dicomCoords[1] = originY + y * orientation[4] * pixelSpacingY + x * orientation[1] * pixelSpacingX;
+            dicomCoords[2] = originZ + y * orientation[5] * pixelSpacingY + x * orientation[2] * pixelSpacingX;
+        } else {
+            dicomCoords[0] = originX + x * pixelSpacingX;
+            dicomCoords[1] = originY + y * pixelSpacingY;
+            dicomCoords[2] = originZ;
+        }
+    }
+
+    /**
+     * DICOM座標（Patient空間）をスライスローカル座標に変換
+     * HOROS-20240407: convertDICOMCoords:toSliceCoords:
+     */
+    public void convertDICOMToSlice(double[] dc, double[] sc, boolean pixelCenter) {
+        double[] temp = new double[3];
+        temp[0] = dc[0] - originX;
+        temp[1] = dc[1] - originY;
+        temp[2] = dc[2] - originZ;
+
+        if (orientation != null) {
+            sc[0] = temp[0] * orientation[0] + temp[1] * orientation[1] + temp[2] * orientation[2];
+            sc[1] = temp[0] * orientation[3] + temp[1] * orientation[4] + temp[2] * orientation[5];
+            sc[2] = temp[0] * orientation[6] + temp[1] * orientation[7] + temp[2] * orientation[8];
+        } else {
+            sc[0] = temp[0];
+            sc[1] = temp[1];
+            sc[2] = temp[2];
+        }
+
+        if (pixelCenter) {
+            sc[0] += pixelSpacingX / 2.0;
+            sc[1] += pixelSpacingY / 2.0;
+        }
+    }
+
+    /**
+     * 同一のオリエンテーションか判定
+     */
+    public boolean identicalOrientationTo(DicomPix other) {
+        if (other == null)
+            return false;
+        double[] o2 = other.getOrientation();
+        if (orientation == null || o2 == null)
+            return orientation == o2;
+        for (int i = 0; i < 6; i++) { // orientation[0..5]が独立した値
+            if (Math.abs(orientation[i] - o2[i]) > 0.0001)
+                return false;
+        }
+        return true;
     }
 
     /**

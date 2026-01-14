@@ -255,32 +255,18 @@ public class ThumbnailsListPanel extends JFrame {
         this.viewer = v;
 
         // HOROS-20240407準拠: ThumbnailsListPanel.m 268-290行目
-        // 同じthumbnailsViewの場合は、ウィンドウの順序のみ調整
+        // 同じthumbnailsViewの場合でも、viewerが変更されている可能性があるため、
+        // 常に内部状態を更新し、ウィンドウの順序のみ調整
         if (thumbnailsView == tb) {
+            this.viewer = v;
             if (tb != null && v != null && v.isVisible()) {
-                // HOROS-20240407準拠: ThumbnailsListPanel.m 270-271行目
-                // [[self window] orderWindow: NSWindowAbove relativeTo: [[v window]
-                // windowNumber]];
                 toFront();
             }
             if (tb == null && isVisible()) {
-                // HOROS-20240407準拠: ThumbnailsListPanel.m 285-286行目
-                // [self.window orderOut: self];
                 setVisible(false);
             }
-            return;
-        }
-
-        // HOROS-20240407準拠: ThumbnailsListPanel.m 292-293行目
-        // [viewer release];
-        // viewer = [v retain];
-        this.viewer = v;
-
-        // HOROS-20240407準拠: ThumbnailsListPanel.m 295-307行目
-        // thumbnailsViewの設定
-        if (thumbnailsView != null && thumbnailsView.getParent() != null) {
-            Container parent = thumbnailsView.getParent();
-            parent.remove(thumbnailsView);
+            // 早期リターンを削除し、常に最新のコンポーネント状態を確認するようにする
+            // return;
         }
 
         this.thumbnailsView = tb;

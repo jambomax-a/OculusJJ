@@ -7432,25 +7432,40 @@ public class BrowserController extends JFrame {
         javax.swing.JMenu syncSeriesMenu = new javax.swing.JMenu("Sync Series (Same Study)");
 
         javax.swing.JMenuItem syncOffItem = new javax.swing.JMenuItem("Off");
-        syncOffItem.addActionListener(e -> syncronize(null));
+        syncOffItem.addActionListener(e -> {
+            DCMView.syncro = DCMView.syncroOFF;
+            NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
+        });
         syncSeriesMenu.add(syncOffItem);
 
         javax.swing.JMenuItem syncSlicePosItem = new javax.swing.JMenuItem("Slice Position - Absolute");
-        syncSlicePosItem.addActionListener(e -> syncronize(null));
+        syncSlicePosItem.addActionListener(e -> {
+            DCMView.syncro = DCMView.syncroLOC;
+            NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
+        });
         syncSeriesMenu.add(syncSlicePosItem);
 
         syncSeriesMenu.addSeparator();
 
         javax.swing.JMenuItem syncSliceIDAbsItem = new javax.swing.JMenuItem("Slice ID - Absolute");
-        syncSliceIDAbsItem.addActionListener(e -> syncronize(null));
+        syncSliceIDAbsItem.addActionListener(e -> {
+            DCMView.syncro = DCMView.syncroABS;
+            NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
+        });
         syncSeriesMenu.add(syncSliceIDAbsItem);
 
         javax.swing.JMenuItem syncSliceIDRatioItem = new javax.swing.JMenuItem("Slice ID - Absolute Ratio");
-        syncSliceIDRatioItem.addActionListener(e -> syncronize(null));
+        syncSliceIDRatioItem.addActionListener(e -> {
+            DCMView.syncro = DCMView.syncroRatio;
+            NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
+        });
         syncSeriesMenu.add(syncSliceIDRatioItem);
 
         javax.swing.JMenuItem syncSliceIDRelItem = new javax.swing.JMenuItem("Slice ID - Relative");
-        syncSliceIDRelItem.addActionListener(e -> syncronize(null));
+        syncSliceIDRelItem.addActionListener(e -> {
+            DCMView.syncro = DCMView.syncroREL;
+            NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
+        });
         syncSeriesMenu.add(syncSliceIDRelItem);
 
         syncSeriesMenu.addSeparator();
@@ -8493,7 +8508,16 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) syncronize: (id) sender
      */
     public void syncronize(Object sender) {
-        // TODO: 同期実装
+        // 同期モードを切り替える
+        if (DCMView.syncro == DCMView.syncroOFF) {
+            DCMView.syncro = DCMView.syncroLOC;
+        } else {
+            DCMView.syncro = DCMView.syncroOFF;
+        }
+        System.out.println("[DEBUG] BrowserController.syncronize() - syncro set to: " + DCMView.syncro);
+
+        // 全てのビューを再描画
+        NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
     }
 
     /**
@@ -8501,7 +8525,9 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) alwaysSyncMenu: (id) sender
      */
     public void alwaysSyncMenu(Object sender) {
-        // TODO: 常に同期メニュー実装
+        // SYNCSERIESを切り替える (Horosの仕様に合わせて調整が必要)
+        DCMView.SYNCSERIES = !DCMView.SYNCSERIES;
+        System.out.println("[DEBUG] BrowserController.alwaysSyncMenu() - SYNCSERIES set to: " + DCMView.SYNCSERIES);
     }
 
     /**
@@ -8509,7 +8535,8 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) SyncSeries: (id) sender
      */
     public void SyncSeries(Object sender) {
-        // TODO: シリーズ同期実装
+        DCMView.SYNCSERIES = !DCMView.SYNCSERIES;
+        System.out.println("[DEBUG] BrowserController.SyncSeries() - SYNCSERIES set to: " + DCMView.SYNCSERIES);
     }
 
     /**
