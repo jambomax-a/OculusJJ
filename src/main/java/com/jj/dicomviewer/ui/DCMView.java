@@ -9,7 +9,11 @@ import java.awt.Dimension;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Stroke;
+import java.awt.Window;
+import java.awt.Frame;
+import java.awt.geom.Ellipse2D;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 import com.jj.dicomviewer.model.DicomPix;
 
@@ -27,8 +31,14 @@ public class DCMView extends JPanel {
     // HOROS-20240407準拠: DCMView.h 173行目 - NSArray *dcmFilesList;
     protected List<Object> dcmFilesList;
 
-    // HOROS-20240407準拠: DCMView.h 174行目 - NSMutableArray *dcmRoiList, *curRoiList;
-    protected List<Object> dcmRoiList;
+    // HOROS-20240407準拠: DCMView.h 174行目 - NSMutableArray *curRoiList;
+    protected List<com.jj.dicomviewer.model.ROI> curRoiList;
+
+    // HOROS-20240407準拠: ROI作成中のオブジェクト
+    protected com.jj.dicomviewer.model.ROI newRoi;
+
+    // 現在選択されているROI
+    protected com.jj.dicomviewer.model.ROI selectedRoi;
 
     // HOROS-20240407準拠: DCMView.h 175行目 - DCMPix *curDCM;
     protected DicomPix curDCM;
@@ -134,6 +144,19 @@ public class DCMView extends JPanel {
     // HOROS-20240407準拠: DCMView.m 6931行目 - avoidRecursiveSync
     protected static int avoidRecursiveSync = 0;
 
+    // HOROS-20240407準拠: ドラッグ操作用の変数
+    protected java.awt.Point startDragPoint = null;
+    protected java.awt.geom.Point2D.Float startDragImagePoint = null;
+    protected float startWL = 0;
+    protected float startWW = 0;
+
+    // HOROS-20240407準拠: Repulsorツールの半径
+    protected float repulsorRadius = 0;
+    protected java.awt.Point originStart = new java.awt.Point(0, 0);
+    protected List<java.awt.geom.Point2D.Float> startRoiPoints = null;
+    protected float startTextBoxOffsetX = 0;
+    protected float startTextBoxOffsetY = 0;
+
     // HOROS-20240407準拠: DCMView.h - sliceFromTo lines
     protected float[][] sliceFromTo = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
     protected float[][] sliceFromToS = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
@@ -169,6 +192,10 @@ public class DCMView extends JPanel {
         t3DRotate, // 3D回転
         tCross, // クロス
         tUnselect, // 選択解除
+        tAxis, // 軸 (長径・短径)
+        tDynamicAngle, // 動的角度
+        tPerpendicular, // 垂直線群
+        tBrush, // ブラシ
         tWLWW, // ウィンドウレベル/ウィンドウ幅
         tNext, // 次
         tPrevious, // 前
@@ -208,15 +235,69 @@ public class DCMView extends JPanel {
         t3DPolygonTool4 // 3D多角形ツール4
     }
 
+    // HOROS-20240407準拠: 現在のツール（デフォルトはWL/WW）
+    public static ToolMode currentTool = ToolMode.tWLWW;
+
+    public List<com.jj.dicomviewer.model.ROI> getCurRoiList() {
+        return curRoiList;
+    }
+
+    /**
+     * ROIツールかどうかを判定
+     */
+    protected boolean isROITool(ToolMode tool) {
+        return tool == ToolMode.tMesure || tool == ToolMode.tOval || tool == ToolMode.tAngle ||
+                tool == ToolMode.tArrow || tool == ToolMode.tText || tool == ToolMode.tOPolygon
+                || tool == ToolMode.tCPolygon || tool == ToolMode.tROI || tool == ToolMode.tPencil
+                || tool == ToolMode.t2DPoint || tool == ToolMode.tAxis || tool == ToolMode.tDynamicAngle
+                || tool == ToolMode.tPerpendicular || tool == ToolMode.tBrush;
+    }
+
     /**
      * コンストラクタ
      * HOROS-20240407準拠: DCMView.m
      */
+    /**
+     * 新規作成中のROIを確定させて保存する
+     */
+    protected void completeNewRoi() {
+        if (newRoi == null)
+            return;
+
+        // HOROS-20240407準拠: 有効なROI（サイズが0でない等）のみ保存する
+        if (curDCM != null && newRoi.isValid()) {
+            // 新規作成時も統計情報を計算
+            if (newRoi.getType() == ToolMode.tOval || newRoi.getType() == ToolMode.tROI ||
+                    newRoi.getType() == ToolMode.tCPolygon || newRoi.getType() == ToolMode.tPencil ||
+                    newRoi.getType() == ToolMode.tOPolygon || newRoi.getType() == ToolMode.tBrush ||
+                    newRoi.getType() == ToolMode.t2DPoint) {
+                curDCM.computeROIStatistics(newRoi);
+            }
+
+            // ROIを現在の画像のSOP Instance UIDに関連付ける
+            String sopUID = curDCM.getSOPInstanceUID();
+            newRoi.setSOPInstanceUID(sopUID);
+            newRoi.setSourcePix(curDCM); // HOROS: 削除や統計計算のためにソースを保持
+
+            curDCM.addROI(newRoi);
+            // 現在表示中のリストも更新（fetch）
+            curRoiList = curDCM.getROIs();
+
+            // HOROS-20240407準拠: データベースに保存して永続化
+            com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase
+                    .activeLocalDatabase();
+            if (db != null) {
+                db.saveROI(newRoi, sopUID, curDCM.getFrameNumber());
+            }
+        }
+        newRoi = null;
+        repaint();
+    }
+
     public DCMView() {
         super();
         this.dcmPixList = new ArrayList<>();
         this.dcmFilesList = new ArrayList<>();
-        this.dcmRoiList = new ArrayList<>();
 
         // HOROS-20240407準拠: DCMView.m 6490行目、12635行目
         // annotationType = [[NSUserDefaults standardUserDefaults]
@@ -236,6 +317,55 @@ public class DCMView extends JPanel {
             }
         });
 
+        // HOROS-20240407準拠: キーボードショートカット
+        addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                switch (e.getKeyCode()) {
+                    case java.awt.event.KeyEvent.VK_W:
+                        currentTool = ToolMode.tWLWW;
+                        break;
+                    case java.awt.event.KeyEvent.VK_P:
+                        currentTool = ToolMode.tTranslate;
+                        break;
+                    case java.awt.event.KeyEvent.VK_Z:
+                        currentTool = ToolMode.tZoom;
+                        break;
+                    case java.awt.event.KeyEvent.VK_R:
+                        currentTool = ToolMode.tROI;
+                        break;
+                    case java.awt.event.KeyEvent.VK_O:
+                        currentTool = ToolMode.tOval;
+                        break;
+                    case java.awt.event.KeyEvent.VK_M:
+                        currentTool = ToolMode.tMesure;
+                        break;
+                    case java.awt.event.KeyEvent.VK_A:
+                        currentTool = ToolMode.tAngle;
+                        break;
+                    case java.awt.event.KeyEvent.VK_T:
+                        currentTool = ToolMode.tText;
+                        break;
+                    case java.awt.event.KeyEvent.VK_E:
+                        currentTool = ToolMode.tRepulsor;
+                        break;
+                    case java.awt.event.KeyEvent.VK_S:
+                        currentTool = ToolMode.tPlain;
+                        break;
+                    case java.awt.event.KeyEvent.VK_BACK_SPACE:
+                    case java.awt.event.KeyEvent.VK_DELETE:
+                        if (selectedRoi != null && curDCM != null) {
+                            curDCM.getROIs().remove(selectedRoi);
+                            curRoiList = curDCM.getROIs();
+                            selectedRoi = null;
+                            repaint();
+                        }
+                        break;
+                }
+                repaint();
+            }
+        });
+
         // HOROS-20240407準拠: マウス位置を追跡するリスナーを追加
         addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
             @Override
@@ -244,10 +374,11 @@ public class DCMView extends JPanel {
                 // becomeFirstResponder は mousePressed または scrollWheel で行う
 
                 // HOROS-20240407準拠: DCMView.m 3769-3772行目
-                java.awt.Point viewPoint = new java.awt.Point(e.getX(), e.getY());
-                java.awt.Point imageLocation = convertFromNSView2GL(viewPoint);
-                mouseXPos = imageLocation.x;
-                mouseYPos = imageLocation.y;
+                java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                if (imgPt != null) {
+                    mouseXPos = imgPt.x;
+                    mouseYPos = imgPt.y;
+                }
 
                 // HOROS-20240407準拠: 3D位置を同期 (DCMView.m 4070-4112行目相当)
                 // isKeyViewの場合のみ同期メッセージを送信 (DCMView.m 6725行目相当)
@@ -262,7 +393,212 @@ public class DCMView extends JPanel {
                     }
                 }
 
+                // --- ROI作成中のマウス移動 (追尾点) ---
+                if (newRoi != null && (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
+                        currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
+                        currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular)) {
+                    if (imgPt != null && newRoi.getPoints().size() > 0) {
+                        // マウスカーソルの位置に「最後の点」を更新し続ける
+                        newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
+                    }
+                }
+
                 repaint(); // マウス位置が変わったら再描画
+            }
+
+            @Override
+            public void mouseDragged(java.awt.event.MouseEvent e) {
+                // HOROS-20240407準拠: DCMView.m 4488-4493行目相当 (mouseDragged:)
+                if (startDragPoint == null) {
+                    return;
+                }
+
+                // --- Repulsorツールのドラッグ ---
+                if (currentTool == ToolMode.tRepulsor) {
+                    java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                    if (imgPt != null) {
+                        mouseXPos = imgPt.x;
+                        mouseYPos = imgPt.y;
+
+                        // HOROS-20240407準拠: 選択中のROI、または選択がなければ全ROIを対象にする
+                        List<com.jj.dicomviewer.model.ROI> targets = new ArrayList<>();
+                        if (selectedRoi != null) {
+                            targets.add(selectedRoi);
+                        } else if (curRoiList != null) {
+                            targets.addAll(curRoiList);
+                        }
+
+                        for (com.jj.dicomviewer.model.ROI roi : targets) {
+                            float pixelRatio = (curDCM != null) ? (float) curDCM.getPixelRatio() : 1.0f;
+                            boolean changed = roi.repulse(imgPt, repulsorRadius, scaleValue, pixelRatio);
+
+                            // 変形が行われた場合に統計情報を更新（リアルタイムにラベルへ反映させるため）
+                            if (changed && curDCM != null) {
+                                // リアルタイム変形中は非同期で計算を行い、UIのレスポンスを優先する
+                                DicomPix currentPix = curDCM;
+                                new Thread(() -> {
+                                    currentPix.computeROIStatistics(roi);
+                                    javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                                }).start();
+                            }
+                        }
+
+                        repaint();
+                    }
+                    return;
+                }
+
+                // --- ROI作成中のドラッグ ---
+                if (newRoi != null && isROITool(currentTool)) {
+                    java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                    if (imgPt != null) {
+                        if (currentTool == ToolMode.tPencil) {
+                            // 鉛筆ツール: ドラッグ中に点を追加
+                            newRoi.addPoint(imgPt);
+                        } else if (currentTool == ToolMode.tBrush) {
+                            // ブラシツール: ブラシサイズとモード（Draw/Erase）を適用
+                            int size = BrushPaletteDialog.getBrushSize();
+                            boolean isErase = (BrushPaletteDialog.getBrushMode() == BrushPaletteDialog.BrushMode.ERASE);
+                            // Brush ROIの実体は点の集合だが、描画時に太さ(thickness)として扱う
+                            newRoi.setThickness(size);
+                            newRoi.setEraseMode(isErase);
+                            newRoi.addPoint(imgPt);
+                        } else if (newRoi.getPoints().size() >= 1) {
+                            // 最後の点を更新 (Measure, Oval, ROI, Arrow, Angle, Polygon等)
+                            newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
+                        }
+                        repaint();
+                    }
+                    return;
+                }
+
+                if (selectedRoi != null && startDragImagePoint != null) {
+                    java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                    if (imgPt != null) {
+                        int handleIndex = selectedRoi.getActiveHandleIndex();
+                        double dx = imgPt.x - startDragImagePoint.x;
+                        double dy = imgPt.y - startDragImagePoint.y;
+
+                        if (handleIndex >= 0) {
+                            if (selectedRoi.getType() == ToolMode.tOval || selectedRoi.getType() == ToolMode.tROI) {
+                                // 楕円・矩形のリサイズ（Horos準拠 5つのハンドル: Center + Corners）
+                                java.awt.geom.Point2D.Float sp0 = startRoiPoints.get(0);
+                                java.awt.geom.Point2D.Float sp1 = startRoiPoints.get(1);
+                                float minX = Math.min(sp0.x, sp1.x);
+                                float minY = Math.min(sp0.y, sp1.y);
+                                float maxX = Math.max(sp0.x, sp1.x);
+                                float maxY = Math.max(sp0.y, sp1.y);
+
+                                switch (handleIndex) {
+                                    case 0: // Center: ROI全体を移動
+                                        minX += dx;
+                                        maxX += dx;
+                                        minY += dy;
+                                        maxY += dy;
+                                        break;
+                                    case 1: // Top-Left
+                                        minX += dx;
+                                        minY += dy;
+                                        break;
+                                    case 2: // Top-Right
+                                        maxX += dx;
+                                        minY += dy;
+                                        break;
+                                    case 3: // Bottom-Left
+                                        minX += dx;
+                                        maxY += dy;
+                                        break;
+                                    case 4: // Bottom-Right
+                                        maxX += dx;
+                                        maxY += dy;
+                                        break;
+                                }
+                                selectedRoi.setPoints(java.util.Arrays.asList(
+                                        new java.awt.geom.Point2D.Float(minX, minY),
+                                        new java.awt.geom.Point2D.Float(maxX, maxY)));
+                            } else if (handleIndex < selectedRoi.getPoints().size()) {
+                                // ハンドルの移動（長さ・向きの変更）
+                                java.awt.geom.Point2D.Float startPoint = startRoiPoints.get(handleIndex);
+                                selectedRoi.updatePoint(handleIndex,
+                                        new java.awt.geom.Point2D.Float((float) (startPoint.x + dx),
+                                                (float) (startPoint.y + dy)));
+                            }
+                        } else if (selectedRoi.isClickInTextBox() && selectedRoi.getType() != ToolMode.tText) {
+                            // テキストボックスの移動 (測定ラベルなど)
+                            selectedRoi.setTextBoxOffset((float) (startTextBoxOffsetX + dx),
+                                    (float) (startTextBoxOffsetY + dy));
+                        } else if (startRoiPoints != null) {
+                            // ROI全体の移動
+                            List<java.awt.geom.Point2D.Float> newPoints = new ArrayList<>();
+                            for (java.awt.geom.Point2D.Float p : startRoiPoints) {
+                                newPoints.add(
+                                        new java.awt.geom.Point2D.Float((float) (p.x + dx), (float) (p.y + dy)));
+                            }
+                            selectedRoi.setPoints(newPoints);
+                        }
+
+                        // リアルタイムで統計情報を更新
+                        if (selectedRoi.getType() == ToolMode.tOval || selectedRoi.getType() == ToolMode.tROI ||
+                                selectedRoi.getType() == ToolMode.tCPolygon
+                                || selectedRoi.getType() == ToolMode.tPencil) {
+                            curDCM.computeROIStatistics(selectedRoi);
+                        }
+
+                        repaint();
+                    }
+                    return;
+                }
+
+                int dragDx = e.getX() - startDragPoint.x;
+                int dragDy = e.getY() - startDragPoint.y;
+
+                // 1. パンニング (中ボタン, Ctrl+左ドラッグ, または tTranslateツール)
+                if ((e.getModifiersEx() & java.awt.event.InputEvent.BUTTON2_DOWN_MASK) != 0 ||
+                        ((e.getModifiersEx() & java.awt.event.InputEvent.CTRL_DOWN_MASK) != 0 &&
+                                (e.getModifiersEx() & java.awt.event.InputEvent.BUTTON1_DOWN_MASK) != 0)
+                        ||
+                        currentTool == ToolMode.tTranslate) {
+
+                    origin.x = originStart.x + dragDx;
+                    origin.y = originStart.y + dragDy;
+                    repaint();
+                }
+                // 2. ズーム (Alt+左ドラッグ, または tZoomツール)
+                else if (((e.getModifiersEx() & java.awt.event.InputEvent.ALT_DOWN_MASK) != 0 &&
+                        (e.getModifiersEx() & java.awt.event.InputEvent.BUTTON1_DOWN_MASK) != 0) ||
+                        currentTool == ToolMode.tZoom) {
+
+                    float newScale = startScaleValue + (float) dragDy / 200.0f; // 感度調整
+                    if (newScale < 0.01f)
+                        newScale = 0.01f;
+                    setScaleValue(newScale);
+                    repaint();
+                }
+                // 3. WLWW処理 (右ボタン または tWLWWツール)
+                else if (currentTool == ToolMode.tWLWW
+                        || (e.getModifiersEx() & java.awt.event.InputEvent.BUTTON3_DOWN_MASK) != 0) {
+                    // HOROS-20240407準拠: DCMView.m 4600行目付近相当
+                    // 感度調整 (WLWWの場合、画像の元々のWWに応じて変化させるのがHoros流)
+                    float sensitivity = startWW / 500.0f;
+                    if (sensitivity < 1.0f)
+                        sensitivity = 1.0f;
+
+                    float newWW = startWW + dragDx * sensitivity;
+                    float newWL = startWL + dragDy * sensitivity;
+
+                    if (newWW < 1)
+                        newWW = 1;
+
+                    if (curDCM != null) {
+                        curDCM.setWindowLevelWidth(newWL, newWW);
+
+                        // 画像が更新されたので再描画
+                        repaint();
+
+                        // 同期が必要な場合
+                        sendSyncMessageWLWW(newWL, newWW);
+                    }
+                }
             }
         });
 
@@ -275,6 +611,359 @@ public class DCMView extends JPanel {
                 if (!isKeyView) {
                     becomeFirstResponder();
                 }
+
+                // URL/画像の座標変換
+                java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                if (imgPt == null)
+                    return;
+
+                // マウス位置を記録
+                mouseXPos = imgPt.x;
+                mouseYPos = imgPt.y;
+
+                // --- 1. ROI作成中の次点追加 または 既存ROI選択 ---
+                if (is2DViewer()) {
+                    if (currentTool == ToolMode.tRepulsor) {
+                        // HOROS-20240407準拠: Repulsorツールの開始 (DCMView.m 4380行目付近)
+                        if (curRoiList != null) {
+                            com.jj.dicomviewer.model.ROI clickedRoi = null;
+                            double hitTolerance = 10.0 / scaleValue;
+                            for (int i = curRoiList.size() - 1; i >= 0; i--) {
+                                com.jj.dicomviewer.model.ROI roi = curRoiList.get(i);
+                                if (roi.hitTest(imgPt, hitTolerance)) {
+                                    clickedRoi = roi;
+                                    break;
+                                }
+                            }
+
+                            if (clickedRoi != null) {
+                                // ROIを直接クリックした場合はPencilモードに切り替えて即座に編集可能にする
+                                currentTool = ToolMode.tPencil;
+                                repulsorROIEdition = true;
+                                selectedRoi = clickedRoi;
+                            } else {
+                                // ROIの近くをクリックした場合はRepulsorとしての半径を計算
+                                double minDist = Double.MAX_VALUE;
+                                com.jj.dicomviewer.model.ROI closest = null;
+                                float pixelRatio = (curDCM != null) ? (float) curDCM.getPixelRatio() : 1.0f;
+
+                                for (com.jj.dicomviewer.model.ROI roi : curRoiList) {
+                                    if (roi.isLocked() || !roi.isSelectable())
+                                        continue;
+
+                                    // 除外されるタイプをチェック
+                                    if (roi.getType() == ToolMode.tAxis || roi.getType() == ToolMode.tAngle ||
+                                            roi.getType() == ToolMode.tArrow || roi.getType() == ToolMode.tDynamicAngle
+                                            ||
+                                            roi.getType() == ToolMode.tText)
+                                        continue;
+
+                                    for (java.awt.geom.Point2D.Float pt : roi.getPoints()) {
+                                        double dx = pt.x - imgPt.x;
+                                        double dy = (pt.y - imgPt.y) * pixelRatio;
+                                        double d = Math.sqrt(dx * dx + dy * dy);
+                                        if (d < minDist) {
+                                            minDist = d;
+                                            closest = roi;
+                                        }
+                                    }
+                                }
+
+                                if (closest != null && minDist > 0) {
+                                    selectedRoi = closest;
+                                    // HOROS-20240407準拠: 半径 = (dist + 0.5) * 0.8
+                                    repulsorRadius = (float) ((minDist + 0.5) * 0.8);
+                                    if (repulsorRadius < 1.0f)
+                                        repulsorRadius = 1.0f; // 最小サイズを保証
+                                    float maxR = (curDCM != null) ? curDCM.getWidth() / 2.0f : 256.0f;
+                                    if (repulsorRadius > maxR)
+                                        repulsorRadius = maxR;
+
+                                    // LengthをOpenPolygonに変換
+                                    if (selectedRoi.getType() == ToolMode.tMesure) {
+                                        selectedRoi.setType(ToolMode.tOPolygon);
+                                    }
+                                    repaint();
+                                } else {
+                                    // 有効なROIが見つからない場合は警告 (Horos準拠)
+                                    javax.swing.JOptionPane.showMessageDialog(DCMView.this,
+                                            "Repulsorツールを使用するには、画像上にROI（Length、Polygon、Pencil）が必要です。",
+                                            "Repulsor",
+                                            javax.swing.JOptionPane.WARNING_MESSAGE);
+                                    repulsorRadius = 0;
+                                }
+                            }
+                        }
+                    } else if (newRoi != null
+                            && (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
+                                    currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
+                                    currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular)) {
+
+                        // --- 終了判定 ---
+                        // HOROS: 既存の点（特に直前の確定点）と非常に近い場所をクリックしたら終了
+                        double tolerance = 10.0 / scaleValue;
+                        // getPoints() はコピーを返すので安全
+                        List<java.awt.geom.Point2D.Float> currentPts = newRoi.getPoints();
+
+                        // mouseMovedで「追尾点」が末尾に追加されているので、
+                        // 確定済みの最後の点は後ろから2番目 (size-2)
+                        if (currentPts.size() >= 2 && currentTool != ToolMode.tAxis &&
+                                currentTool != ToolMode.tDynamicAngle && currentTool != ToolMode.tPerpendicular) {
+                            java.awt.geom.Point2D.Float lastFixedPt = currentPts.get(currentPts.size() - 2);
+                            if (imgPt.distance(lastFixedPt) < tolerance) {
+                                completeNewRoi();
+                                repaint();
+                                return;
+                            }
+                        }
+
+                        // ダブルクリック判定（補助）
+                        if (e.getClickCount() == 2) {
+                            completeNewRoi();
+                            repaint();
+                            return;
+                        }
+
+                        // --- 次の点へ ---
+                        // ツールごとの完了条件
+                        if (currentTool == ToolMode.tAngle && currentPts.size() == 3) {
+                            newRoi.updatePoint(2, imgPt); // 最後（3点目）を確定
+                            completeNewRoi();
+                        } else if (currentTool == ToolMode.tAxis && currentPts.size() == 4) {
+                            // HOROS: 1-Click(P0,P1), 2-Click(P1確定,P2追加), 3-Click(P2確定,P3追加),
+                            // 4-Click(P3確定&完了)
+                            newRoi.updatePoint(3, imgPt); // 4点目を確定
+                            completeNewRoi();
+                        } else if (currentTool == ToolMode.tDynamicAngle && currentPts.size() == 4) {
+                            newRoi.updatePoint(3, imgPt); // 最後（4点目）を確定
+                            completeNewRoi();
+                        } else if (currentTool == ToolMode.tPerpendicular && currentPts.size() == 6) {
+                            newRoi.updatePoint(5, imgPt); // 最後（6点目）を確定
+                            completeNewRoi();
+                        } else {
+                            // まだ続くなら、現在の位置を確定させ、次の追尾用の点を同じ場所に重ねて追加
+                            newRoi.updatePoint(currentPts.size() - 1, imgPt);
+                            newRoi.addPoint(imgPt);
+                        }
+
+                        repaint();
+                        return;
+                    }
+
+                    // 既存のROIをヒットテスト
+                    com.jj.dicomviewer.model.ROI clickedRoi = null;
+                    if (curRoiList != null) {
+                        for (int i = curRoiList.size() - 1; i >= 0; i--) {
+                            com.jj.dicomviewer.model.ROI roi = curRoiList.get(i);
+                            double tolerance = 10.0 / scaleValue; // NeighborhoodRadius (10px)
+                            if (roi.hitTest(imgPt, tolerance)) {
+                                clickedRoi = roi;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (clickedRoi != null) {
+                        selectedRoi = clickedRoi;
+                        newRoi = null;
+
+                        // HOROS-20240407: Double-click to open properties
+                        if (e.getClickCount() == 2) {
+                            Window owner = SwingUtilities.getWindowAncestor(DCMView.this);
+                            ROIPropertyDialog dialog = new ROIPropertyDialog(
+                                    owner instanceof Frame ? (Frame) owner : null,
+                                    selectedRoi);
+                            dialog.setVisible(true);
+                        }
+
+                        // HOROS: 選択時に統計情報を再計算
+                        if (curDCM != null && (selectedRoi.getType() == ToolMode.tOval ||
+                                selectedRoi.getType() == ToolMode.tROI ||
+                                selectedRoi.getType() == ToolMode.tCPolygon ||
+                                selectedRoi.getType() == ToolMode.tPencil ||
+                                selectedRoi.getType() == ToolMode.tOPolygon)) {
+                            curDCM.computeROIStatistics(selectedRoi);
+                        }
+
+                        repaint();
+                    } else if (isROITool(currentTool)) {
+                        selectedRoi = null;
+                        if (curDCM != null) {
+                            newRoi = new com.jj.dicomviewer.model.ROI(currentTool,
+                                    (float) curDCM.getPixelSpacingX(),
+                                    (float) curDCM.getPixelSpacingY(), imgPt);
+                            newRoi.setSourcePix(curDCM);
+                            newRoi.setParentView(DCMView.this);
+
+                            if (currentTool == ToolMode.tText) {
+                                // HOROS-20240407: Create with only 1 point and default text
+                                newRoi.addPoint(imgPt);
+                                newRoi.setName("Double-Click to edit");
+                                completeNewRoi();
+                            } else if (currentTool == ToolMode.tPerpendicular) {
+                                // HOROS-20240407: 6つの点をテンプレートとして即座に作成 (One-click drop)
+                                float off = (float) (100.0 / scaleValue);
+                                // Baseline (4-5)
+                                java.awt.geom.Point2D.Float p4 = new java.awt.geom.Point2D.Float(imgPt.x, imgPt.y);
+                                java.awt.geom.Point2D.Float p5 = new java.awt.geom.Point2D.Float(imgPt.x + off,
+                                        imgPt.y);
+                                // Line B (0-1)
+                                java.awt.geom.Point2D.Float p0 = new java.awt.geom.Point2D.Float(imgPt.x + off * 0.25f,
+                                        imgPt.y);
+                                java.awt.geom.Point2D.Float p1 = new java.awt.geom.Point2D.Float(imgPt.x + off * 0.25f,
+                                        imgPt.y + off * 0.5f);
+                                // Line C (2-3)
+                                java.awt.geom.Point2D.Float p2 = new java.awt.geom.Point2D.Float(imgPt.x + off * 0.75f,
+                                        imgPt.y);
+                                java.awt.geom.Point2D.Float p3 = new java.awt.geom.Point2D.Float(imgPt.x + off * 0.75f,
+                                        imgPt.y + off * 0.5f);
+
+                                newRoi.addPoint(p0);
+                                newRoi.addPoint(p1);
+                                newRoi.addPoint(p2);
+                                newRoi.addPoint(p3);
+                                newRoi.addPoint(p4);
+                                newRoi.addPoint(p5);
+
+                                newRoi.recalculatePerpendicular();
+                                selectedRoi = newRoi;
+                                completeNewRoi();
+                            } else {
+                                // HOROS: mouseRoiDownIn 準拠
+                                if (currentTool == ToolMode.tAxis || currentTool == ToolMode.tDynamicAngle
+                                        || currentTool == ToolMode.tAngle) {
+                                    // HOROS: 最初のクリックで2点（起点と追尾点）を追加することで、
+                                    // 2クリック目で2点目、3クリック目で3点目を確定させる直感的な操作にする
+                                    newRoi.addPoint(imgPt); // P0: 起点
+                                    newRoi.addPoint(imgPt); // P1: 追尾点
+                                } else {
+                                    // 従来のOval, ROI等はドラッグを前提に2点追加
+                                    newRoi.addPoint(imgPt); // P0: 起点
+                                    newRoi.addPoint(imgPt); // P1: 終点/追尾点
+                                }
+
+                                if (currentTool == ToolMode.tAngle || currentTool == ToolMode.tOPolygon ||
+                                        currentTool == ToolMode.tCPolygon || currentTool == ToolMode.tPencil ||
+                                        currentTool == ToolMode.tAxis || currentTool == ToolMode.tDynamicAngle) {
+                                    if (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon
+                                            || currentTool == ToolMode.tPencil) {
+                                        newRoi.setIsSpline(true);
+                                    }
+                                }
+                            }
+                        }
+                        repaint();
+                    } else {
+                        selectedRoi = null;
+                        // ツールなし（移動等）の場合でもドラッグ開始位置を記録するためここでは何もしない
+                    }
+                }
+
+                // --- 2. WL/WWリセット (ROI作成中・選択中でない場合のダブルクリック) ---
+                if (e.getClickCount() == 2 && newRoi == null && selectedRoi == null) {
+                    if (curDCM != null) {
+                        curDCM.resetWLWW();
+                        sendSyncMessageWLWW(curDCM.getWindowLevel(), curDCM.getWindowWidth());
+                        repaint();
+                    }
+                    return;
+                }
+
+                // --- ドラッグ開始情報の保存 ---
+                startDragPoint = e.getPoint();
+                startDragImagePoint = imgPt;
+                originStart = new java.awt.Point(origin);
+                startScaleValue = scaleValue;
+                if (curDCM != null) {
+                    startWL = curDCM.getWindowLevel();
+                    startWW = curDCM.getWindowWidth();
+                }
+
+                if (selectedRoi != null && startDragImagePoint != null) {
+                    startRoiPoints = selectedRoi.getPoints();
+                    startTextBoxOffsetX = selectedRoi.getTextBoxOffsetX();
+                    startTextBoxOffsetY = selectedRoi.getTextBoxOffsetY();
+                } else {
+                    startRoiPoints = null;
+                }
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                // --- Repulsorツールの終了 ---
+                boolean hadRepulsorAction = (currentTool == ToolMode.tRepulsor || repulsorROIEdition);
+
+                if (repulsorROIEdition) {
+                    currentTool = ToolMode.tRepulsor;
+                    repulsorROIEdition = false;
+                }
+                if (currentTool == ToolMode.tRepulsor) {
+                    if (hadRepulsorAction && curDCM != null) {
+                        // Repulsorによる変形を保存
+                        com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase
+                                .activeLocalDatabase();
+                        if (db != null) {
+                            if (selectedRoi != null) {
+                                db.saveROI(selectedRoi, selectedRoi.getSOPInstanceUID(), curDCM.getFrameNumber());
+                            } else if (curRoiList != null) {
+                                for (com.jj.dicomviewer.model.ROI roi : curRoiList) {
+                                    db.saveROI(roi, roi.getSOPInstanceUID(), curDCM.getFrameNumber());
+                                }
+                            }
+                        }
+                    }
+                    repulsorRadius = 0;
+                    repaint();
+                }
+
+                // --- ROI移動の完了 ---
+                if (selectedRoi != null && startRoiPoints != null) {
+                    if (curDCM != null) {
+                        // 移動やリサイズ後に統計情報を再計算
+                        if (selectedRoi.getType() == ToolMode.tOval || selectedRoi.getType() == ToolMode.tROI ||
+                                selectedRoi.getType() == ToolMode.tCPolygon
+                                || selectedRoi.getType() == ToolMode.tPencil) {
+                            curDCM.computeROIStatistics(selectedRoi);
+                        }
+
+                        com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase
+                                .activeLocalDatabase();
+                        if (db != null) {
+                            db.saveROI(selectedRoi, selectedRoi.getSOPInstanceUID(), curDCM.getFrameNumber());
+                        }
+                    }
+                    startRoiPoints = null;
+                }
+
+                // --- ROI作成中のマウスリリース ---
+                if (newRoi != null) {
+                    // 多角形、角度、軸、垂線ツールなどはクリック（またはドラッグ＆リリース）の繰り返しで作成する
+                    if (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
+                            currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
+                            currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular) {
+
+                        // ドラッグして離した場合、その点を確定させて次の点の追尾を開始する
+                        java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                        if (imgPt != null) {
+                            List<java.awt.geom.Point2D.Float> pts = newRoi.getPoints();
+                            newRoi.updatePoint(pts.size() - 1, imgPt);
+
+                            // 次の点を追加（条件付き）
+                            // Axis/DynamicAngle/Perpendicular は mousePressed で次点を追加していくため、ここでは追加しない
+                            if (currentTool != ToolMode.tAxis && currentTool != ToolMode.tDynamicAngle
+                                    && currentTool != ToolMode.tPerpendicular) {
+                                if (currentTool == ToolMode.tPerpendicular && pts.size() % 2 == 0
+                                        && pts.size() < 6) {
+                                    newRoi.addPoint(imgPt);
+                                }
+                            }
+                        }
+                    } else {
+                        completeNewRoi();
+                    }
+                }
+                startDragPoint = null;
+                startDragImagePoint = null;
             }
         });
 
@@ -319,13 +1008,47 @@ public class DCMView extends JPanel {
     }
 
     /**
+     * convertScreenToImage - スクリーン座標を画像上の座標（ピクセル）に変換
+     * HOROS-20240407準拠: DCMView.m 5100行目付近相当
+     */
+    public java.awt.geom.Point2D.Float convertScreenToImage(java.awt.Point screenPt) {
+        if (curDCM == null)
+            return null;
+
+        int panelWidth = getWidth();
+        int panelHeight = getHeight();
+        int imageWidth = curDCM.getWidth();
+        int imageHeight = curDCM.getHeight();
+        float pixelRatio = (float) curDCM.getPixelRatio();
+
+        float scaledWidth = imageWidth * scaleValue;
+        float scaledHeight = imageHeight * scaleValue * pixelRatio;
+
+        float xOffset = (panelWidth - scaledWidth) / 2.0f + origin.x;
+        float yOffset = (panelHeight - scaledHeight) / 2.0f + origin.y;
+
+        float imgX = (screenPt.x - xOffset) / scaleValue;
+        float imgY = (screenPt.y - yOffset) / (scaleValue * pixelRatio);
+
+        // 反転を考慮
+        if (xFlipped) {
+            imgX = imageWidth - imgX;
+        }
+        if (yFlipped) {
+            imgY = imageHeight - imgY;
+        }
+
+        return new java.awt.geom.Point2D.Float(imgX, imgY);
+    }
+
+    /**
      * setPixels - ピクセルデータを設定
      * HOROS-20240407準拠: DCMView.m 2176-2257行目
      * - (void) setPixels: (NSMutableArray*) pixels files: (NSArray*) files rois:
      * (NSMutableArray*) rois firstImage: (short) firstImage level: (char) level
      * reset: (BOOL) reset
      */
-    public void setPixels(List<DicomPix> pixels, List<Object> files, List<Object> rois, short firstImage, char level,
+    public void setPixels(List<DicomPix> pixels, List<Object> files, List<?> rois, short firstImage, char level,
             boolean reset) {
         System.out.println("[DEBUG] DCMView.setPixels() called - pixels: " + (pixels != null ? pixels.size() : "null")
                 + ", firstImage: " + firstImage + ", reset: " + reset);
@@ -373,9 +1096,8 @@ public class DCMView extends JPanel {
                 }
 
                 // HOROS-20240407準拠: DCMView.m 2232-2236行目 - dcmRoiListの設定
-                if (this.dcmRoiList != rois) {
-                    this.dcmRoiList = rois != null ? new ArrayList<>(rois) : new ArrayList<>();
-                }
+                // 各DCMPixが保持しているROIsをdcmRoiListにミラーリングする
+                // dcmRoiListは廃止、常にcurDCMから取得する
 
                 // HOROS-20240407準拠: DCMView.m 2238行目 - listType = level;
                 this.listType = level;
@@ -383,11 +1105,12 @@ public class DCMView extends JPanel {
                 // HOROS-20240407準拠: DCMView.m 2240-2247行目 -
                 // resetがtrueの場合はsetIndexWithResetを呼び出す
                 if (this.dcmPixList != null && !this.dcmPixList.isEmpty()) {
+                    // インデックスが変わらなくても更新を強制するために curImage を一時的に無効な値にする
+                    this.curImage = -1;
                     if (reset) {
                         setIndexWithReset(firstImage, true);
-                        // HOROS-20240407準拠: DCMView.m 2245行目 - [self
-                        // updatePresentationStateFromSeries];
-                        // TODO: updatePresentationStateFromSeriesの実装
+                    } else {
+                        setIndex(firstImage);
                     }
                 }
 
@@ -434,6 +1157,38 @@ public class DCMView extends JPanel {
             // HOROS-20240407準拠: DCMView.m 2113行目
             // self.curDCM = [dcmPixList objectAtIndex: curImage];
             this.curDCM = this.dcmPixList.get(this.curImage);
+
+            // HOROS-20240407準拠: ROIリストを同期する
+            if (this.curDCM != null) {
+                this.curRoiList = this.curDCM.getROIs();
+                // 読み込み時に統計情報を再計算
+                if (this.curRoiList != null) {
+                    for (com.jj.dicomviewer.model.ROI roi : this.curRoiList) {
+                        roi.setParentView(DCMView.this); // 描画状態を判定できるように自身をセット
+                        roi.setSourcePix(this.curDCM); // 座標変換や統計のためにソース画像をセット
+                        if (roi.getType() == ToolMode.tOval || roi.getType() == ToolMode.tROI ||
+                                roi.getType() == ToolMode.tCPolygon || roi.getType() == ToolMode.tPencil ||
+                                roi.getType() == ToolMode.t2DPoint || roi.getType() == ToolMode.tOPolygon) {
+
+                            // 保存されたROIにスムーズ（Spline）設定がなくても、多角形ならデフォルトで有効化
+                            if (roi.getType() == ToolMode.tCPolygon || roi.getType() == ToolMode.tPencil
+                                    || roi.getType() == ToolMode.tOPolygon) {
+                                roi.setIsSpline(true);
+                            }
+
+                            // 非同期で統計計算を行う（UIスレッドをブロックしない）
+                            DicomPix currentPix = this.curDCM;
+                            new Thread(() -> {
+                                currentPix.computeROIStatistics(roi);
+                                // 計算が終わったら再描画
+                                javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                            }).start();
+                        }
+                    }
+                }
+            } else {
+                this.curRoiList = null;
+            }
 
             // HOROS-20240407準拠: DCMView.m 2130-2135行目
             // origin.x = origin.y = 0;
@@ -514,6 +1269,36 @@ public class DCMView extends JPanel {
                             System.out.println("[DEBUG] DCMView.setIndex() - curDCM is null at index " + this.curImage);
                         }
 
+                        // HOROS-20240407準拠: curRoiList = [curDCM annotations];
+                        // 画像ごとに独立して保持するため、DicomPixから取得する
+                        if (this.curDCM != null) {
+                            this.curRoiList = this.curDCM.getROIs();
+                            // 読み込み時に統計情報を再計算
+                            if (this.curRoiList != null) {
+                                for (com.jj.dicomviewer.model.ROI roi : this.curRoiList) {
+                                    roi.setParentView(DCMView.this); // 描画状態を判定できるように自身をセット
+                                    if (roi.getType() == ToolMode.tOval || roi.getType() == ToolMode.tROI ||
+                                            roi.getType() == ToolMode.tCPolygon || roi.getType() == ToolMode.tPencil) {
+
+                                        // 保存されたROIにスムーズ（Spline）設定がなくても、多角形ならデフォルトで有効化
+                                        if (roi.getType() == ToolMode.tCPolygon || roi.getType() == ToolMode.tPencil) {
+                                            roi.setIsSpline(true);
+                                        }
+
+                                        // 非同期で統計計算を行う（UIスレッドをブロックしない）
+                                        DicomPix currentPix = this.curDCM;
+                                        new Thread(() -> {
+                                            currentPix.computeROIStatistics(roi);
+                                            // 計算が終わったら再描画
+                                            javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                                        }).start();
+                                    }
+                                }
+                            }
+                        } else {
+                            this.curRoiList = null;
+                        }
+
                         // HOROS-20240407準拠: DCMView.m 2580行目
                         // [self setNeedsDisplay:true];
                         // HOROS-20240407準拠: setNeedsDisplayは再描画を要求する
@@ -556,6 +1341,8 @@ public class DCMView extends JPanel {
         return this.stringID;
     }
 
+    private boolean repulsorROIEdition = false;
+
     /**
      * is2DViewer - 2Dビューワーかどうか
      * HOROS-20240407準拠: DCMView.m 564-576行目
@@ -596,6 +1383,10 @@ public class DCMView extends JPanel {
      */
     public DicomPix getCurDCM() {
         return this.curDCM;
+    }
+
+    public com.jj.dicomviewer.model.ROI getNewRoi() {
+        return this.newRoi;
     }
 
     /**
@@ -885,6 +1676,59 @@ public class DCMView extends JPanel {
         repaint();
     }
 
+    public void drawROI(Graphics2D g2d) {
+        if (curRoiList != null) {
+            // HOROS-20240407準拠: 描画中（newRoiが存在する）または変形中（ハンドル操作中）は
+            // ビュー全体のラベル描画を抑制する
+            // ただし、測定ツール（角度、長さ等）はリアルタイム表示が必要なため抑制しない
+            boolean globalSuppressLabels = false;
+            if (newRoi != null) {
+                globalSuppressLabels = true;
+            }
+
+            String currentSopUID = curDCM != null ? curDCM.getSOPInstanceUID() : null;
+            for (com.jj.dicomviewer.model.ROI roi : curRoiList) {
+                // ROIアイソレーション: SOP Instance UIDが一致する場合のみ描画
+                String roiSopUID = roi.getSOPInstanceUID();
+                if (roiSopUID != null && currentSopUID != null && !roiSopUID.equals(currentSopUID)) {
+                    continue;
+                }
+
+                if (roi.getSourcePix() == null) {
+                    roi.setSourcePix(curDCM);
+                }
+
+                boolean suppressLabels = globalSuppressLabels;
+                // 現在操作中の測定ROIは常にラベルを表示する
+                if (roi == selectedRoi && roi.getActiveHandleIndex() != -1) {
+                    if (roi.getType() == ToolMode.tMesure || roi.getType() == ToolMode.tAngle ||
+                            roi.getType() == ToolMode.tDynamicAngle || roi.getType() == ToolMode.tAxis) {
+                        suppressLabels = false;
+                    } else {
+                        suppressLabels = true;
+                    }
+                }
+
+                roi.draw(g2d, roi == selectedRoi, suppressLabels);
+            }
+        }
+        if (newRoi != null) {
+            newRoi.draw(g2d, true, false); // 作成中のものはラベルを表示する
+        }
+
+        // HOROS-20240407準拠: Repulsorツールのインジケータ（マウス位置の円）を描画
+        if (currentTool == ToolMode.tRepulsor && repulsorRadius > 0) {
+            Graphics2D g2temp = (Graphics2D) g2d.create();
+            g2temp.setColor(new Color(255, 255, 0, 150)); // 黄色の半透明
+            g2temp.setStroke(new BasicStroke(1.5f / scaleValue));
+            // マウス位置 (image座標) を中心とした円
+            double x = mouseXPos - repulsorRadius;
+            double y = mouseYPos - repulsorRadius;
+            g2temp.draw(new java.awt.geom.Ellipse2D.Double(x, y, repulsorRadius * 2, repulsorRadius * 2));
+            g2temp.dispose();
+        }
+    }
+
     /**
      * paintComponent - 画像を描画
      * HOROS-20240407準拠: DCMView.m（OpenGL描画の代わりにJava Swingで実装）
@@ -977,6 +1821,38 @@ public class DCMView extends JPanel {
 
                     // 画像を描画 (反転対応版)
                     g2d.drawImage(image, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2, null);
+
+                    // --- ROIの表示 ---
+                    // HOROS-20240407準拠: 座標変換を考慮してROIを描画
+                    // ROIを描画する前に、画像スケールとオフセットを考慮したGraphics2D状態を作成
+                    Graphics2D roiG2d = (Graphics2D) g2d.create();
+                    try {
+                        roiG2d.translate(x, y);
+
+                        // HOROS-20240407準拠: 反転時の座標変換を適用
+                        if (xFlipped) {
+                            roiG2d.translate(scaledWidth, 0);
+                            roiG2d.scale(-1, 1);
+                        }
+                        if (yFlipped) {
+                            roiG2d.translate(0, scaledHeight);
+                            roiG2d.scale(1, -1);
+                        }
+
+                        // 基本スケール (画像座標系 0,0 - width,height に変換)
+                        roiG2d.scale(scaleValue, scaleValue * pixelRatio);
+
+                        // ズームアウト時に線が細くなりすぎないようにストロークを調整
+                        // 画面上で約1.5ピクセル程度に見えるようにする
+                        float baseStrokeWidth = 1.5f / scaleValue;
+                        roiG2d.setStroke(new BasicStroke(baseStrokeWidth));
+
+                        if (is2DViewer()) {
+                            drawROI(roiG2d);
+                        }
+                    } finally {
+                        roiG2d.dispose();
+                    }
 
                     // HOROS-20240407準拠: 境界線の描画
                     drawBorders(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
@@ -1923,6 +2799,11 @@ public class DCMView extends JPanel {
      * HOROS-20240407準拠: DCMView.m 12574行目
      */
     public boolean becomeFirstResponder() {
+        // HOROS-20240407準拠: ブラシ以外のツールに切り替わった時にパレットを閉じる
+        if (currentTool != ToolMode.tBrush) {
+            BrushPaletteDialog.hidePalette();
+        }
+
         // HOROS-20240407準拠: 既にisKeyViewであっても、通知を送信して他を確実にオフにする
         isKeyView = true;
         // キービュー（操作主体）になったら、以前に受信した同期ポインタをクリア
@@ -1977,6 +2858,11 @@ public class DCMView extends JPanel {
      * HOROS-20240407準拠: DCMView.m 6721-6780行目
      */
     public void sendSyncMessage(int inc) {
+        // 再帰防止
+        if (avoidRecursiveSync > 0) {
+            return;
+        }
+
         // HOROS-20240407準拠: DCMView.m 6725行目 - isKeyView && matrix == 0 && [self
         // is2DViewer]
         if (isKeyView && is2DViewer()) {
@@ -1997,6 +2883,29 @@ public class DCMView extends JPanel {
             }
 
             // HOROS-20240407準拠: 通知を送信
+            NotificationCenter.defaultCenter().postNotification(
+                    NotificationCenter.OsirixDCMViewSyncNotification,
+                    this,
+                    userInfo);
+        }
+    }
+
+    /**
+     * sendSyncMessageWLWW - WL/WW同期メッセージを送信
+     */
+    public void sendSyncMessageWLWW(float wl, float ww) {
+        if (isKeyView && is2DViewer()) {
+            java.util.Map<String, Object> userInfo = new java.util.HashMap<>();
+            userInfo.put("sender", this);
+            userInfo.put("WL", wl);
+            userInfo.put("WW", ww);
+
+            // シリーズ情報も含める（同じシリーズのみ同期するか、全シリーズ同期するかの判定用）
+            if (curDCM != null) {
+                userInfo.put("studyID", curDCM.getStudyInstanceUID());
+                userInfo.put("frameOfReferenceUID", curDCM.getFrameOfReferenceUID());
+            }
+
             NotificationCenter.defaultCenter().postNotification(
                     NotificationCenter.OsirixDCMViewSyncNotification,
                     this,
@@ -2052,6 +2961,19 @@ public class DCMView extends JPanel {
 
                     // 同期処理の実行 (DCMView.m 7044行目以降)
                     if (same3DReferenceWorld || SYNCSERIES) {
+
+                        // --- WL/WWの同期 ---
+                        if (userInfo.containsKey("WL") && userInfo.containsKey("WW")) {
+                            float wl = (float) userInfo.get("WL");
+                            float ww = (float) userInfo.get("WW");
+                            if (curDCM != null) {
+                                // 自分のWLWWと異なる場合のみ設定（無限ループ防止はavoidRecursiveSyncでも行っているが念のため）
+                                if (curDCM.getWindowLevel() != wl || curDCM.getWindowWidth() != ww) {
+                                    curDCM.setWindowLevelWidth(wl, ww);
+                                    repaint();
+                                }
+                            }
+                        }
 
                         // --- 3Dカーソル(点)の同期 ---
                         if (userInfo.containsKey("point3DX")) {
@@ -2140,15 +3062,30 @@ public class DCMView extends JPanel {
                             System.out.println("[DEBUG] DCMView.onSyncNotification() - Slice changing from " + prevImage
                                     + " to " + newImage + " (mode=" + syncro + ")");
                             final int finalImage = newImage;
-                            javax.swing.SwingUtilities.invokeLater(() -> {
-                                setIndex(finalImage);
-                                // スライダーの更新
-                                javax.swing.JFrame frame = (javax.swing.JFrame) javax.swing.SwingUtilities
-                                        .getWindowAncestor(this);
-                                if (frame instanceof ViewerController) {
-                                    ((ViewerController) frame).adjustSlider();
+
+                            Runnable run = () -> {
+                                // 実行時にも再帰防止をチェック（invokeLaterの場合は時間差があるため）
+                                if (avoidRecursiveSync > 1)
+                                    return;
+                                avoidRecursiveSync++;
+                                try {
+                                    setIndex(finalImage);
+                                    // スライダーの更新
+                                    javax.swing.JFrame frame = (javax.swing.JFrame) javax.swing.SwingUtilities
+                                            .getWindowAncestor(this);
+                                    if (frame instanceof ViewerController) {
+                                        ((ViewerController) frame).adjustSlider();
+                                    }
+                                } finally {
+                                    avoidRecursiveSync--;
                                 }
-                            });
+                            };
+
+                            if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+                                run.run();
+                            } else {
+                                javax.swing.SwingUtilities.invokeLater(run);
+                            }
                         }
 
                         // --- 交線(Crosshair)の計算は drawSyncLines で動的に行うため、ここでは再描画のみ ---
