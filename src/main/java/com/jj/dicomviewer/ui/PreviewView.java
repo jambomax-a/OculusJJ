@@ -26,14 +26,6 @@ public class PreviewView extends DCMView {
     public PreviewView() {
         super();
 
-        // HOROS: マウスホイールリスナー
-        addMouseWheelListener(new MouseWheelListener() {
-            @Override
-            public void mouseWheelMoved(MouseWheelEvent e) {
-                scrollWheel(e);
-            }
-        });
-
         // HOROS-20240407準拠: DCMView.m 4319-4322行目
         // if( clickCount == 2 && [self window] == [[BrowserController currentBrowser]
         // window])
@@ -127,7 +119,7 @@ public class PreviewView extends DCMView {
      * HOROS-20240407準拠: DCMView.m 2176行目
      */
     @Override
-    public void setPixels(List<DicomPix> pixels, List<Object> files, List<Object> rois, short firstImage, char level,
+    public void setPixels(List<DicomPix> pixels, List<Object> files, List<?> rois, short firstImage, char level,
             boolean reset) {
         // HOROS-20240407準拠: DCMViewのsetPixelsを呼び出す
         super.setPixels(pixels, files, rois, firstImage, level, reset);

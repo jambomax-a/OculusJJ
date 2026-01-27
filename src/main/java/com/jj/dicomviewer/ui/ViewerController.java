@@ -2,6 +2,7 @@ package com.jj.dicomviewer.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
@@ -62,7 +64,15 @@ public class ViewerController extends JFrame {
                                     || keyCode == java.awt.event.KeyEvent.VK_PAGE_UP
                                     || keyCode == java.awt.event.KeyEvent.VK_PAGE_DOWN
                                     || keyCode == java.awt.event.KeyEvent.VK_HOME
-                                    || keyCode == java.awt.event.KeyEvent.VK_END) {
+                                    || keyCode == java.awt.event.KeyEvent.VK_END
+                                    || (keyCode >= java.awt.event.KeyEvent.VK_1
+                                            && keyCode <= java.awt.event.KeyEvent.VK_5)
+                                    || keyCode == java.awt.event.KeyEvent.VK_W
+                                    || keyCode == java.awt.event.KeyEvent.VK_Z
+                                    || keyCode == java.awt.event.KeyEvent.VK_P
+                                    || keyCode == java.awt.event.KeyEvent.VK_M
+                                    || keyCode == java.awt.event.KeyEvent.VK_DELETE
+                                    || keyCode == java.awt.event.KeyEvent.VK_BACK_SPACE) {
 
                                 // Find the active ViewerController
                                 ViewerController vc = null;
@@ -70,8 +80,7 @@ public class ViewerController extends JFrame {
                                         .getActiveWindow();
 
                                 // Debug log to see what window is active
-                                // if (activeWindow != null) System.out.println("[DEBUG] Active Window: " +
-                                // activeWindow.getClass().getSimpleName());
+                                // if (activeWindow != null)
 
                                 if (activeWindow instanceof ViewerController) {
                                     vc = (ViewerController) activeWindow;
@@ -100,8 +109,7 @@ public class ViewerController extends JFrame {
                                 if (vc != null) {
                                     DCMView view = vc.getImageView();
                                     if (view != null) {
-                                        // System.out.println("[DEBUG] Key Triggered: " +
-                                        // java.awt.event.KeyEvent.getKeyText(keyCode));
+                                        //
                                         if (keyCode == java.awt.event.KeyEvent.VK_H) {
                                             // Horos: 'H' is Horizontal Flip
                                             view.toggleXFlipped();
@@ -132,6 +140,78 @@ public class ViewerController extends JFrame {
                                         } else if (keyCode == java.awt.event.KeyEvent.VK_END) {
                                             if (view.getDcmPixList() != null) {
                                                 view.setIndex(view.getDcmPixList().size() - 1);
+                                            }
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_1) {
+                                            // Horos: '1' is Brain (WL: 40, WW: 80)
+                                            if (view.getCurDCM() != null) {
+                                                view.getCurDCM().setWindowLevelWidth(40, 80);
+                                                view.sendSyncMessageWLWW(40, 80);
+                                                view.repaint();
+                                            }
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_2) {
+                                            // Horos: '2' is Bone (WL: 300, WW: 1500)
+                                            if (view.getCurDCM() != null) {
+                                                view.getCurDCM().setWindowLevelWidth(300, 1500);
+                                                view.sendSyncMessageWLWW(300, 1500);
+                                                view.repaint();
+                                            }
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_3) {
+                                            // Horos: '3' is Lung (WL: -600, WW: 1500)
+                                            if (view.getCurDCM() != null) {
+                                                view.getCurDCM().setWindowLevelWidth(-600, 1500);
+                                                view.sendSyncMessageWLWW(-600, 1500);
+                                                view.repaint();
+                                            }
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_4) {
+                                            // Horos: '4' is Soft Tissue (WL: 40, WW: 400)
+                                            if (view.getCurDCM() != null) {
+                                                view.getCurDCM().setWindowLevelWidth(40, 400);
+                                                view.sendSyncMessageWLWW(40, 400);
+                                                view.repaint();
+                                            }
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_5) {
+                                            // Horos: '5' is Reset
+                                            if (view.getCurDCM() != null) {
+                                                view.getCurDCM().resetWLWW();
+                                                view.sendSyncMessageWLWW(view.getCurDCM().getWindowLevel(),
+                                                        view.getCurDCM().getWindowWidth());
+                                                view.repaint();
+                                            }
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_W) {
+                                            DCMView.currentTool = DCMView.ToolMode.tWLWW;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_Z) {
+                                            DCMView.currentTool = DCMView.ToolMode.tZoom;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_P) {
+                                            DCMView.currentTool = DCMView.ToolMode.tTranslate;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_M) {
+                                            DCMView.currentTool = DCMView.ToolMode.tMesure;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_O) {
+                                            DCMView.currentTool = DCMView.ToolMode.tOval;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_R) {
+                                            DCMView.currentTool = DCMView.ToolMode.tROI;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_A) {
+                                            DCMView.currentTool = DCMView.ToolMode.tAngle;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_S) {
+                                            DCMView.currentTool = DCMView.ToolMode.tPlain;
+                                        } else if (keyCode == java.awt.event.KeyEvent.VK_DELETE
+                                                || keyCode == java.awt.event.KeyEvent.VK_BACK_SPACE) {
+                                            // 選択中のROIを削除
+                                            if (view.selectedRoi != null) {
+                                                com.jj.dicomviewer.model.ROI toRemove = view.selectedRoi;
+                                                view.selectedRoi = null;
+                                                if (view.getCurDCM() != null) {
+                                                    view.getCurDCM().removeROI(toRemove);
+                                                    // 表示リストを更新
+                                                    view.curRoiList = view.getCurDCM().getROIs();
+
+                                                    // データベースからも削除
+                                                    com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase
+                                                            .activeLocalDatabase();
+                                                    if (db != null) {
+                                                        db.deleteROI(toRemove);
+                                                    }
+                                                    view.repaint();
+                                                }
                                             }
                                         }
                                         return true; // Consume event
@@ -185,6 +265,10 @@ public class ViewerController extends JFrame {
         return imageView;
     }
 
+    public List<List<DicomPix>> getPixList() {
+        return pixList;
+    }
+
     /**
      * コンストラクタ
      * HOROS-20240407準拠: ViewerController.m 7620行目 -
@@ -214,6 +298,17 @@ public class ViewerController extends JFrame {
      */
     private void initializeUI() {
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        // HOROS-20240407準拠: 2D Viewerもメインメニューを表示する（Windowsでのアクセシビリティのため）
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null && browser.getJMenuBar() != null) {
+            javax.swing.JMenuBar menuBar = replicateMenuBar(browser.getJMenuBar());
+            // Windowsでの視認性向上のための設定
+            menuBar.setOpaque(true);
+            menuBar.setBackground(new Color(240, 240, 240));
+            setJMenuBar(menuBar);
+        }
+
         setLayout(new BorderLayout());
 
         // HOROS-20240407準拠: imageSliderを作成 (最上部に配置)
@@ -230,20 +325,20 @@ public class ViewerController extends JFrame {
         imageSlider.addChangeListener(new ChangeListener() {
             @Override
             public void stateChanged(ChangeEvent e) {
-                // ユーザーによる操作の場合のみ画像を切り替える
-                if (imageSlider.getValueIsAdjusting()) {
-                    int index = imageSlider.getValue();
-                    if (index != currentImageIndex) {
-                        currentImageIndex = index;
-                        // HOROS-20240407準拠: 操作したビューをアクティブにする
+                // スライダーの値が現在のインデックスと異なる場合に更新
+                int index = imageSlider.getValue();
+                if (index != currentImageIndex) {
+                    currentImageIndex = index;
+                    // HOROS-20240407準拠: 操作したビューをアクティブにする
+                    if (imageView != null) {
                         imageView.becomeFirstResponder();
                         imageView.setIndex(currentImageIndex);
+                    }
 
-                        // 交差線を描画するために、他のビューアーも再描画を促す
-                        for (ViewerController vc : ViewerController.getDisplayedViewers()) {
-                            if (vc != ViewerController.this) {
-                                vc.getImageView().repaint();
-                            }
+                    // 交差線を描画するために、他のビューアーも再描画を促す
+                    for (ViewerController vc : ViewerController.getDisplayedViewers()) {
+                        if (vc != ViewerController.this && vc.getImageView() != null) {
+                            vc.getImageView().repaint();
                         }
                     }
                 }
@@ -301,8 +396,6 @@ public class ViewerController extends JFrame {
                 // HOROS-20240407準拠: メインウィンドウ（アクティブなビューワー）のフォーカス管理
                 windowDidBecomeMain();
                 if (imageView != null) {
-                    System.out.println(
-                            "[DEBUG] ViewerController.windowActivated - setting frontMost=true for " + getTitle());
                     imageView.setFrontMost(true);
                     imageView.becomeFirstResponder();
                 }
@@ -350,7 +443,6 @@ public class ViewerController extends JFrame {
         windowDidBecomeMain();
 
         if (imageView != null) {
-            System.out.println("[DEBUG] ViewerController.initWithPix - initial activation for " + getTitle());
             imageView.setFrontMost(true);
             imageView.becomeFirstResponder();
         }
@@ -364,15 +456,11 @@ public class ViewerController extends JFrame {
      * HOROS-20240407準拠: ViewerController.m startLoadImageThread
      */
     public void startLoadImageThread() {
-        System.out.println("[DEBUG] ViewerController.startLoadImageThread() - submitting task");
         backgroundLoader.submit(() -> {
-            System.out.println("[DEBUG] ViewerController.startLoadImageThread() - worker started");
             // 現在の画像を最優先でロード
             if (imageView != null && imageView.getCurDCM() != null) {
-                System.out.println("[DEBUG] ViewerController.startLoadImageThread() - loading current image");
                 imageView.getCurDCM().loadImage();
                 SwingUtilities.invokeLater(() -> {
-                    System.out.println("[DEBUG] ViewerController.startLoadImageThread() - repainting imageView");
                     imageView.repaint();
                 });
             }
@@ -401,10 +489,8 @@ public class ViewerController extends JFrame {
      */
     public void changeImageData(List<List<Object>> f, List<List<Object>> d, byte[] v, boolean firstTime) {
         if (f == null || f.isEmpty() || d == null || d.isEmpty()) {
-            System.out.println("[DEBUG] ViewerController.changeImageData() - data is empty");
             return;
         }
-        System.out.println("[DEBUG] ViewerController.changeImageData() - rows: " + f.size());
 
         // pixListとfileListをクリア
         pixList.clear();
@@ -434,8 +520,7 @@ public class ViewerController extends JFrame {
         // currentSeriesをセット (Horos準拠: 代表的なイメージから取得)
         if (!fileList.isEmpty() && !fileList.get(0).isEmpty()) {
             this.currentSeries = fileList.get(0).get(0).getSeries();
-            System.out.println("[DEBUG] changeImageData: currentSeries set to "
-                    + (currentSeries != null ? currentSeries.getSeriesDescription() : "null"));
+
         }
 
         // 最初の画像を表示
@@ -506,14 +591,9 @@ public class ViewerController extends JFrame {
         Object representedObject = button.getRepresentedObject();
         boolean rightClick = button.isRightClick();
 
-        System.out.println("[DEBUG] matrixPreviewPressed: object="
-                + (representedObject != null ? representedObject.getClass().getSimpleName() : "null")
-                + ", rightClick=" + rightClick);
-
         // HOROS-20240407準拠: スタディセルの場合、開閉を切り替える
         if (representedObject instanceof com.jj.dicomviewer.model.DicomStudy) {
             com.jj.dicomviewer.model.DicomStudy study = (com.jj.dicomviewer.model.DicomStudy) representedObject;
-            System.out.println("[DEBUG] Toggling study collapse: " + study.getStudyName());
             if (collapsedStudies.contains(study)) {
                 collapsedStudies.remove(study);
             } else {
@@ -533,8 +613,7 @@ public class ViewerController extends JFrame {
      * HOROS-20240407準拠: ViewerController.m 4272行目 - loadSelectedSeries:rightClick:
      */
     private void loadSelectedSeries(Object series, boolean rightClick) {
-        System.out.println("[DEBUG] ViewerController.loadSelectedSeries() - series: "
-                + (series != null ? series.getClass().getSimpleName() : "null") + ", rightClick: " + rightClick);
+
         if (series == null) {
             return;
         }
@@ -631,8 +710,6 @@ public class ViewerController extends JFrame {
         // AppController.m 5110-5188行目
         int viewerCount = viewers.size();
 
-        System.out.println("[DEBUG] tileWindows: START count=" + viewerCount);
-
         boolean landscape = (availWidth > availHeight);
 
         // HOROS-20240407準拠: 比率の計算 (1.5 または 2.0)
@@ -698,8 +775,6 @@ public class ViewerController extends JFrame {
                 }
             }
         }
-
-        System.out.println("[DEBUG] tileWindows: FINAL count=" + viewerCount + ", grid=" + cols + "x" + rows);
 
         // グリッド配置
         int cellWidth = availWidth / cols;
@@ -796,10 +871,8 @@ public class ViewerController extends JFrame {
      */
     public void loadSeries(com.jj.dicomviewer.model.DicomSeries series) {
         if (series == null) {
-            System.out.println("[DEBUG] ViewerController.loadSeries() - series is null");
             return;
         }
-        System.out.println("[DEBUG] ViewerController.loadSeries() - series: " + series.getSeriesDescription());
         this.currentSeries = series;
 
         BrowserController browser = BrowserController.currentBrowser();
@@ -832,14 +905,14 @@ public class ViewerController extends JFrame {
         List<Object> correspondingObjects = new ArrayList<>();
 
         for (com.jj.dicomviewer.model.DicomImage img : loadList) {
-            com.jj.dicomviewer.model.DicomPix dcmPix = img.getCachedDicomPix();
-            if (dcmPix == null) {
-                dcmPix = new com.jj.dicomviewer.model.DicomPix(
-                        img,
-                        img.getFrameID() != null ? img.getFrameID() : 0,
-                        loadList.size());
-                img.setCachedDicomPix(dcmPix);
-            }
+            // HOROS-20240407準拠: 各フレーム/画像に対して独立したDicomPixインスタンスを作成する
+            // (ROIリストなどを独立させるため、DicomImageでのキャッシュは最小限に留めるか、
+            // フレームごとに独立させる必要がある)
+            com.jj.dicomviewer.model.DicomPix dcmPix = new com.jj.dicomviewer.model.DicomPix(
+                    img,
+                    img.getFrameID() != null ? img.getFrameID() : 0,
+                    loadList.size());
+
             viewerPix.add(dcmPix);
             correspondingObjects.add(img);
         }
@@ -868,7 +941,6 @@ public class ViewerController extends JFrame {
                 imageView.scaleToFit();
                 imageView.revalidate();
                 imageView.repaint();
-                System.out.println("[DEBUG] loadSeries (after change): scaleToFit called");
             }
         });
 
@@ -948,11 +1020,12 @@ public class ViewerController extends JFrame {
         }
 
         // 現在表示中のシリーズの枚数を取得
-        // pixList.get(0) は現在ロードされている単一のシリーズリストを想定
         int totalImages = 0;
         if (!pixList.isEmpty() && pixList.get(0) != null) {
             totalImages = pixList.get(0).size();
         }
+
+        int currentImageViewIndex = imageView.getCurImage();
 
         if (totalImages <= 1) {
             // HOROS-20240407準拠: 1枚の時も表示はするが、無効化する
@@ -961,6 +1034,7 @@ public class ViewerController extends JFrame {
             imageSlider.setMinimum(0);
             imageSlider.setMaximum(0);
             imageSlider.setValue(0);
+            currentImageIndex = 0;
         } else {
             imageSlider.setVisible(true);
             imageSlider.setEnabled(true);
@@ -969,12 +1043,11 @@ public class ViewerController extends JFrame {
             imageSlider.setMaximum(totalImages - 1);
 
             // 現在のインデックスをセット
-            int curIndex = imageView.getCurImage();
-            if (curIndex != imageSlider.getValue()) {
-                imageSlider.setValue(curIndex);
+            if (currentImageViewIndex != imageSlider.getValue()) {
+                imageSlider.setValue(currentImageViewIndex);
             }
-
-            imageSlider.setVisible(true);
+            // 内部インデックスも確実に同期
+            this.currentImageIndex = currentImageViewIndex;
         }
 
         // レイアウトを更新
@@ -1120,8 +1193,6 @@ public class ViewerController extends JFrame {
             return b.getDate().compareTo(a.getDate());
         });
 
-        System.out.println("buildMatrixPreview: 患者の全スタディ数 = " + allStudies.size());
-
         // HOROS-20240407準拠: 複数の患者が含まれているか判定
         boolean multiplePatients = false;
         if (!allStudies.isEmpty()) {
@@ -1134,10 +1205,23 @@ public class ViewerController extends JFrame {
             }
         }
 
+        // 表示件数制限 (パフォーマンス向上のため)
+        // シリーズ数が極端に多い場合、描画負荷が非常に高くなるため制限を設ける
+        // 1000から250に減らして、サイドパネルの描画負荷を軽減する (Swingの制限)
+        final int MAX_DISPLAY_SERIES = 250;
+        int displayedSeriesCount = 0;
+        boolean limitationReached = false;
+
         ThumbnailButton targetButton = null;
 
         for (com.jj.dicomviewer.model.DicomStudy study : allStudies) {
+            if (displayedSeriesCount >= MAX_DISPLAY_SERIES) {
+                limitationReached = true;
+                break;
+            }
+
             // シリーズ情報を事前に読み込んでシリーズ数を確定させる
+            // スタディ情報を構築する前に1回だけ読み込む
             db.loadSeriesForStudyIfNeeded(study);
             int seriesCount = (study.getSeries() != null) ? study.getSeries().size() : 0;
 
@@ -1188,7 +1272,7 @@ public class ViewerController extends JFrame {
 
             // スタディが折りたたまれていない場合、シリーズを表示
             if (!collapsedStudies.contains(study)) {
-                db.loadSeriesForStudyIfNeeded(study);
+                // すでに上記で読み込み済み
                 java.util.Set<com.jj.dicomviewer.model.DicomSeries> seriesSet = study.getSeries();
 
                 if (seriesSet != null) {
@@ -1296,9 +1380,24 @@ public class ViewerController extends JFrame {
                         }
 
                         previewMatrix.add(button);
+                        displayedSeriesCount++;
+                        if (displayedSeriesCount >= MAX_DISPLAY_SERIES) {
+                            limitationReached = true;
+                            break;
+                        }
+                    }
+                    if (limitationReached) {
+                        break;
                     }
                 }
             }
+        }
+
+        if (limitationReached) {
+            JLabel limitLabel = new JLabel("... and more (Limited for performance)");
+            limitLabel.setForeground(Color.RED);
+            limitLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            previewMatrix.add(limitLabel);
         }
 
         previewMatrix.revalidate();
@@ -1312,5 +1411,46 @@ public class ViewerController extends JFrame {
                 finalButton.scrollRectToVisible(rect);
             });
         }
+    }
+
+    /**
+     * メニューバーの内容を複製する
+     * SwingのJMenuBar/JMenuItemは1つの場所にしか所属できないため、新しいインスタンスを作成する必要がある
+     */
+    public static javax.swing.JMenuBar replicateMenuBar(javax.swing.JMenuBar original) {
+        javax.swing.JMenuBar copy = new javax.swing.JMenuBar();
+        for (int i = 0; i < original.getMenuCount(); i++) {
+            javax.swing.JMenu menu = original.getMenu(i);
+            if (menu != null) {
+                copy.add(replicateMenu(menu));
+            }
+        }
+        return copy;
+    }
+
+    private static javax.swing.JMenu replicateMenu(javax.swing.JMenu original) {
+        javax.swing.JMenu copy = new javax.swing.JMenu(original.getText());
+        copy.setForeground(Color.BLACK);
+        for (int i = 0; i < original.getItemCount(); i++) {
+            java.awt.Component item = original.getMenuComponent(i);
+            if (item instanceof javax.swing.JSeparator) {
+                copy.addSeparator();
+            } else if (item instanceof javax.swing.JMenuItem) {
+                javax.swing.JMenuItem originalItem = (javax.swing.JMenuItem) item;
+                if (originalItem instanceof javax.swing.JMenu) {
+                    copy.add(replicateMenu((javax.swing.JMenu) originalItem));
+                } else {
+                    javax.swing.JMenuItem itemCopy = new javax.swing.JMenuItem(originalItem.getText());
+                    itemCopy.setForeground(Color.BLACK);
+                    itemCopy.setAccelerator(originalItem.getAccelerator());
+                    // 元のリスナーをコピー
+                    for (java.awt.event.ActionListener al : originalItem.getActionListeners()) {
+                        itemCopy.addActionListener(al);
+                    }
+                    copy.add(itemCopy);
+                }
+            }
+        }
+        return copy;
     }
 }

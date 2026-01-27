@@ -40,6 +40,8 @@ public class DicomPix {
     // 画像データ
     private BufferedImage bufferedImage;
     private BufferedImage thumbnailImage;
+    private short[] rawShortData; // 高速なWW/WL調整用の生の16bitデータ
+    private boolean isGrayscale = true;
 
     // Window Level/Width
     private float windowLevel = 0.0f;
@@ -89,9 +91,20 @@ public class DicomPix {
     // 圧縮形式の判定に使用
     private String transferSyntaxUID = null;
 
+    // HOROS-20240407準拠: Pixel Representation (0028,0103)
+    // 0: unsigned, 1: signed
+    private boolean isSigned = false;
+
+    // HOROS-20240407準拠: Photometric Interpretation (0028,0004)
+    // MONOCHROME1, MONOCHROME2, RGB, YBR_FULL 等
+    private String photometricInterpretation = "MONOCHROME2";
+
     // HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
     // Modality (0008,0060) - モダリティ（CT, MR, CR, USなど）
     private String modality = null;
+
+    // HOROS-20240407準拠 - inverseVal
+    private boolean isInverse = false;
 
     // Study Instance UID
     private String studyInstanceUID = null;
@@ -124,12 +137,47 @@ public class DicomPix {
         try {
             File dicomFile = path.toFile();
             org.dcm4che3.io.DicomInputStream dis = new org.dcm4che3.io.DicomInputStream(dicomFile);
-            org.dcm4che3.data.Attributes attrs = dis.readDataset(-1, org.dcm4che3.data.Tag.PixelData);
-            dis.close();
+            org.dcm4che3.data.Attributes attrs = null;
+            try {
+                dis.readFileMetaInformation();
+                org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
+                if (fmi != null) {
+                    String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
+                    System.out.println("[DEBUG] DicomPix.readHeader() - Transfer Syntax: " + tsuid);
+                }
+                attrs = dis.readDataset();
+                dis.close();
+            } catch (Exception e) {
+                dis.close();
+                // ファイルメタ情報がない場合（プリアンブルがないDICOMファイル）は無視して進む
+                // DicomInputStreamを再度オープンして先頭から読み込む
+                try (org.dcm4che3.io.DicomInputStream dis2 = new org.dcm4che3.io.DicomInputStream(dicomFile)) {
+                    attrs = dis2.readDataset();
+                }
+            }
+
+            if (attrs == null) {
+                return;
+            }
 
             this.width = attrs.getInt(org.dcm4che3.data.Tag.Columns, 0);
             this.height = attrs.getInt(org.dcm4che3.data.Tag.Rows, 0);
+            this.isSigned = attrs.getInt(org.dcm4che3.data.Tag.PixelRepresentation, 0) == 1;
+
+            System.out.println("[DEBUG] DicomPix.readHeader() - dimensions: " + width + "x" + height + ", isSigned: "
+                    + isSigned + ", path: " + path);
             this.modality = attrs.getString(org.dcm4che3.data.Tag.Modality);
+            this.photometricInterpretation = attrs.getString(org.dcm4che3.data.Tag.PhotometricInterpretation,
+                    "MONOCHROME2");
+
+            boolean shouldInverse = "MONOCHROME1".equalsIgnoreCase(this.photometricInterpretation);
+            // HOROS-20240407準拠: PTやNM(条件付き)では反転させない (DCMPix.m 6542行目)
+            if (shouldInverse) {
+                if ("PT".equalsIgnoreCase(this.modality) || "NM".equalsIgnoreCase(this.modality)) {
+                    shouldInverse = false;
+                }
+            }
+
             this.studyInstanceUID = attrs.getString(org.dcm4che3.data.Tag.StudyInstanceUID);
             this.seriesInstanceUID = attrs.getString(org.dcm4che3.data.Tag.SeriesInstanceUID);
             this.frameOfReferenceUID = attrs.getString(org.dcm4che3.data.Tag.FrameOfReferenceUID);
@@ -137,10 +185,34 @@ public class DicomPix {
             this.sliceThickness = attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0);
 
             // HOROS-20240407準拠: Window Level/Width
-            this.windowLevel = attrs.getFloat(org.dcm4che3.data.Tag.WindowCenter, 0.0f);
-            this.windowWidth = attrs.getFloat(org.dcm4che3.data.Tag.WindowWidth, 0.0f);
+            float[] wls = attrs.getFloats(org.dcm4che3.data.Tag.WindowCenter);
+            float[] wws = attrs.getFloats(org.dcm4che3.data.Tag.WindowWidth);
+
+            if (wls != null && wls.length > 0 && wws != null && wws.length > 0) {
+                this.windowLevel = wls[0];
+                this.windowWidth = wws[0];
+            } else {
+                this.windowLevel = attrs.getFloat(org.dcm4che3.data.Tag.WindowCenter, 0.0f);
+                this.windowWidth = attrs.getFloat(org.dcm4che3.data.Tag.WindowWidth, 0.0f);
+            }
+
+            // HOROS-20240407準拠: MONOCHROME1の場合、savedWLを反転させる (DCMPix.m 6550行目)
+            if (shouldInverse) {
+                this.isInverse = true;
+                this.windowLevel = -this.windowLevel;
+            } else {
+                this.isInverse = false;
+            }
+
             this.defaultWL = this.windowLevel;
             this.defaultWW = this.windowWidth;
+
+            // VOI LUT
+            org.dcm4che3.data.Sequence voiLutSeq = attrs.getSequence(org.dcm4che3.data.Tag.VOILUTSequence);
+            if (voiLutSeq != null && !voiLutSeq.isEmpty()) {
+                System.out.println("[DEBUG] DicomPix.readHeader() - Found VOI LUT sequence. High priority.");
+                // VOI LUTがある場合は、後で適用することを検討するか、BestFitを促す
+            }
 
             // Rescale Slope/Intercept
             this.rescaleSlope = attrs.getFloat(org.dcm4che3.data.Tag.RescaleSlope, 1.0f);
@@ -400,19 +472,23 @@ public class DicomPix {
         if (bufferedImage != null) {
             return; // 既に読み込み済み
         }
-        System.out.println("[DEBUG] DicomPix.loadImage() - loading: " + (path != null ? path.toString() : "null"));
+        String absolutePath = (path != null ? path.toAbsolutePath().toString() : "null");
+        System.out.println("[DEBUG] DicomPix.loadImage() - attempting to load: " + absolutePath);
 
         if (path == null) {
             logger.warn("loadImage: path is null");
             return;
         }
 
-        if (!path.toFile().exists()) {
-            logger.warn("loadImage: DICOM file not found: {}", path);
+        java.io.File dicomFile = path.toFile();
+        if (!dicomFile.exists()) {
+            System.err.println("[ERROR] DicomPix.loadImage() - DICOM file not found at: " + absolutePath);
+            logger.warn("loadImage: DICOM file not found: {}", absolutePath);
             return;
         }
 
-        logger.info("loadImage: Loading DICOM image from {}", path);
+        System.out.println("[DEBUG] DicomPix.loadImage() - File size: " + dicomFile.length() + " bytes");
+        logger.info("loadImage: Loading DICOM image from {}", absolutePath);
 
         try {
             // Weasisのアプローチを参考に、dcm4che3のImageIO APIを使用
@@ -421,14 +497,18 @@ public class DicomPix {
 
             try {
                 // ImageIOプラグインをスキャン（JPEG圧縮DICOM画像を読み込むために必要）
-                ImageIO.scanForPlugins();
-                File dicomFile = path.toFile();
+                if (!pluginsScanned) {
+                    ImageIO.scanForPlugins();
+                    pluginsScanned = true;
+                }
 
                 // DICOMフォーマット名でImageReaderを取得
                 java.util.Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("DICOM");
                 if (readers.hasNext()) {
                     reader = readers.next();
+                    logger.info("Using ImageReader: {}", reader.getClass().getName());
                 } else {
+                    logger.warn("No ImageReader found for format DICOM, falling back to DicomImageReader");
                     reader = new DicomImageReader(null);
                 }
 
@@ -439,74 +519,120 @@ public class DicomPix {
                 // DicomImageReadParamを作成
                 DicomImageReadParam param = new DicomImageReadParam();
 
-                // Window Level/Widthを設定（Weasis方式）
-                if (windowLevel != 0.0f || windowWidth != 0.0f) {
-                    param.setWindowCenter(windowLevel);
-                    param.setWindowWidth(windowWidth);
-                }
-
-                // フレーム番号を設定
+                // 初回読み込み時はWindow設定をせず、生のデータを取得する
+                // これにより16bitの精度を保持し、メモリ内での高速なWW/WL調整を可能にする
                 int frameIndex = frameNumber >= 0 ? frameNumber : 0;
 
-                // 画像を読み込む
-                // DicomImageReaderは内部的にTransfer Syntaxを確認し、適切なデコンプレッサーを使用する
-                // NativeImageReaderが失敗した場合、例外がスローされるため、フォールバック処理を追加
                 try {
-                    logger.debug("Attempting to read frame {} from DICOM file", frameIndex);
-                    bufferedImage = reader.read(frameIndex, param);
-                    if (bufferedImage != null) {
-                        logger.debug("Successfully read DICOM image: {}x{}", bufferedImage.getWidth(),
-                                bufferedImage.getHeight());
-                    } else {
-                        logger.warn("DicomImageReader.read() returned null for frame {}", frameIndex);
-                    }
-                } catch (RuntimeException e) {
-                    logger.error("RuntimeException while reading DICOM image from {}: {}", path, e.getMessage(), e);
-                    // NativeImageReaderが失敗した場合（OpenCVネイティブライブラリが見つからない、またはdicomJpgFileReadメソッドが存在しないなど）
-                    String errorMsg = e.getMessage();
-                    Throwable cause = e.getCause();
-                    boolean isOpenCVError = false;
+                    logger.debug("Attempting to read raw frame {} from DICOM file", frameIndex);
+                    // HOROS-20240407準拠: ライブラリによるPhotometric Interpretationの自動変換を避けるため
+                    // read() ではなく readRaster() を使用して生のピクセルデータを取得する
+                    java.awt.image.Raster raster = reader.readRaster(frameIndex, param);
 
-                    // OpenCV関連のエラーをチェック
-                    if (errorMsg != null && (errorMsg.contains("opencv") || errorMsg.contains("opencv_java") ||
-                            errorMsg.contains("No stream adaptor") || errorMsg.contains("StreamSegment") ||
-                            errorMsg.contains("No Reader for format: jpeg-cv") ||
-                            errorMsg.contains("dicomJpgFileRead") || errorMsg.contains("UnsatisfiedLinkError"))) {
-                        isOpenCVError = true;
-                    }
-                    if (cause != null && (cause instanceof UnsatisfiedLinkError ||
-                            (cause.getMessage() != null && cause.getMessage().contains("dicomJpgFileRead")))) {
-                        isOpenCVError = true;
-                    }
+                    if (Thread.currentThread().isInterrupted())
+                        return;
 
-                    if (isOpenCVError) {
-                        logger.warn("NativeImageReader failed (OpenCV native method not found or inaccessible). " +
-                                "This may be due to missing dicomJpgFileRead method in OpenCV native library. File: {}",
-                                path);
-                        logger.warn("Note: The OpenCV native library may not have the custom dicomJpgFileRead method. "
-                                +
-                                "JPEG compressed DICOM images may not be readable without a properly built OpenCV library.");
-                        // DicomImageReaderは内部的にJava実装のJPEGデコンプレッサーにフォールバックする可能性があるが、
-                        // 実際にはNativeImageReaderが失敗すると、JPEG圧縮画像を読み込むことは困難
-                        throw new UnsupportedOperationException(
-                                "JPEG compressed DICOM images require OpenCV native library " +
-                                        "with dicomJpgFileRead method. The current OpenCV library may not support this method.",
-                                e);
-                    } else {
-                        throw e;
+                    if (raster != null) {
+                        width = raster.getWidth();
+                        height = raster.getHeight();
+
+                        // DataBufferから16bitデータを直接抽出
+                        java.awt.image.DataBuffer dataBuffer = raster.getDataBuffer();
+                        short[] tempData = null;
+                        if (dataBuffer instanceof java.awt.image.DataBufferUShort) {
+                            tempData = ((java.awt.image.DataBufferUShort) dataBuffer).getData();
+                        } else if (dataBuffer instanceof java.awt.image.DataBufferShort) {
+                            tempData = ((java.awt.image.DataBufferShort) dataBuffer).getData();
+                        } else if (dataBuffer instanceof java.awt.image.DataBufferByte) {
+                            byte[] byteData = ((java.awt.image.DataBufferByte) dataBuffer).getData();
+                            tempData = new short[byteData.length];
+                            for (int i = 0; i < byteData.length; i++) {
+                                tempData[i] = (short) (byteData[i] & 0xFF);
+                                if (i % 100000 == 0 && Thread.currentThread().isInterrupted())
+                                    return;
+                            }
+                        } else {
+                            // その他のケース（int等）
+                            int totalPixels = width * height;
+                            tempData = new short[totalPixels];
+                            int[] pixelRow = new int[width];
+                            for (int y = 0; y < height; y++) {
+                                if (Thread.currentThread().isInterrupted())
+                                    return;
+                                raster.getPixels(0, y, width, 1, pixelRow);
+                                for (int x = 0; x < width; x++) {
+                                    tempData[y * width + x] = (short) pixelRow[x];
+                                }
+                            }
+                        }
+                        this.rawShortData = tempData;
+
+                        isGrayscale = true; // readRaster() で取得したデータはグレースケールとして処理
+
+                        // 現在のWL/WWをメモリ内で適用
+                        applyWLWWInMemory();
+
+                        logger.debug("Successfully loaded and processed raw DICOM raster: {}x{}", width, height);
+                    }
+                } catch (Exception e) {
+                    logger.warn("readRaster failed, falling back to read(): {}", e.getMessage());
+                    BufferedImage rawImg = reader.read(frameIndex, param);
+                    if (rawImg != null) {
+                        width = rawImg.getWidth();
+                        height = rawImg.getHeight();
+                        isGrayscale = (rawImg.getType() == BufferedImage.TYPE_USHORT_GRAY ||
+                                rawImg.getType() == BufferedImage.TYPE_BYTE_GRAY ||
+                                rawImg.getColorModel().getColorSpace()
+                                        .getType() == java.awt.color.ColorSpace.TYPE_GRAY);
+
+                        if (isGrayscale) {
+                            short[] tempData = null;
+                            if (rawImg.getType() == BufferedImage.TYPE_USHORT_GRAY) {
+                                tempData = ((java.awt.image.DataBufferUShort) rawImg.getRaster().getDataBuffer())
+                                        .getData();
+                            } else if (rawImg.getType() == BufferedImage.TYPE_BYTE_GRAY) {
+                                byte[] byteData = ((java.awt.image.DataBufferByte) rawImg.getRaster().getDataBuffer())
+                                        .getData();
+                                tempData = new short[byteData.length];
+                                for (int i = 0; i < byteData.length; i++) {
+                                    tempData[i] = (short) (byteData[i] & 0xFF);
+                                    if (i % 100000 == 0 && Thread.currentThread().isInterrupted())
+                                        return;
+                                }
+                            } else {
+                                int w = rawImg.getWidth();
+                                int h = rawImg.getHeight();
+                                tempData = new short[w * h];
+                                java.awt.image.Raster raster = rawImg.getRaster();
+                                int[] pixel = new int[1];
+                                for (int y = 0; y < h; y++) {
+                                    if (Thread.currentThread().isInterrupted())
+                                        return;
+                                    for (int x = 0; x < w; x++) {
+                                        raster.getPixel(x, y, pixel);
+                                        tempData[y * w + x] = (short) pixel[0];
+                                    }
+                                }
+                            }
+                            this.rawShortData = tempData;
+                        } else {
+                            bufferedImage = rawImg;
+                        }
+                        applyWLWWInMemory();
                     }
                 }
 
-                if (bufferedImage != null) {
-                    width = bufferedImage.getWidth();
-                    height = bufferedImage.getHeight();
+                if (bufferedImage != null || rawShortData != null) {
+                    if (width == 0 && bufferedImage != null) {
+                        width = bufferedImage.getWidth();
+                        height = bufferedImage.getHeight();
+                    }
                     logger.debug("Loaded DICOM image: {}x{} from {}", width, height, path);
                 } else {
                     logger.warn("Failed to read DICOM image from {}", path);
                 }
 
             } finally {
-                // リソースを解放
                 if (reader != null) {
                     reader.dispose();
                 }
@@ -519,41 +645,8 @@ public class DicomPix {
                 }
             }
 
-        } catch (RuntimeException e) {
-            // HOROS-20240407準拠: JPEG圧縮画像の読み込みエラーを処理
-            // DicomImageReaderが内部的にNativeImageReaderを使用しようとして失敗する場合がある
-            // これは、OpenCVネイティブライブラリが見つからない場合に発生する
-            String errorMsg = e.getMessage();
-            if (errorMsg != null) {
-                if (errorMsg.contains("opencv") || errorMsg.contains("opencv_java") ||
-                        errorMsg.contains("No stream adaptor") || errorMsg.contains("StreamSegment")) {
-                    logger.warn(
-                            "JPEG compressed DICOM image cannot be loaded: OpenCV native library not found or inaccessible. File: {}",
-                            path);
-                    logger.debug("Error details: {}", errorMsg);
-                } else if (errorMsg.contains("jpeg-cv")) {
-                    logger.debug(
-                            "JPEG compressed DICOM image (jpeg-cv) cannot be loaded without dcm4che-imageio-opencv: {}",
-                            path);
-                } else {
-                    logger.error("Error loading DICOM image from {}", path, e);
-                }
-            } else {
-                logger.error("Error loading DICOM image from {}: {}", path, e.getClass().getSimpleName(), e);
-            }
-            bufferedImage = null;
         } catch (Exception e) {
-            // その他の例外
-            String errorMsg = e.getMessage();
-            if (errorMsg != null && (errorMsg.contains("opencv") || errorMsg.contains("opencv_java") ||
-                    errorMsg.contains("No stream adaptor") || errorMsg.contains("StreamSegment"))) {
-                logger.warn(
-                        "JPEG compressed DICOM image cannot be loaded: OpenCV native library not found or inaccessible. File: {}",
-                        path);
-                logger.debug("Error details: {}", errorMsg);
-            } else {
-                logger.error("Error loading DICOM image from {}", path, e);
-            }
+            logger.error("Error loading DICOM image from {}: {}", path, e.getMessage(), e);
             bufferedImage = null;
         }
     }
@@ -563,8 +656,13 @@ public class DicomPix {
      * HOROS-20240407準拠で実装
      */
     public BufferedImage generateThumbnail(int maxWidth, int maxHeight) {
-        if (bufferedImage == null) {
+        if (bufferedImage == null || (isGrayscale && rawShortData == null)) {
             loadImage();
+        }
+
+        // loadImage()後、グレイスケールならLUTを適用してbufferedImageを更新
+        if (isGrayscale && rawShortData != null && bufferedImage != null) {
+            applyWLWWInMemory();
         }
 
         if (bufferedImage == null) {
@@ -601,21 +699,150 @@ public class DicomPix {
     }
 
     /**
+     * メモリ内の生データに対してWindow Level/Widthを高速に適用
+     * HOROS-20240407準拠の滑らかな階調表現
+     */
+    private void applyWLWWInMemory() {
+        if (!isGrayscale || rawShortData == null)
+            return;
+
+        // WL/WWが正しく設定されていない（0以下）場合は自動計算（Best Fit）
+        if (windowWidth <= 0) {
+            computeBestFit();
+        }
+
+        // 表示用の8bit RGB画像を作成または使い回す
+        if (bufferedImage == null || bufferedImage.getWidth() != width || bufferedImage.getHeight() != height
+                || bufferedImage.getType() != BufferedImage.TYPE_INT_RGB) {
+            bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        }
+
+        // 高速化のためのLookup Table (LUT) 生成
+        // 16bit入力を0-255にマッピング
+        byte[] lut = new byte[65536];
+        float low = windowLevel - (windowWidth / 2f);
+        float actualWW = (windowWidth < 1.0f) ? 1.0f : windowWidth;
+        float factor = 255.0f / actualWW;
+
+        for (int i = 0; i < 65536; i++) {
+            // DICOMのピクセル値に応じたRescale Slope/Interceptを考慮
+            float rawValue = isSigned ? (float) ((short) i) : (float) i;
+            float v = rawValue * rescaleSlope + rescaleIntercept;
+
+            // HOROS-20240407準拠: MONOCHROME1の場合、データ(v)とWLを両方反転させる
+            if (this.isInverse) {
+                v = -v;
+            }
+
+            int p = (int) ((v - low) * factor);
+            if (p < 0)
+                p = 0;
+            if (p > 255)
+                p = 255;
+
+            // Note: vとWL(lowの一部)が両方反転しているため、ここで255-pをする必要はない
+            lut[i] = (byte) p;
+        }
+
+        // 画像ピクセルへの適用 (DataBufferへの直接書き込みで高速化)
+        int[] pixels = ((java.awt.image.DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
+        for (int i = 0; i < rawShortData.length; i++) {
+            if (i % 500000 == 0 && Thread.currentThread().isInterrupted()) {
+                return;
+            }
+            int rawVal = rawShortData[i] & 0xFFFF;
+            int gray = lut[rawVal] & 0xFF;
+            pixels[i] = (gray << 16) | (gray << 8) | gray;
+        }
+    }
+
+    /**
+     * 画像データから最適なWindow Level/Widthを計算（Best Fit）
+     * HOROS-20240407 [DCMPix computePixMinPixMax] 準拠
+     */
+    public void computeBestFit() {
+        if (rawShortData == null || rawShortData.length == 0) {
+            setWindowLevelWidth(128, 256);
+            return;
+        }
+
+        // 高速化のためサンプリング (サイズが大きい場合は間引く)
+        int step = Math.max(1, rawShortData.length / 50000);
+        int sampleCount = (rawShortData.length + step - 1) / step;
+        float[] samples = new float[sampleCount];
+
+        for (int i = 0; i < sampleCount; i++) {
+            int idx = i * step;
+            if (idx >= rawShortData.length)
+                break;
+            int rawValInt = rawShortData[idx] & 0xFFFF;
+            float rawValue = isSigned ? (float) ((short) rawValInt) : (float) rawValInt;
+            float v = rawValue * rescaleSlope + rescaleIntercept;
+
+            // HOROS-20240407準拠: MONOCHROME1の場合は反転値で計算する
+            if (this.isInverse) {
+                v = -v;
+            }
+            samples[i] = v;
+        }
+        java.util.Arrays.sort(samples);
+
+        // HOROS-20240407 [DCMPix computePixMinPixMax] は絶対的な最小・最大を使用 (DCMPix.m 8989行目)
+        // カスタムロジックを排除し、Horosの挙動を完全に再現する
+        float min = samples[0];
+        float max = samples[samples.length - 1];
+
+        if (max <= min) {
+            max = min + 20;
+        }
+
+        // HOROS-20240407準拠: fullwl = pixmin + (pixmax - pixmin)/2; (DCMPix.m 9015行目)
+        // HOROS-20240407準拠: fullww = (pixmax - pixmin); (DCMPix.m 9016行目)
+        float computedWW = max - min;
+        float computedWL = min + (computedWW / 2.0f);
+
+        // すでに反転空間(v=-v)で計算しているため、そのままセットする
+        this.windowWidth = computedWW;
+        this.windowLevel = computedWL;
+
+        if (this.windowWidth < 1.0f) {
+            this.windowWidth = 1.0f;
+        }
+
+        // デフォルトとして保存
+        this.defaultWW = this.windowWidth;
+        this.defaultWL = this.windowLevel;
+
+        System.out.println(String.format(
+                "[DEBUG] computeBestFit() - Absolute Min: %.1f, Max: %.1f -> WL: %.1f, WW: %.1f (isInverse: %b)",
+                min, max, windowLevel, windowWidth, isInverse));
+    }
+
+    /**
      * Window Level/Widthを設定
      * HOROS-20240407: - (void)setWLWW:(float)wl :(float)ww
      */
     public void setWindowLevelWidth(float wl, float ww) {
-        if (this.windowLevel == wl && this.windowWidth == ww) {
-            return; // 変更なし
+        // ww (Width) が 0 以下の場合は、自動計算（Best Fit）を強制する
+        if (ww <= 0) {
+            this.windowWidth = 0; // applyWLWWInMemory内で強制計算させる
+        } else {
+            this.windowWidth = ww;
+
+            // HOROS-20240407準拠: MONOCHROME1の場合、内部的にはWLを反転して保持する
+            if (this.isInverse) {
+                // 入力が正の値（DICOM値）なら反転させる
+                this.windowLevel = (wl > 0) ? -wl : wl;
+            } else {
+                this.windowLevel = wl;
+            }
         }
 
-        this.windowLevel = wl;
-        this.windowWidth = ww;
-
-        // 画像を再読み込み（Window Level/Widthを適用）
-        bufferedImage = null;
-        thumbnailImage = null;
-        loadImage();
+        if (isGrayscale && (rawShortData != null)) {
+            // メモリ内で高速に適用（再読み込み不要）
+            applyWLWWInMemory();
+            thumbnailImage = null; // サムネイルは必要に応じて再生成
+        }
     }
 
     /**
@@ -632,7 +859,7 @@ public class DicomPix {
      * Window Levelを取得
      */
     public float getWindowLevel() {
-        return windowLevel;
+        return isInverse ? -windowLevel : windowLevel;
     }
 
     /**
@@ -642,12 +869,28 @@ public class DicomPix {
         return windowWidth;
     }
 
+    public float getRescaleSlope() {
+        return rescaleSlope;
+    }
+
+    public float getRescaleIntercept() {
+        return rescaleIntercept;
+    }
+
+    public boolean getIsSigned() {
+        return isSigned;
+    }
+
+    public boolean getIsInverse() {
+        return isInverse;
+    }
+
     /**
      * 保存されたWindow Levelを取得
      * HOROS-20240407準拠: savedWL
      */
     public float getSavedWL() {
-        return windowLevel;
+        return isInverse ? -defaultWL : defaultWL;
     }
 
     /**
@@ -655,7 +898,7 @@ public class DicomPix {
      * HOROS-20240407準拠: savedWW
      */
     public float getSavedWW() {
-        return windowWidth;
+        return defaultWW;
     }
 
     /**
@@ -897,12 +1140,55 @@ public class DicomPix {
     }
 
     /**
+     * ピクセルデータをshort配列で取得
+     * HOROS-20240407準拠: 補間なしの生データを優先して取得
+     */
+    public short[] getShortData() {
+        if (rawShortData == null) {
+            loadImage();
+        }
+        if (rawShortData != null) {
+            return rawShortData;
+        }
+
+        BufferedImage bi = getBufferedImage();
+        if (bi == null)
+            return null;
+
+        if (bi.getType() == BufferedImage.TYPE_USHORT_GRAY) {
+            return ((java.awt.image.DataBufferUShort) bi.getRaster().getDataBuffer()).getData();
+        } else {
+            int w = bi.getWidth();
+            int h = bi.getHeight();
+            short[] data = new short[w * h];
+            java.awt.image.Raster raster = bi.getRaster();
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    data[y * w + x] = (short) (raster.getSample(x, y, 0) & 0xFFFF);
+                }
+            }
+            return data;
+        }
+    }
+
+    /**
      * Slice Locationを取得
      * HOROS-20240407準拠: DCMPix.h 281行目 - @property double sliceLocation;
      */
     public double getSliceLocation() {
         if (width == 0 && height == 0) {
             readHeader();
+        }
+        // HOROS-20240407準拠: SliceLocation（タグ 0020,1041）が欠落している場合、
+        // 画像の位置と法線ベクトルの内積を計算して物理的な位置を特定する（ソート用）
+        if (sliceLocation == 0.0) {
+            double nx = orientation[6];
+            double ny = orientation[7];
+            double nz = orientation[8];
+            // 法線が未計算(0,0,0)の場合は originZ を使用
+            if (nx == 0 && ny == 0 && nz == 0)
+                return originZ;
+            return originX * nx + originY * ny + originZ * nz;
         }
         return sliceLocation;
     }

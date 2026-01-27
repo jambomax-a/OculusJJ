@@ -11,12 +11,12 @@ import java.util.Set;
  * Core Dataの代わりにJPA/HibernateまたはSQLiteを使用
  */
 public class DicomSeries {
-    
+
     public static final int THUMBNAIL_SIZE = 70;
-    
+
     // ========== インスタンスフィールド ==========
     private LocalDateTime dicomTime;
-    
+
     // プロパティ
     private String comment;
     private String comment2;
@@ -48,19 +48,19 @@ public class DicomSeries {
     private Double xOffset;
     private Boolean yFlipped;
     private Double yOffset;
-    
+
     // リレーション
     private Set<DicomImage> images;
     private DicomStudy study;
-    
+
     // ========== コンストラクタ ==========
-    
+
     public DicomSeries() {
         // TODO: 初期化
     }
-    
+
     // ========== インスタンスメソッド ==========
-    
+
     /**
      * パスセットを取得
      */
@@ -68,7 +68,7 @@ public class DicomSeries {
         // TODO: 実装
         return new java.util.HashSet<>();
     }
-    
+
     /**
      * キー画像セットを取得
      */
@@ -76,7 +76,7 @@ public class DicomSeries {
         // TODO: 実装
         return new java.util.HashSet<>();
     }
-    
+
     /**
      * ソートされた画像配列を取得
      * HOROS-20240407: - (NSArray *)sortedImages
@@ -85,23 +85,26 @@ public class DicomSeries {
         if (images == null || images.isEmpty()) {
             return new java.util.ArrayList<>();
         }
-        
+
         List<DicomImage> result = new java.util.ArrayList<>(images);
-        
+
         // HOROS-20240407準拠: sortDescriptorsForImagesでソート
         // 簡易実装として、instanceNumberでソート
         result.sort((a, b) -> {
             Integer aInst = a.getInstanceNumber();
             Integer bInst = b.getInstanceNumber();
-            if (aInst == null && bInst == null) return 0;
-            if (aInst == null) return -1;
-            if (bInst == null) return 1;
+            if (aInst == null && bInst == null)
+                return 0;
+            if (aInst == null)
+                return -1;
+            if (bInst == null)
+                return 1;
             return aInst.compareTo(bInst);
         });
-        
+
         return result;
     }
-    
+
     /**
      * タイプを取得
      * HOROS-20240407: - (NSString*) type
@@ -109,18 +112,21 @@ public class DicomSeries {
     public String getType() {
         return "Series";
     }
-    
+
     /**
      * 名前で比較
      */
     public int compareName(DicomSeries series) {
         // TODO: 実装
-        if (name == null && series.name == null) return 0;
-        if (name == null) return -1;
-        if (series.name == null) return 1;
+        if (name == null && series.name == null)
+            return 0;
+        if (name == null)
+            return -1;
+        if (series.name == null)
+            return 1;
         return name.compareTo(series.name);
     }
-    
+
     /**
      * マルチフレームを除くファイル数を取得
      */
@@ -128,7 +134,7 @@ public class DicomSeries {
         // TODO: 実装
         return numberOfImages;
     }
-    
+
     /**
      * 生ファイル数を取得
      */
@@ -154,11 +160,11 @@ public class DicomSeries {
                 }
             }
         }
-        
+
         // 画像がない場合は0
         return 0;
     }
-    
+
     /**
      * ファイル数を取得
      * HOROS-20240407準拠: DicomSeries.m のnoFilesメソッド
@@ -172,7 +178,7 @@ public class DicomSeries {
         // numberOfImagesがnullの場合はrawNoFilesを返す
         return rawNoFiles();
     }
-    
+
     /**
      * 前のシリーズを取得
      */
@@ -180,7 +186,7 @@ public class DicomSeries {
         // TODO: 実装
         return null;
     }
-    
+
     /**
      * 次のシリーズを取得
      */
@@ -188,7 +194,7 @@ public class DicomSeries {
         // TODO: 実装
         return null;
     }
-    
+
     /**
      * 画像のソート記述子を取得
      */
@@ -196,7 +202,7 @@ public class DicomSeries {
         // TODO: 実装
         return new java.util.ArrayList<>();
     }
-    
+
     /**
      * 一意のファイル名を取得
      */
@@ -204,109 +210,285 @@ public class DicomSeries {
         // TODO: 実装
         return name != null ? name : "Series";
     }
-    
+
     // ========== プロパティアクセサ ==========
-    
-    public LocalDateTime getDicomTime() { return dicomTime; }
-    public void setDicomTime(LocalDateTime dicomTime) { this.dicomTime = dicomTime; }
-    
-    public String getComment() { return comment; }
-    public void setComment(String comment) { this.comment = comment; }
-    
-    public String getComment2() { return comment2; }
-    public void setComment2(String comment2) { this.comment2 = comment2; }
-    
-    public String getComment3() { return comment3; }
-    public void setComment3(String comment3) { this.comment3 = comment3; }
-    
-    public String getComment4() { return comment4; }
-    public void setComment4(String comment4) { this.comment4 = comment4; }
-    
-    public LocalDateTime getDate() { return date; }
-    public void setDate(LocalDateTime date) { this.date = date; }
-    
-    public LocalDateTime getDateAdded() { return dateAdded; }
-    public void setDateAdded(LocalDateTime dateAdded) { this.dateAdded = dateAdded; }
-    
-    public LocalDateTime getDateOpened() { return dateOpened; }
-    public void setDateOpened(LocalDateTime dateOpened) { this.dateOpened = dateOpened; }
-    
-    public Integer getDisplayStyle() { return displayStyle; }
-    public void setDisplayStyle(Integer displayStyle) { this.displayStyle = displayStyle; }
-    
-    public Integer getId() { return id; }
-    public void setId(Integer id) { this.id = id; }
-    
-    public String getModality() { return modality; }
-    public void setModality(String modality) { this.modality = modality; }
-    
+
+    public LocalDateTime getDicomTime() {
+        return dicomTime;
+    }
+
+    public void setDicomTime(LocalDateTime dicomTime) {
+        this.dicomTime = dicomTime;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    public String getComment2() {
+        return comment2;
+    }
+
+    public void setComment2(String comment2) {
+        this.comment2 = comment2;
+    }
+
+    public String getComment3() {
+        return comment3;
+    }
+
+    public void setComment3(String comment3) {
+        this.comment3 = comment3;
+    }
+
+    public String getComment4() {
+        return comment4;
+    }
+
+    public void setComment4(String comment4) {
+        this.comment4 = comment4;
+    }
+
+    public LocalDateTime getDate() {
+        return date;
+    }
+
+    public void setDate(LocalDateTime date) {
+        this.date = date;
+    }
+
+    public LocalDateTime getDateAdded() {
+        return dateAdded;
+    }
+
+    public void setDateAdded(LocalDateTime dateAdded) {
+        this.dateAdded = dateAdded;
+    }
+
+    public LocalDateTime getDateOpened() {
+        return dateOpened;
+    }
+
+    public void setDateOpened(LocalDateTime dateOpened) {
+        this.dateOpened = dateOpened;
+    }
+
+    public Integer getDisplayStyle() {
+        return displayStyle;
+    }
+
+    public void setDisplayStyle(Integer displayStyle) {
+        this.displayStyle = displayStyle;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getModality() {
+        return modality;
+    }
+
+    public void setModality(String modality) {
+        this.modality = modality;
+    }
+
     @Deprecated
-    public Boolean getMountedVolume() { return mountedVolume; }
+    public Boolean getMountedVolume() {
+        return mountedVolume;
+    }
+
     @Deprecated
-    public void setMountedVolume(Boolean mountedVolume) { this.mountedVolume = mountedVolume; }
-    
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    
-    public Integer getNumberOfImages() { return numberOfImages; }
-    public void setNumberOfImages(Integer numberOfImages) { this.numberOfImages = numberOfImages; }
-    
-    public Integer getNumberOfKeyImages() { return numberOfKeyImages; }
-    public void setNumberOfKeyImages(Integer numberOfKeyImages) { this.numberOfKeyImages = numberOfKeyImages; }
-    
-    public Double getRotationAngle() { return rotationAngle; }
-    public void setRotationAngle(Double rotationAngle) { this.rotationAngle = rotationAngle; }
-    
-    public Double getScale() { return scale; }
-    public void setScale(Double scale) { this.scale = scale; }
-    
-    public String getSeriesDescription() { return seriesDescription; }
-    public void setSeriesDescription(String seriesDescription) { this.seriesDescription = seriesDescription; }
-    
-    public String getSeriesDICOMUID() { return seriesDICOMUID; }
-    public void setSeriesDICOMUID(String seriesDICOMUID) { this.seriesDICOMUID = seriesDICOMUID; }
-    
-    public String getSeriesInstanceUID() { return seriesInstanceUID; }
-    public void setSeriesInstanceUID(String seriesInstanceUID) { this.seriesInstanceUID = seriesInstanceUID; }
-    
-    public String getSeriesSOPClassUID() { return seriesSOPClassUID; }
-    public void setSeriesSOPClassUID(String seriesSOPClassUID) { this.seriesSOPClassUID = seriesSOPClassUID; }
-    
-    public Integer getSeriesNumber() { return seriesNumber; }
-    public void setSeriesNumber(Integer seriesNumber) { this.seriesNumber = seriesNumber; }
-    
-    public Integer getStateText() { return stateText; }
-    public void setStateText(Integer stateText) { this.stateText = stateText; }
-    
-    public byte[] getThumbnail() { return thumbnail; }
-    public void setThumbnail(byte[] thumbnail) { this.thumbnail = thumbnail; }
-    
-    public Double getWindowLevel() { return windowLevel; }
-    public void setWindowLevel(Double windowLevel) { this.windowLevel = windowLevel; }
-    
-    public Double getWindowWidth() { return windowWidth; }
-    public void setWindowWidth(Double windowWidth) { this.windowWidth = windowWidth; }
-    
-    public Boolean getXFlipped() { return xFlipped; }
-    public void setXFlipped(Boolean xFlipped) { this.xFlipped = xFlipped; }
-    
-    public Double getXOffset() { return xOffset; }
-    public void setXOffset(Double xOffset) { this.xOffset = xOffset; }
-    
-    public Boolean getYFlipped() { return yFlipped; }
-    public void setYFlipped(Boolean yFlipped) { this.yFlipped = yFlipped; }
-    
-    public Double getYOffset() { return yOffset; }
-    public void setYOffset(Double yOffset) { this.yOffset = yOffset; }
-    
-    public Set<DicomImage> getImages() { return images; }
-    public void setImages(Set<DicomImage> images) { this.images = images; }
-    
-    public DicomStudy getStudy() { return study; }
-    public void setStudy(DicomStudy study) { this.study = study; }
-    
+    public void setMountedVolume(Boolean mountedVolume) {
+        this.mountedVolume = mountedVolume;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Integer getNumberOfImages() {
+        return numberOfImages;
+    }
+
+    public void setNumberOfImages(Integer numberOfImages) {
+        this.numberOfImages = numberOfImages;
+    }
+
+    public Integer getNumberOfKeyImages() {
+        return numberOfKeyImages;
+    }
+
+    public void setNumberOfKeyImages(Integer numberOfKeyImages) {
+        this.numberOfKeyImages = numberOfKeyImages;
+    }
+
+    public Double getRotationAngle() {
+        return rotationAngle;
+    }
+
+    public void setRotationAngle(Double rotationAngle) {
+        this.rotationAngle = rotationAngle;
+    }
+
+    public Double getScale() {
+        return scale;
+    }
+
+    public void setScale(Double scale) {
+        this.scale = scale;
+    }
+
+    public String getSeriesDescription() {
+        return seriesDescription;
+    }
+
+    public void setSeriesDescription(String seriesDescription) {
+        this.seriesDescription = seriesDescription;
+    }
+
+    public String getSeriesDICOMUID() {
+        return seriesDICOMUID;
+    }
+
+    public void setSeriesDICOMUID(String seriesDICOMUID) {
+        this.seriesDICOMUID = seriesDICOMUID;
+    }
+
+    public String getSeriesInstanceUID() {
+        return seriesInstanceUID;
+    }
+
+    public void setSeriesInstanceUID(String seriesInstanceUID) {
+        this.seriesInstanceUID = seriesInstanceUID;
+    }
+
+    public String getSeriesSOPClassUID() {
+        return seriesSOPClassUID;
+    }
+
+    public void setSeriesSOPClassUID(String seriesSOPClassUID) {
+        this.seriesSOPClassUID = seriesSOPClassUID;
+    }
+
+    public Integer getSeriesNumber() {
+        return seriesNumber;
+    }
+
+    public void setSeriesNumber(Integer seriesNumber) {
+        this.seriesNumber = seriesNumber;
+    }
+
+    public Integer getStateText() {
+        return stateText;
+    }
+
+    public void setStateText(Integer stateText) {
+        this.stateText = stateText;
+    }
+
+    public byte[] getThumbnail() {
+        return thumbnail;
+    }
+
+    public void setThumbnail(byte[] thumbnail) {
+        this.thumbnail = thumbnail;
+    }
+
+    public Double getWindowLevel() {
+        return windowLevel;
+    }
+
+    public void setWindowLevel(Double windowLevel) {
+        this.windowLevel = windowLevel;
+    }
+
+    public Double getWindowWidth() {
+        return windowWidth;
+    }
+
+    public void setWindowWidth(Double windowWidth) {
+        this.windowWidth = windowWidth;
+    }
+
+    public Boolean getXFlipped() {
+        return xFlipped;
+    }
+
+    public void setXFlipped(Boolean xFlipped) {
+        this.xFlipped = xFlipped;
+    }
+
+    public Double getXOffset() {
+        return xOffset;
+    }
+
+    public void setXOffset(Double xOffset) {
+        this.xOffset = xOffset;
+    }
+
+    public Boolean getYFlipped() {
+        return yFlipped;
+    }
+
+    public void setYFlipped(Boolean yFlipped) {
+        this.yFlipped = yFlipped;
+    }
+
+    public Double getYOffset() {
+        return yOffset;
+    }
+
+    public void setYOffset(Double yOffset) {
+        this.yOffset = yOffset;
+    }
+
+    public Set<DicomImage> getImages() {
+        return images;
+    }
+
+    public void setImages(Set<DicomImage> images) {
+        this.images = images;
+    }
+
+    public DicomStudy getStudy() {
+        return study;
+    }
+
+    public void setStudy(DicomStudy study) {
+        this.study = study;
+    }
+
     // ========== CoreDataGeneratedAccessors ==========
-    
+
+    /**
+     * SOP Instance UIDとフレーム番号で画像を取得
+     */
+    public DicomImage getImageBySOPUID(String sopUID, int frameID) {
+        if (images == null || sopUID == null) {
+            return null;
+        }
+        for (DicomImage img : images) {
+            if (sopUID.equals(img.getSopInstanceUID()) &&
+                    (img.getFrameID() != null && img.getFrameID() == frameID)) {
+                return img;
+            }
+        }
+        return null;
+    }
+
     /**
      * 画像オブジェクトを追加
      */
@@ -319,7 +501,7 @@ public class DicomSeries {
             value.setSeries(this);
         }
     }
-    
+
     /**
      * 画像オブジェクトを削除
      */
@@ -331,7 +513,7 @@ public class DicomSeries {
             value.setSeries(null);
         }
     }
-    
+
     /**
      * 画像セットを追加
      */
@@ -346,7 +528,7 @@ public class DicomSeries {
             }
         }
     }
-    
+
     /**
      * 画像セットを削除
      */
@@ -360,7 +542,7 @@ public class DicomSeries {
             }
         }
     }
-    
+
     /**
      * localstringを取得
      * HOROS-20240407準拠: DicomSeries.m 510-530行目
@@ -368,7 +550,7 @@ public class DicomSeries {
      */
     public String localstring() {
         boolean local = true;
-        
+
         try {
             // HOROS-20240407準拠: 最初のImageのinDatabaseFolderをチェック
             if (images != null && !images.isEmpty()) {
@@ -383,9 +565,8 @@ public class DicomSeries {
             // エラーが発生した場合はデフォルト値（true）を使用
             local = true;
         }
-        
+
         // HOROS-20240407準拠: localがtrueの場合は"L"を返し、falseの場合は空文字列を返す
         return local ? "L" : "";
     }
 }
-

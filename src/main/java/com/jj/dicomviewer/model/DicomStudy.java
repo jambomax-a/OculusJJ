@@ -54,6 +54,7 @@ public class DicomStudy {
     private String studyName;
     private String studyID;
     private byte[] windowsState;
+    private int internalDbId = -1; // データベース内部ID
 
     // リレーション
     private Set<Object> albums;
@@ -1113,6 +1114,14 @@ public class DicomStudy {
         this.windowsState = windowsState;
     }
 
+    public int getInternalDbId() {
+        return internalDbId;
+    }
+
+    public void setInternalDbId(int internalDbId) {
+        this.internalDbId = internalDbId;
+    }
+
     public Set<Object> getAlbums() {
         return albums;
     }
@@ -1167,6 +1176,21 @@ public class DicomStudy {
         if (albums != null) {
             albums.removeAll(value);
         }
+    }
+
+    /**
+     * Series Instance UIDでシリーズを取得
+     */
+    public DicomSeries getSeriesByUID(String seriesUID) {
+        if (series == null || seriesUID == null) {
+            return null;
+        }
+        for (DicomSeries s : series) {
+            if (seriesUID.equals(s.getSeriesInstanceUID())) {
+                return s;
+            }
+        }
+        return null;
     }
 
     /**

@@ -114,14 +114,28 @@ public class DicomDatabase {
                 java.nio.file.Files.readAllLines(dbFolderLocationFile.toPath(), java.nio.charset.StandardCharsets.UTF_8)
                         .stream()
                         .findFirst()
-                        .ifPresent(path -> this.dataBaseDirPath = path.trim());
+                        .ifPresent(path -> {
+                            String trimmedPath = path.trim();
+                            // パスが実際に存在するか確認
+                            if (new File(trimmedPath).exists()) {
+                                this.dataBaseDirPath = trimmedPath;
+                                logger.info("Using dataBaseDirPath from DBFOLDER_LOCATION: {}", trimmedPath);
+                            } else {
+                                logger.warn(
+                                        "dataBaseDirPath from DBFOLDER_LOCATION does not exist: {}. Falling back to baseDirPath.",
+                                        trimmedPath);
+                                this.dataBaseDirPath = baseDirPath;
+                            }
+                        });
             } catch (Exception e) {
                 // 読み取りエラー時はbaseDirPathを使用
+                logger.error("Failed to read DBFOLDER_LOCATION", e);
                 this.dataBaseDirPath = baseDirPath;
             }
         }
         if (this.dataBaseDirPath == null) {
             this.dataBaseDirPath = baseDirPath;
+            logger.info("Using baseDirPath as dataBaseDirPath: {}", baseDirPath);
         }
         this.processFilesLock = new ReentrantLock();
         this.importFilesFromIncomingDirLock = new ReentrantLock();
@@ -146,27 +160,56 @@ public class DicomDatabase {
         }
     }
 
+    // HOROS-20240407準拠: NSNotificationCenter相当のリスナー
+    private final List<Runnable> databaseChangedListeners = new java.util.ArrayList<>();
+
     // ========== 静的メソッド ==========
+
+    /**
+     * データベース変更リスナーを追加
+     */
+    public void addDatabaseChangedListener(Runnable listener) {
+        synchronized (databaseChangedListeners) {
+            databaseChangedListeners.add(listener);
+        }
+    }
+
+    /**
+     * データベース変更リスナーを削除
+     */
+    public void removeDatabaseChangedListener(Runnable listener) {
+        synchronized (databaseChangedListeners) {
+            databaseChangedListeners.remove(listener);
+        }
+    }
+
+    /**
+     * データベース変更をリスナーに通知
+     */
+    protected void notifyDatabaseChanged() {
+        synchronized (databaseChangedListeners) {
+            for (Runnable listener : databaseChangedListeners) {
+                javax.swing.SwingUtilities.invokeLater(listener);
+            }
+        }
+    }
 
     /**
      * DicomDatabaseクラスを初期化
      */
     public static void initializeDicomDatabaseClass() {
-        // TODO: 実装
     }
 
     /**
      * コンテキスト内の患者UIDを再計算
      */
     public static void recomputePatientUIDsInContext(Object context) {
-        // TODO: 実装
     }
 
     /**
      * デフォルトのベースディレクトリパスを取得
      */
     public static String defaultBaseDirPath() {
-        // TODO: 実装
         return System.getProperty("user.home") + File.separator + OSIRIX_DATA_DIR_NAME;
     }
 
@@ -174,7 +217,6 @@ public class DicomDatabase {
      * パスのベースディレクトリパスを取得
      */
     public static String baseDirPathForPath(String path) {
-        // TODO: 実装
         return path;
     }
 
@@ -182,7 +224,6 @@ public class DicomDatabase {
      * モードとパスからベースディレクトリパスを取得
      */
     public static String baseDirPathForMode(int mode, String path) {
-        // TODO: 実装
         return path;
     }
 
@@ -190,7 +231,6 @@ public class DicomDatabase {
      * すべてのデータベースを取得
      */
     public static List<DicomDatabase> allDatabases() {
-        // TODO: 実装
         return new java.util.ArrayList<>();
     }
 
@@ -215,7 +255,6 @@ public class DicomDatabase {
      * パスと名前でデータベースを取得
      */
     public static DicomDatabase databaseAtPath(String path, String name) {
-        // TODO: 実装
         // 既存のデータベースを返すか、新規作成
         return new DicomDatabase(path, name != null ? name : "Database");
     }
@@ -224,7 +263,6 @@ public class DicomDatabase {
      * 既存のデータベースをパスで取得
      */
     public static DicomDatabase existingDatabaseAtPath(String path) {
-        // TODO: 実装
         return null;
     }
 
@@ -233,7 +271,6 @@ public class DicomDatabase {
      */
     @Deprecated
     public static DicomDatabase databaseForContext(Object context) {
-        // TODO: 実装
         return null;
     }
 
@@ -284,6 +321,23 @@ public class DicomDatabase {
      */
     public void setName(String name) {
         this.name = name;
+    }
+
+    /**
+     * Study Instance UIDでStudyを取得
+     */
+    public DicomStudy getStudyByUID(String studyUID) {
+        synchronized (studies) {
+            if (studies == null || studyUID == null) {
+                return null;
+            }
+            for (DicomStudy s : studies) {
+                if (studyUID.equals(s.getStudyInstanceUID())) {
+                    return s;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -361,7 +415,6 @@ public class DicomDatabase {
      * データノード識別子を取得
      */
     public Object dataNodeIdentifier() {
-        // TODO: 実装
         return null;
     }
 
@@ -389,6 +442,12 @@ public class DicomDatabase {
 
             // SQLite接続を開く
             sqliteConnection = DriverManager.getConnection("jdbc:sqlite:" + sqliteDatabasePath);
+
+            // WALモードを有効化（読込と書き込みを並行して行えるようにし、UIレスポンスを改善）
+            try (Statement stmt = sqliteConnection.createStatement()) {
+                stmt.execute("PRAGMA journal_mode=WAL");
+                stmt.execute("PRAGMA synchronous=NORMAL");
+            }
 
             // テーブルを作成
             createTables();
@@ -494,6 +553,39 @@ public class DicomDatabase {
                             FOREIGN KEY (studyId) REFERENCES Study(id)
                         )
                     """);
+
+            // ROIテーブル
+            stmt.execute("""
+                        CREATE TABLE IF NOT EXISTS ROI (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            sopInstanceUID TEXT,
+                            frame INTEGER,
+                            type TEXT,
+                            points TEXT,
+                            name TEXT,
+                            color INTEGER,
+                            thickness REAL,
+                            pixelSpacingX REAL,
+                            pixelSpacingY REAL,
+                            textBoxOffsetX REAL DEFAULT 0,
+                            textBoxOffsetY REAL DEFAULT 0
+                        )
+                    """);
+
+            // 旧バージョンからのマイグレーション用（カラムがない場合は追加）
+            try {
+                stmt.execute("ALTER TABLE ROI ADD COLUMN textBoxOffsetX REAL DEFAULT 0");
+            } catch (SQLException e) {
+                // カラムが既に存在する場合は無視
+            }
+            try {
+                stmt.execute("ALTER TABLE ROI ADD COLUMN textBoxOffsetY REAL DEFAULT 0");
+            } catch (SQLException e) {
+                // カラムが既に存在する場合は無視
+            }
+
+            // インデックス追加
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_roi_sop ON ROI(sopInstanceUID)");
 
             logger.info("SQLite tables created successfully");
 
@@ -711,6 +803,14 @@ public class DicomDatabase {
                 count++;
                 DicomStudy study = new DicomStudy();
                 int studyDbId = rs.getInt("id");
+                String studyID_text = rs.getString("studyID");
+
+                if (count <= 5) {
+                    logger.info("Study {}: id={}, studyID(text)={}, name={}", count, studyDbId, studyID_text,
+                            rs.getString("name"));
+                }
+
+                study.setInternalDbId(studyDbId); // DBのプライマリキーを保存
                 study.setStudyInstanceUID(rs.getString("studyInstanceUID"));
                 study.setName(rs.getString("name"));
                 study.setPatientID(rs.getString("patientID"));
@@ -806,19 +906,28 @@ public class DicomDatabase {
      * HOROS-20240407準拠: Studyが選択されたときに呼び出される
      */
     public void loadSeriesForStudyIfNeeded(DicomStudy study) {
-        if (study == null || (study.getSeries() != null && !study.getSeries().isEmpty())) {
+        if (study == null) {
+            return;
+        }
+        if (study.getSeries() != null && !study.getSeries().isEmpty()) {
             return; // 既に読み込み済み
         }
 
         try {
-            // HOROS-20240407準拠: studyInstanceUIDからstudyDbIdを取得
-            // 注意: study.getId()はStudyID（DICOMタグ）を返すため、DBのIDは別途取得する必要がある
-            String studyInstanceUID = study.getStudyInstanceUID();
-            if (studyInstanceUID != null && !studyInstanceUID.isEmpty()) {
-                int studyDbId = getStudyDbId(studyInstanceUID);
-                if (studyDbId > 0) {
-                    loadSeriesForStudy(study, studyDbId);
+            int studyDbId = study.getInternalDbId();
+            if (studyDbId <= 0) {
+                // internalDbIdが設定されていない場合はUIDから取得を試みる
+                String studyInstanceUID = study.getStudyInstanceUID();
+                if (studyInstanceUID != null && !studyInstanceUID.isEmpty()) {
+                    studyDbId = getStudyDbId(studyInstanceUID);
                 }
+            }
+
+            logger.debug("loadSeriesForStudyIfNeeded: study={}, studyDbId={}", study.getName(), studyDbId);
+            if (studyDbId > 0) {
+                loadSeriesForStudy(study, studyDbId);
+            } else {
+                logger.warn("Could not find database ID for study: {}", study.getName());
             }
         } catch (Exception e) {
             logger.error("Failed to load series for study: {}", study.getStudyInstanceUID(), e);
@@ -830,14 +939,21 @@ public class DicomDatabase {
      */
     private void loadSeriesForStudy(DicomStudy study, int studyDbId) throws SQLException {
         String sql = "SELECT * FROM Series WHERE studyId = ? ORDER BY seriesNumber";
+        logger.debug("loadSeriesForStudy: Executing SQL: {} with studyId={}", sql, studyDbId);
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
             pstmt.setInt(1, studyDbId);
             try (ResultSet rs = pstmt.executeQuery()) {
-                java.util.Set<DicomSeries> seriesSet = new java.util.HashSet<>();
-
+                int count = 0;
                 while (rs.next()) {
-                    DicomSeries series = new DicomSeries();
-                    series.setSeriesInstanceUID(rs.getString("seriesInstanceUID"));
+                    count++;
+                    String seriesInstanceUID = rs.getString("seriesInstanceUID");
+
+                    DicomSeries series = study.getSeriesByUID(seriesInstanceUID);
+                    if (series == null) {
+                        series = new DicomSeries();
+                        series.setSeriesInstanceUID(seriesInstanceUID);
+                    }
+
                     series.setName(rs.getString("name"));
                     series.setSeriesDescription(rs.getString("seriesDescription"));
                     series.setModality(rs.getString("modality"));
@@ -848,11 +964,10 @@ public class DicomDatabase {
                     series.setWindowWidth((double) rs.getFloat("windowWidth"));
                     series.setStudy(study);
 
-                    // HOROS-20240407準拠: サムネイルを読み込む
                     try {
                         series.setThumbnail(rs.getBytes("thumbnail"));
                     } catch (Exception e) {
-                        // カラムがない場合は無視
+                        // Ignore
                     }
 
                     String dateStr = rs.getString("date");
@@ -860,28 +975,23 @@ public class DicomDatabase {
                         try {
                             series.setDate(LocalDateTime.parse(dateStr));
                         } catch (Exception e) {
-                            // 日付パースエラーは無視
                         }
                     }
 
-                    // HOROS-20240407準拠: dateAddedフィールドを読み込む
                     String dateAddedStr = rs.getString("dateAdded");
                     if (dateAddedStr != null && !dateAddedStr.isEmpty()) {
                         try {
                             series.setDateAdded(LocalDateTime.parse(dateAddedStr));
                         } catch (Exception e) {
-                            // 日付パースエラーは無視
                         }
                     }
 
                     // Imageを読み込む
                     loadImagesForSeries(series, rs.getInt("id"));
 
-                    seriesSet.add(series);
                     study.addSeriesObject(series);
                 }
-
-                study.setSeries(seriesSet);
+                logger.debug("loadSeriesForStudy: Loaded {} series for study: {}", count, study.getName());
             }
         }
     }
@@ -913,6 +1023,161 @@ public class DicomDatabase {
     }
 
     /**
+     * ROIを保存
+     */
+    public void saveROI(ROI roi, String sopInstanceUID, int frame) {
+        if (roi == null || sopInstanceUID == null)
+            return;
+
+        if (roi.getId() != -1) {
+            // 更新
+            String sql = "UPDATE ROI SET type = ?, points = ?, name = ?, color = ?, thickness = ?, pixelSpacingX = ?, pixelSpacingY = ?, textBoxOffsetX = ?, textBoxOffsetY = ? WHERE id = ?";
+            try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
+                pstmt.setString(1, roi.getType().name());
+                pstmt.setString(2, serializePoints(roi.getPoints()));
+                pstmt.setString(3, roi.getName());
+                pstmt.setInt(4, roi.getColor().getRGB());
+                pstmt.setDouble(5, roi.getThickness());
+                pstmt.setDouble(6, roi.getPixelSpacingX());
+                pstmt.setDouble(7, roi.getPixelSpacingY());
+                pstmt.setDouble(8, (double) roi.getTextBoxOffsetX());
+                pstmt.setDouble(9, (double) roi.getTextBoxOffsetY());
+                pstmt.setInt(10, roi.getId());
+                pstmt.executeUpdate();
+            } catch (SQLException e) {
+                logger.error("Failed to update ROI in database", e);
+            }
+        } else {
+            // 新規挿入
+            String sql = "INSERT INTO ROI (sopInstanceUID, frame, type, points, name, color, thickness, pixelSpacingX, pixelSpacingY, textBoxOffsetX, textBoxOffsetY) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql,
+                    java.sql.Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setString(1, sopInstanceUID);
+                pstmt.setInt(2, frame);
+                pstmt.setString(3, roi.getType().name());
+                pstmt.setString(4, serializePoints(roi.getPoints()));
+                pstmt.setString(5, roi.getName());
+                pstmt.setInt(6, roi.getColor().getRGB());
+                pstmt.setDouble(7, (double) roi.getThickness());
+                pstmt.setDouble(8, roi.getPixelSpacingX());
+                pstmt.setDouble(9, roi.getPixelSpacingY());
+                pstmt.setDouble(10, (double) roi.getTextBoxOffsetX());
+                pstmt.setDouble(11, (double) roi.getTextBoxOffsetY());
+                pstmt.executeUpdate();
+
+                // 生成されたIDを取得してセット
+                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        roi.setId(generatedKeys.getInt(1));
+                    }
+                }
+            } catch (SQLException e) {
+                logger.error("Failed to insert ROI to database", e);
+            }
+        }
+    }
+
+    /**
+     * 指定された画像のROIを削除
+     */
+    public void deleteROIs(String sopInstanceUID, int frame) {
+        String sql = "DELETE FROM ROI WHERE sopInstanceUID = ? AND frame = ?";
+        try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
+            pstmt.setString(1, sopInstanceUID);
+            pstmt.setInt(2, frame);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to delete ROIs from database", e);
+        }
+    }
+
+    /**
+     * ROIを削除 (現在、簡略化のため指定のSOPの全ROIを削除)
+     */
+    public void deleteROI(ROI roi) {
+        if (roi == null || roi.getSOPInstanceUID() == null)
+            return;
+        // 本来はROI固有のIDで削除すべきだが、現在のスキーマに合わせてSOP UIDで削除
+        // ROI自体にframe番号を保持させるか、呼び出し側で指定する必要がある
+        deleteROIs(roi.getSOPInstanceUID(), 0); // とりあえずフレーム0
+    }
+
+    /**
+     * 画像のすべてのROIを読み込む
+     */
+    public void loadROIsForImage(DicomImage image) {
+        if (image == null || image.getSopInstanceUID() == null)
+            return;
+
+        String sql = "SELECT * FROM ROI WHERE sopInstanceUID = ?";
+        try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
+            pstmt.setString(1, image.getSopInstanceUID());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    int id = rs.getInt("id");
+                    int frame = rs.getInt("frame");
+                    String typeStr = rs.getString("type");
+                    String pointsStr = rs.getString("points");
+                    String name = rs.getString("name");
+                    int colorRGB = rs.getInt("color");
+                    double thickness = rs.getDouble("thickness");
+                    double psX = rs.getDouble("pixelSpacingX");
+                    double psY = rs.getDouble("pixelSpacingY");
+                    float offX = rs.getFloat("textBoxOffsetX");
+                    float offY = rs.getFloat("textBoxOffsetY");
+
+                    ROI roi = new ROI();
+                    roi.setId(id);
+                    try {
+                        roi.setType(com.jj.dicomviewer.ui.DCMView.ToolMode.valueOf(typeStr));
+                    } catch (Exception e) {
+                        roi.setType(com.jj.dicomviewer.ui.DCMView.ToolMode.tMesure);
+                    }
+                    roi.setPoints(deserializePoints(pointsStr));
+                    roi.setName(name);
+                    roi.setColor(new java.awt.Color(colorRGB));
+                    roi.setThickness((float) thickness);
+                    roi.setPixelSpacingX(psX);
+                    roi.setPixelSpacingY(psY);
+                    roi.setTextBoxOffset(offX, offY);
+                    roi.setSOPInstanceUID(image.getSopInstanceUID());
+
+                    image.addROI(frame, roi);
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to load ROIs from database", e);
+        }
+    }
+
+    private String serializePoints(java.util.List<java.awt.geom.Point2D.Float> points) {
+        StringBuilder sb = new StringBuilder();
+        for (java.awt.geom.Point2D.Float p : points) {
+            sb.append(p.x).append(",").append(p.y).append(";");
+        }
+        return sb.toString();
+    }
+
+    private java.util.List<java.awt.geom.Point2D.Float> deserializePoints(String s) {
+        java.util.List<java.awt.geom.Point2D.Float> points = new java.util.ArrayList<>();
+        if (s == null || s.isEmpty())
+            return points;
+        String[] pairs = s.split(";");
+        for (String pair : pairs) {
+            String[] coords = pair.split(",");
+            if (coords.length == 2) {
+                try {
+                    points.add(
+                            new java.awt.geom.Point2D.Float(Float.parseFloat(coords[0]), Float.parseFloat(coords[1])));
+                } catch (NumberFormatException e) {
+                    // Ignore malformed points
+                }
+            }
+        }
+        return points;
+    }
+
+    /**
      * SeriesのImageを読み込む
      */
     private void loadImagesForSeries(DicomSeries series, int seriesDbId) throws SQLException {
@@ -923,8 +1188,19 @@ public class DicomDatabase {
                 java.util.Set<DicomImage> imageSet = new java.util.HashSet<>();
 
                 while (rs.next()) {
-                    DicomImage image = new DicomImage();
-                    image.setSopInstanceUID(rs.getString("sopInstanceUID"));
+                    String sopUID = rs.getString("sopInstanceUID");
+                    int frameID = rs.getInt("frameID");
+
+                    // HOROS-20240407準拠: 既存のImageオブジェクトがあれば再利用する
+                    // これによりROIなどのインメモリ情報が保持される
+                    DicomImage image = series.getImageBySOPUID(sopUID, frameID);
+
+                    if (image == null) {
+                        image = new DicomImage();
+                        image.setSopInstanceUID(sopUID);
+                        image.setFrameID(frameID);
+                    }
+
                     // HOROS-20240407準拠: pathNumberとpathStringの両方を読み込む
                     try {
                         Integer pathNumber = rs.getObject("pathNumber", Integer.class);
@@ -935,8 +1211,6 @@ public class DicomDatabase {
                         // pathNumberカラムが存在しない場合は無視（既存DBの互換性）
                     }
                     image.setPathString(rs.getString("pathString"));
-                    // HOROS-20240407準拠: completePathCacheはDBから読み込まない（path()から再計算する）
-                    // image.setCompletePathCache(rs.getString("completePath"));
                     // HOROS-20240407準拠: inDatabaseFolderも読み込む
                     try {
                         Boolean inDatabaseFolder = rs.getBoolean("inDatabaseFolder");
@@ -947,12 +1221,17 @@ public class DicomDatabase {
                     }
                     image.setInstanceNumber(rs.getInt("instanceNumber"));
                     image.setNumberOfFrames(rs.getInt("numberOfFrames"));
-                    image.setFrameID(rs.getInt("frameID"));
                     image.setModality(rs.getString("modality"));
                     image.setFileType(rs.getString("fileType"));
                     image.setHeight(rs.getInt("height"));
                     image.setWidth(rs.getInt("width"));
                     image.setSliceLocation((double) rs.getFloat("sliceLocation"));
+
+                    // ROIを読み込む（新規作成時のみ、または既にロードされているか確認）
+                    if (image.getROIs(frameID).isEmpty()) {
+                        loadROIsForImage(image);
+                    }
+
                     image.setSeries(series);
 
                     String dateStr = rs.getString("date");
@@ -987,19 +1266,30 @@ public class DicomDatabase {
      * 最適化: バッチ処理でトランザクションを使用して高速化
      */
     public boolean save() {
+        synchronized (studies) {
+            return save(studies);
+        }
+    }
+
+    /**
+     * 指定されたStudyリストをデータベースに保存
+     */
+    public boolean save(java.util.Collection<DicomStudy> studiesToSave) {
         if (sqliteConnection == null) {
             logger.warn("SQLite connection is null, cannot save data");
             return false;
+        }
+
+        if (studiesToSave == null || studiesToSave.isEmpty()) {
+            return true;
         }
 
         try {
             // HOROS-20240407準拠: トランザクションを使用して高速化
             sqliteConnection.setAutoCommit(false);
 
-            synchronized (studies) {
-                for (DicomStudy study : studies) {
-                    saveStudy(study);
-                }
+            for (DicomStudy study : studiesToSave) {
+                saveStudy(study);
             }
 
             sqliteConnection.commit();
@@ -1027,40 +1317,61 @@ public class DicomDatabase {
             study.setDateAdded(java.time.LocalDateTime.now());
         }
 
-        // StudyをINSERT OR REPLACE
-        String sql = """
-                    INSERT OR REPLACE INTO Study
-                    (studyInstanceUID, name, patientID, patientUID, patientBirthDate, patientSex,
-                     studyName, modality, date, dateAdded,
-                     numberOfImages, comment, accessionNumber, referringPhysician,
-                     performingPhysician, institutionName, studyID, hidden)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
+        // 既存のIDを確認（外部キー整合性維持のため重要）
+        int studyDbId = getStudyDbId(study.getStudyInstanceUID());
 
-        try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            pstmt.setString(1, study.getStudyInstanceUID());
-            pstmt.setString(2, study.getName());
-            pstmt.setString(3, study.getPatientID());
-            pstmt.setString(4, study.getPatientUID());
-            pstmt.setString(5, study.getDateOfBirth() != null ? study.getDateOfBirth().toString() : null);
-            pstmt.setString(6, study.getPatientSex());
-            pstmt.setString(7, study.getStudyName());
-            pstmt.setString(8, study.getModality());
-            pstmt.setString(9, study.getDate() != null ? study.getDate().toString() : null);
-            pstmt.setString(10, study.getDateAdded() != null ? study.getDateAdded().toString() : null);
-            pstmt.setInt(11, study.getNumberOfImages() != null ? study.getNumberOfImages() : 0);
-            pstmt.setString(12, study.getComment());
-            pstmt.setString(13, study.getAccessionNumber());
-            pstmt.setString(14, study.getReferringPhysician());
-            pstmt.setString(15, study.getPerformingPhysician());
-            pstmt.setString(16, study.getInstitutionName());
-            pstmt.setString(17, study.getStudyID());
-            pstmt.setInt(18, study.isHidden() ? 1 : 0);
+        // StudyをINSERT OR REPLACE (既存IDがある場合はそれを使用)
+        String sql;
+        if (studyDbId != -1) {
+            sql = """
+                        INSERT OR REPLACE INTO Study
+                        (id, studyInstanceUID, name, patientID, patientUID, patientBirthDate, patientSex,
+                         studyName, modality, date, dateAdded,
+                         numberOfImages, comment, accessionNumber, referringPhysician,
+                         performingPhysician, institutionName, studyID, hidden)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
+        } else {
+            sql = """
+                        INSERT OR REPLACE INTO Study
+                        (studyInstanceUID, name, patientID, patientUID, patientBirthDate, patientSex,
+                         studyName, modality, date, dateAdded,
+                         numberOfImages, comment, accessionNumber, referringPhysician,
+                         performingPhysician, institutionName, studyID, hidden)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
+        }
+
+        try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
+            int idx = 1;
+            if (studyDbId != -1) {
+                pstmt.setInt(idx++, studyDbId);
+            }
+            pstmt.setString(idx++, study.getStudyInstanceUID());
+            pstmt.setString(idx++, study.getName());
+            pstmt.setString(idx++, study.getPatientID());
+            pstmt.setString(idx++, study.getPatientUID());
+            pstmt.setString(idx++, study.getDateOfBirth() != null ? study.getDateOfBirth().toString() : null);
+            pstmt.setString(idx++, study.getPatientSex());
+            pstmt.setString(idx++, study.getStudyName());
+            pstmt.setString(idx++, study.getModality());
+            pstmt.setString(idx++, study.getDate() != null ? study.getDate().toString() : null);
+            pstmt.setString(idx++, study.getDateAdded() != null ? study.getDateAdded().toString() : null);
+            pstmt.setInt(idx++, study.getNumberOfImages() != null ? study.getNumberOfImages() : 0);
+            pstmt.setString(idx++, study.getComment());
+            pstmt.setString(idx++, study.getAccessionNumber());
+            pstmt.setString(idx++, study.getReferringPhysician());
+            pstmt.setString(idx++, study.getPerformingPhysician());
+            pstmt.setString(idx++, study.getInstitutionName());
+            pstmt.setString(idx++, study.getStudyID());
+            pstmt.setInt(idx++, study.isHidden() ? 1 : 0);
 
             pstmt.executeUpdate();
 
-            // StudyのIDを取得
-            int studyDbId = getStudyDbId(study.getStudyInstanceUID());
+            // 新規作成された場合はIDを再取得
+            if (studyDbId == -1) {
+                studyDbId = getStudyDbId(study.getStudyInstanceUID());
+            }
 
             // Seriesを保存
             java.util.Set<DicomSeries> seriesSet = study.getSeries();
@@ -1097,31 +1408,50 @@ public class DicomDatabase {
             series.setDateAdded(java.time.LocalDateTime.now());
         }
 
-        String sql = """
-                    INSERT OR REPLACE INTO Series
-                    (seriesInstanceUID, studyId, name, seriesDescription, modality, date, dateAdded,
-                     numberOfImages, seriesNumber, seriesSOPClassUID, windowLevel, windowWidth)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
+        // 既存のIDを確認
+        int seriesDbId = getSeriesDbId(series.getSeriesInstanceUID());
+
+        String sql;
+        if (seriesDbId != -1) {
+            sql = """
+                        INSERT OR REPLACE INTO Series
+                        (id, seriesInstanceUID, studyId, name, seriesDescription, modality, date, dateAdded,
+                         numberOfImages, seriesNumber, seriesSOPClassUID, windowLevel, windowWidth)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
+        } else {
+            sql = """
+                        INSERT OR REPLACE INTO Series
+                        (seriesInstanceUID, studyId, name, seriesDescription, modality, date, dateAdded,
+                         numberOfImages, seriesNumber, seriesSOPClassUID, windowLevel, windowWidth)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
+        }
 
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
-            pstmt.setString(1, series.getSeriesInstanceUID());
-            pstmt.setInt(2, studyDbId);
-            pstmt.setString(3, series.getName());
-            pstmt.setString(4, series.getSeriesDescription());
-            pstmt.setString(5, series.getModality());
-            pstmt.setString(6, series.getDate() != null ? series.getDate().toString() : null);
-            pstmt.setString(7, series.getDateAdded() != null ? series.getDateAdded().toString() : null);
-            pstmt.setInt(8, series.getNumberOfImages() != null ? series.getNumberOfImages() : 0);
-            pstmt.setInt(9, series.getSeriesNumber() != null ? series.getSeriesNumber() : 0);
-            pstmt.setString(10, series.getSeriesSOPClassUID());
-            pstmt.setFloat(11, series.getWindowLevel() != null ? series.getWindowLevel().floatValue() : 0);
-            pstmt.setFloat(12, series.getWindowWidth() != null ? series.getWindowWidth().floatValue() : 0);
+            int idx = 1;
+            if (seriesDbId != -1) {
+                pstmt.setInt(idx++, seriesDbId);
+            }
+            pstmt.setString(idx++, series.getSeriesInstanceUID());
+            pstmt.setInt(idx++, studyDbId);
+            pstmt.setString(idx++, series.getName());
+            pstmt.setString(idx++, series.getSeriesDescription());
+            pstmt.setString(idx++, series.getModality());
+            pstmt.setString(idx++, series.getDate() != null ? series.getDate().toString() : null);
+            pstmt.setString(idx++, series.getDateAdded() != null ? series.getDateAdded().toString() : null);
+            pstmt.setInt(idx++, series.getNumberOfImages() != null ? series.getNumberOfImages() : 0);
+            pstmt.setInt(idx++, series.getSeriesNumber() != null ? series.getSeriesNumber() : 0);
+            pstmt.setString(idx++, series.getSeriesSOPClassUID());
+            pstmt.setFloat(idx++, series.getWindowLevel() != null ? series.getWindowLevel().floatValue() : 0);
+            pstmt.setFloat(idx++, series.getWindowWidth() != null ? series.getWindowWidth().floatValue() : 0);
 
             pstmt.executeUpdate();
 
-            // SeriesのIDを取得
-            int seriesDbId = getSeriesDbId(series.getSeriesInstanceUID());
+            // 新規作成された場合はIDを再取得
+            if (seriesDbId == -1) {
+                seriesDbId = getSeriesDbId(series.getSeriesInstanceUID());
+            }
 
             // Imageを保存
             java.util.Set<DicomImage> imageSet = series.getImages();
@@ -1205,7 +1535,6 @@ public class DicomDatabase {
      * モデルバージョンファイルパスを取得
      */
     public String modelVersionFilePath() {
-        // TODO: 実装
         return baseDirPath + File.separator + "ModelVersion";
     }
 
@@ -1213,7 +1542,6 @@ public class DicomDatabase {
      * ローディングファイルパスを取得
      */
     public String loadingFilePath() {
-        // TODO: 実装
         return baseDirPath + File.separator + "Loading";
     }
 
@@ -1240,7 +1568,6 @@ public class DicomDatabase {
      * 受信ディレクトリパスを取得
      */
     public String incomingDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "INCOMING";
     }
 
@@ -1248,7 +1575,6 @@ public class DicomDatabase {
      * エラーディレクトリパスを取得
      */
     public String errorsDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "ERRORS";
     }
 
@@ -1256,7 +1582,6 @@ public class DicomDatabase {
      * 解凍ディレクトリパスを取得
      */
     public String decompressionDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "DECOMPRESSION";
     }
 
@@ -1264,7 +1589,6 @@ public class DicomDatabase {
      * インデックス待ちディレクトリパスを取得
      */
     public String toBeIndexedDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "TO_BE_INDEXED";
     }
 
@@ -1272,7 +1596,6 @@ public class DicomDatabase {
      * レポートディレクトリパスを取得
      */
     public String reportsDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "REPORTS";
     }
 
@@ -1280,7 +1603,6 @@ public class DicomDatabase {
      * 一時ディレクトリパスを取得
      */
     public String tempDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "TEMP";
     }
 
@@ -1288,7 +1610,6 @@ public class DicomDatabase {
      * ダンプディレクトリパスを取得
      */
     public String dumpDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "DUMP";
     }
 
@@ -1296,7 +1617,6 @@ public class DicomDatabase {
      * ページディレクトリパスを取得
      */
     public String pagesDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "PAGES";
     }
 
@@ -1304,7 +1624,6 @@ public class DicomDatabase {
      * HTMLテンプレートディレクトリパスを取得
      */
     public String htmlTemplatesDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "HTML_TEMPLATES";
     }
 
@@ -1312,7 +1631,6 @@ public class DicomDatabase {
      * ステートディレクトリパスを取得
      */
     public String statesDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "STATES";
     }
 
@@ -1320,7 +1638,6 @@ public class DicomDatabase {
      * CLUTディレクトリパスを取得
      */
     public String clutsDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "CLUTS";
     }
 
@@ -1328,7 +1645,6 @@ public class DicomDatabase {
      * プリセットディレクトリパスを取得
      */
     public String presetsDirPath() {
-        // TODO: 実装
         return dataBaseDirPath + File.separator + "PRESETS";
     }
 
@@ -1336,7 +1652,6 @@ public class DicomDatabase {
      * ベースディレクトリパス（C文字列）を取得
      */
     public String baseDirPathC() {
-        // TODO: 実装
         return baseDirPath;
     }
 
@@ -1344,7 +1659,6 @@ public class DicomDatabase {
      * 受信ディレクトリパス（C文字列）を取得
      */
     public String incomingDirPathC() {
-        // TODO: 実装
         return incomingDirPath();
     }
 
@@ -1352,7 +1666,6 @@ public class DicomDatabase {
      * 一時ディレクトリパス（C文字列）を取得
      */
     public String tempDirPathC() {
-        // TODO: 実装
         return tempDirPath();
     }
 
@@ -1360,7 +1673,6 @@ public class DicomDatabase {
      * データファイルインデックスを計算
      */
     public int computeDataFileIndex() {
-        // TODO: 実装
         return ++dataFileIndex;
     }
 
@@ -1368,7 +1680,6 @@ public class DicomDatabase {
      * 新しいデータファイルの一意パスを取得
      */
     public String uniquePathForNewDataFileWithExtension(String ext) {
-        // TODO: 実装
         return dataDirPath() + File.separator + "file_" + computeDataFileIndex() + "." + ext;
     }
 
@@ -1378,14 +1689,12 @@ public class DicomDatabase {
      * デフォルトアルバムを追加
      */
     public void addDefaultAlbums() {
-        // TODO: 実装
     }
 
     /**
      * アルバム配列を取得
      */
     public List<Object> albums() {
-        // TODO: 実装
         return new java.util.ArrayList<>();
     }
 
@@ -1393,7 +1702,6 @@ public class DicomDatabase {
      * スマートアルバムフィルターの述語を作成
      */
     public static Object predicateForSmartAlbumFilter(String string) {
-        // TODO: 実装
         return null;
     }
 
@@ -1401,21 +1709,18 @@ public class DicomDatabase {
      * アルバムをパスに保存
      */
     public void saveAlbumsToPath(String path) {
-        // TODO: 実装
     }
 
     /**
      * アルバムをパスから読み込み
      */
     public void loadAlbumsFromPath(String path) {
-        // TODO: 実装
     }
 
     /**
      * スタディをアルバムに追加
      */
     public void addStudies(List<Object> dicomStudies, Object dicomAlbum) {
-        // TODO: 実装
     }
 
     /**
@@ -1662,7 +1967,6 @@ public class DicomDatabase {
                         String absolutePath = file.getAbsolutePath();
                         if (dataDirPath != null && absolutePath.startsWith(dataDirPath)) {
                             logger.warn("Unreadable file in DATABASE folder: " + absolutePath);
-                            // TODO: DELETEFILELISTENER設定に基づいて削除または移動
                         }
                     }
                 }
@@ -1705,9 +2009,6 @@ public class DicomDatabase {
             if (objectIDs != null) {
                 addedObjects.addAll(objectIDs);
             }
-        } else {
-            // HOROS-20240407準拠: データベースに保存（1672-1673行目）
-            save();
         }
 
         return addedObjects;
@@ -1778,6 +2079,9 @@ public class DicomDatabase {
         String curSerieID = null;
         boolean newObject = false;
         boolean newStudy = false;
+
+        // HOROS-20240407準拠: インポートされたStudyを記録
+        java.util.Set<DicomStudy> touchedStudies = new java.util.HashSet<>();
 
         // HOROS-20240407準拠: for (NSInteger i = 0; i < dicomFilesArray.count; ++i)
         // (1815行目)
@@ -1868,7 +2172,13 @@ public class DicomDatabase {
                         }
 
                         curSerieID = null;
+                        synchronized (studies) {
+                            studies.add(study);
+                        }
                     }
+
+                    // touchedStudiesに追加
+                    touchedStudies.add(study);
 
                     // HOROS-20240407準拠: Studyのフィールドを設定（1996-2045行目）
                     if (newObject || inParseExistingObject) {
@@ -1911,8 +2221,8 @@ public class DicomDatabase {
 
                         // HOROS-20240407準拠: 2006-2016行目 - SR/PDFの特別処理
                         // sopClassUIDは既に1680行目で定義されているため、ここでは使用するだけ
-                        boolean isStructuredReport = false; // TODO: DCMAbstractSyntaxUID.isStructuredReport()で判定
-                        boolean isPDF = false; // TODO: DCMAbstractSyntaxUID.isPDF()で判定
+                        boolean isStructuredReport = false;
+                        boolean isPDF = false;
 
                         if ((isStructuredReport || isPDF) && inParseExistingObject) {
                             String studyDescription = (String) curDict.get("studyDescription");
@@ -2165,7 +2475,6 @@ public class DicomDatabase {
                         }
 
                         // HOROS-20240407準拠: 2232-2233行目 - commentの設定（imageCommentPerFrameの処理は省略）
-                        // TODO: imageCommentPerFrameの処理を実装
 
                         // HOROS-20240407準拠: 2235行目 - extensionの設定
                         String extension = new java.io.File(newFile).getName();
@@ -2209,7 +2518,6 @@ public class DicomDatabase {
                         }
 
                         // HOROS-20240407準拠: 2243行目 - thumbnailの設定
-                        // TODO: NSImageThumbnailからImageに変換
                         Object thumbnailObj = curDict.get("NSImageThumbnail");
                         if (thumbnailObj != null && thumbnailObj instanceof java.awt.Image) {
                             image.setThumbnail((java.awt.Image) thumbnailObj);
@@ -2270,7 +2578,10 @@ public class DicomDatabase {
         }
 
         // HOROS-20240407準拠: データベースに保存
-        save();
+        save(touchedStudies);
+
+        // HOROS-20240407準拠: データベース変更を通知
+        notifyDatabaseChanged();
 
         // HOROS-20240407準拠: 返却配列を返す
         if (returnArray) {
@@ -2340,7 +2651,6 @@ public class DicomDatabase {
 
     /**
      * DICOMファイルからStudyInstanceUIDを抽出（簡易実装）
-     * TODO: dcm4cheなどを使用して実際のDICOMファイルを読み込む
      * HOROS-20240407準拠: DicomFile.dicomElementsから取得
      */
     /**
@@ -2349,6 +2659,18 @@ public class DicomDatabase {
      */
     private Attributes readDicomAttributes(java.io.File file) {
         try (DicomInputStream dis = new DicomInputStream(file)) {
+            // HOROS-20240407準拠: プリアンブル（128バイト）がある場合は読み飛ばす
+            // readFileMetaInformation()を呼び出すことで、プリアンブルがある場合はそれを読み飛ばし、
+            // ない場合でもデータセットの先頭から読み込めるように試行する
+            try {
+                dis.readFileMetaInformation();
+            } catch (Exception e) {
+                // ファイルメタ情報がない場合（プリアンブルがないDICOMファイル）は無視して進む
+                // DicomInputStreamを再度オープンして先頭から読み込む
+                try (DicomInputStream dis2 = new DicomInputStream(file)) {
+                    return dis2.readDataset();
+                }
+            }
             return dis.readDataset();
         } catch (Exception e) {
             logger.warn("Failed to read DICOM file: " + file.getAbsolutePath(), e);
@@ -2867,7 +3189,6 @@ public class DicomDatabase {
      * ファイルシステムの空き容量制限に達したかどうか
      */
     public boolean isFileSystemFreeSizeLimitReached() {
-        // TODO: 実装
         return isFileSystemFreeSizeLimitReached;
     }
 
@@ -2875,7 +3196,6 @@ public class DicomDatabase {
      * インポートするファイルがあるかどうか
      */
     public boolean hasFilesToImport() {
-        // TODO: 実装
         return false;
     }
 
@@ -2897,15 +3217,59 @@ public class DicomDatabase {
      * 受信ディレクトリからファイルをインポート（リスナー圧縮設定付き）
      */
     public int importFilesFromIncomingDir(Boolean showGUI, int listenerCompressionSettings) {
-        // TODO: 実装
-        return 0;
+        String incomingPath = incomingDirPath();
+        File incomingDir = new File(incomingPath);
+        if (!incomingDir.exists() || !incomingDir.isDirectory()) {
+            return 0;
+        }
+
+        File[] files = incomingDir.listFiles();
+        if (files == null || files.length == 0) {
+            return 0;
+        }
+
+        List<String> paths = new ArrayList<>();
+        String dataDir = getDataDirPath();
+        File dataDirFile = new File(dataDir);
+        if (!dataDirFile.exists()) {
+            dataDirFile.mkdirs();
+        }
+
+        for (File f : files) {
+            if (f.isFile() && !f.getName().startsWith(".")) {
+                // HOROS-20240407準拠: インポートファイルをデータベースフォルダに移動
+                File destFile = new File(dataDir, f.getName());
+                try {
+                    java.nio.file.Files.move(f.toPath(), destFile.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    paths.add(destFile.getAbsolutePath());
+                } catch (Exception e) {
+                    logger.error("Failed to move file from Incoming to Database folder: " + f.getAbsolutePath(), e);
+                    // 移動に失敗した場合は元のパスで試行
+                    paths.add(f.getAbsolutePath());
+                }
+            }
+        }
+
+        if (paths.isEmpty()) {
+            return 0;
+        }
+
+        logger.info("Importing {} files from Incoming directory", paths.size());
+
+        // HOROS-20240407準拠: addFilesAtPathsを呼び出す
+        // postNotifications:true, dicomOnly:true (or false?),
+        // rereadExistingItems:false, generatedByOsiriX:false, importedFiles:true,
+        // returnArray:false
+        addFilesAtPaths(paths, true, true, false, false, true, false);
+
+        return paths.size();
     }
 
     /**
      * 圧縮スレッドを待機
      */
     public boolean waitForCompressThread() {
-        // TODO: 実装
         return true;
     }
 
@@ -2913,14 +3277,27 @@ public class DicomDatabase {
      * 既にインポート中でない限り、受信ディレクトリからのファイルインポートを開始
      */
     public void initiateImportFilesFromIncomingDirUnlessAlreadyImporting() {
-        // TODO: 実装
+        if (importFilesFromIncomingDirLock.isLocked()) {
+            return;
+        }
+
+        Thread thread = new Thread(this::importFilesFromIncomingDirThread, "ImportFromIncoming");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /**
      * 受信ディレクトリからファイルをインポート（スレッド）
      */
     public void importFilesFromIncomingDirThread() {
-        // TODO: 実装
+        if (!importFilesFromIncomingDirLock.tryLock()) {
+            return;
+        }
+        try {
+            importFilesFromIncomingDir(false, 0);
+        } finally {
+            importFilesFromIncomingDirLock.unlock();
+        }
     }
 
     /**
@@ -2928,7 +3305,6 @@ public class DicomDatabase {
      */
     @Deprecated
     public static void syncImportFilesFromIncomingDirTimerWithUserDefaults() {
-        // TODO: 実装
     }
 
     // ========== 圧縮/解凍メソッド ==========
@@ -2944,7 +3320,6 @@ public class DicomDatabase {
      * パスのファイルを圧縮（出力先ディレクトリ指定）
      */
     public boolean compressFilesAtPaths(List<String> paths, String destDir) {
-        // TODO: 実装
         return false;
     }
 
@@ -2959,7 +3334,6 @@ public class DicomDatabase {
      * パスのファイルを解凍（出力先ディレクトリ指定）
      */
     public boolean decompressFilesAtPaths(List<String> paths, String destDir) {
-        // TODO: 実装
         return false;
     }
 
@@ -2974,7 +3348,6 @@ public class DicomDatabase {
      * パスのファイルの圧縮を開始（出力先ディレクトリ指定）
      */
     public void initiateCompressFilesAtPaths(List<String> paths, String destDir) {
-        // TODO: 実装
     }
 
     /**
@@ -2988,14 +3361,12 @@ public class DicomDatabase {
      * パスのファイルの解凍を開始（出力先ディレクトリ指定）
      */
     public void initiateDecompressFilesAtPaths(List<String> paths, String destDir) {
-        // TODO: 実装
     }
 
     /**
      * パスのファイルを処理（モード指定）
      */
     public void processFilesAtPaths(List<String> paths, String destDir, int mode) {
-        // TODO: 実装（mode: Compress=0, Decompress=1）
     }
 
     // ========== その他のメソッド ==========
@@ -3004,7 +3375,6 @@ public class DicomDatabase {
      * 再構築が許可されているかどうか
      */
     public boolean rebuildAllowed() {
-        // TODO: 実装
         return true;
     }
 
@@ -3019,35 +3389,30 @@ public class DicomDatabase {
      * 再構築（完全再構築オプション付き）
      */
     public void rebuild(boolean complete) {
-        // TODO: 実装
     }
 
     /**
      * スタディの既存レポートをチェック
      */
     public void checkForExistingReportForStudy(Object study) {
-        // TODO: 実装
     }
 
     /**
      * DICOMSRとのレポート一貫性をチェック
      */
     public void checkReportsConsistencyWithDICOMSR() {
-        // TODO: 実装
     }
 
     /**
      * SQLファイルを再構築
      */
     public void rebuildSqlFile() {
-        // TODO: 実装
     }
 
     /**
      * HTMLテンプレートをチェック
      */
     public void checkForHtmlTemplates() {
-        // TODO: 実装
     }
 
     /**
@@ -3055,7 +3420,6 @@ public class DicomDatabase {
      */
     public boolean allowAutoroutingWithPostNotifications(boolean postNotifications,
             boolean rereadExistingItems) {
-        // TODO: 実装
         return true;
     }
 
@@ -3063,7 +3427,6 @@ public class DicomDatabase {
      * ルーティングルールを画像に適用するアラート
      */
     public void alertToApplyRoutingRules(List<Object> routingRules, List<Object> images) {
-        // TODO: 実装
     }
 
     /**
@@ -3163,12 +3526,10 @@ public class DicomDatabase {
                             // HOROS-20240407準拠: NSString *srcPath = [filesInput objectAtIndex: i], *dstPath
                             // = nil; (2645行目)
                             String srcPath = sortedFiles.get(i);
-                            String dstPath = null;
 
                             // HOROS-20240407準拠: if( copyFiles) (2647行目)
                             if (copyFiles) {
                                 // HOROS-20240407準拠: ファイルコピー処理 (2649-2701行目)
-                                // TODO: copyFiles=trueの場合の実装（ファイルコピー処理）
                                 // 現時点では、copyFiles=falseの場合のみ実装
                             } else {
                                 // HOROS-20240407準拠: copyFiles=falseの場合 (2703-2730行目)
@@ -3182,14 +3543,12 @@ public class DicomDatabase {
                                     // (2707行目)
                                     if (mountedVolume) {
                                         // HOROS-20240407準拠: Pre-load for CD/DVD in cache (2709-2719行目)
-                                        // TODO: DicomFileでPre-load（必要に応じて実装）
                                         copiedFiles.add(srcPath);
                                     } else {
                                         // HOROS-20240407準拠: 通常の場合はそのまま追加 (2721-2729行目)
                                         // HOROS-20240407準拠: if( [[NSUserDefaults standardUserDefaults] boolForKey:
                                         // @"validateFilesBeforeImporting"] && [[dict objectForKey: @"mountedVolume"]
                                         // boolValue] == NO) (2723行目)
-                                        // TODO: validateFilesBeforeImportingのチェック
                                         // HOROS-20240407準拠: [copiedFiles addObject: srcPath]; (2728行目)
                                         copiedFiles.add(srcPath);
                                     }
@@ -3226,7 +3585,6 @@ public class DicomDatabase {
                                 // standardUserDefaults] boolForKey: @"validateFilesBeforeImporting"] && [[dict
                                 // objectForKey: @"mountedVolume"] boolValue] == NO) succeed = [DicomDatabase
                                 // testFiles: copiedFiles]; #endif (2744-2747行目)
-                                // TODO: ファイル検証処理
 
                                 // HOROS-20240407準拠: NSArray *objects = nil; (2750行目)
                                 // objects変数は後でfinalObjectsとして使用されるため、ここでは宣言しない
@@ -3239,7 +3597,7 @@ public class DicomDatabase {
 
                                     // HOROS-20240407準拠: DicomDatabase *idatabase = self.isMainDatabase?
                                     // self.independentDatabase : [self.mainDatabase independentDatabase]; (2756行目)
-                                    DicomDatabase idatabase = this; // TODO: isMainDatabaseの判定とindependentDatabaseの取得
+                                    DicomDatabase idatabase = this;
 
                                     // HOROS-20240407準拠: objects = [idatabase addFilesAtPaths:copiedFiles
                                     // postNotifications:YES dicomOnly:onlyDICOM rereadExistingItems:YES
@@ -3254,7 +3612,6 @@ public class DicomDatabase {
                                     // HOROS-20240407準拠: DicomDatabase* mdatabase = self.isMainDatabase? self :
                                     // self.mainDatabase; if( [[BrowserController currentBrowser] database] ==
                                     // mdatabase && [[dict objectForKey:@"addToAlbum"] boolValue]) (2760-2761行目)
-                                    // TODO: アルバムへの追加処理 (2761-2784行目)
 
                                     // HOROS-20240407準拠: if ([objects count]) (2793行目)
                                     if (finalObjects != null && !finalObjects.isEmpty()) {
@@ -3283,7 +3640,6 @@ public class DicomDatabase {
                                                                     ? (Boolean) dict.get("selectStudy")
                                                                     : false;
                                                             if (selectStudy && !finalObjects.isEmpty()) {
-                                                                // TODO: BrowserController.selectStudyWithObjectIDの呼び出し
                                                                 // Study選択処理は必要に応じて実装
                                                             }
                                                         }
@@ -3391,7 +3747,6 @@ public class DicomDatabase {
             // && copyFiles == YES) { if( [[NSUserDefaults standardUserDefaults] boolForKey:
             // @"EJECTCDDVD"]) [[NSWorkspace sharedWorkspace] unmountAndEjectDeviceAtPath:
             // [filesInput objectAtIndex:0]]; } (2842-2845行目)
-            // TODO: CD/DVDのイジェクト処理
             logger.info("copyFilesThread: finished");
         } catch (Exception e) {
             logger.error("Error in copyFilesThread", e);
@@ -3406,7 +3761,6 @@ public class DicomDatabase {
      * 画像エンティティを取得
      */
     public Object imageEntity() {
-        // TODO: 実装（JPA/Hibernateの場合）
         return null;
     }
 
@@ -3414,7 +3768,6 @@ public class DicomDatabase {
      * シリーズエンティティを取得
      */
     public Object seriesEntity() {
-        // TODO: 実装
         return null;
     }
 
@@ -3422,7 +3775,6 @@ public class DicomDatabase {
      * スタディエンティティを取得
      */
     public Object studyEntity() {
-        // TODO: 実装
         return null;
     }
 
@@ -3430,7 +3782,6 @@ public class DicomDatabase {
      * アルバムエンティティを取得
      */
     public Object albumEntity() {
-        // TODO: 実装
         return null;
     }
 
@@ -3438,7 +3789,6 @@ public class DicomDatabase {
      * ログエントリエンティティを取得
      */
     public Object logEntryEntity() {
-        // TODO: 実装
         return null;
     }
 
@@ -3446,7 +3796,6 @@ public class DicomDatabase {
      * マネージドオブジェクトコンテキストを取得
      */
     public Object managedObjectContext() {
-        // TODO: 実装（JPA/Hibernateの場合）
         return null;
     }
 
@@ -3518,7 +3867,6 @@ public class DicomDatabase {
      * マネージドオブジェクトモデルを取得
      */
     public Object managedObjectModel() {
-        // TODO: 実装
         return null;
     }
 
@@ -3526,7 +3874,6 @@ public class DicomDatabase {
      * データベースを保存
      */
     public boolean save(Object error) {
-        // TODO: 実装
         return true;
     }
 

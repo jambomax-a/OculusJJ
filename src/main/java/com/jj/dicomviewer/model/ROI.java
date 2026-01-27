@@ -1752,6 +1752,16 @@ public class ROI {
     }
 
     private void prepareTextualData() {
+        if (isStatsCalculating) {
+            textualBoxLine1 = (name == null || name.isEmpty() || name.equalsIgnoreCase("Unnamed")) ? null : name;
+            textualBoxLine2 = "Calculating...";
+            textualBoxLine3 = null;
+            textualBoxLine4 = null;
+            textualBoxLine5 = null;
+            textualBoxLine6 = null;
+            return;
+        }
+
         textualBoxLine1 = (name == null || name.isEmpty() || name.equalsIgnoreCase("Unnamed")) ? null : name;
         textualBoxLine2 = null;
         textualBoxLine3 = null;

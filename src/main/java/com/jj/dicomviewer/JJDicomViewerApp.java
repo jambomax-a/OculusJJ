@@ -372,9 +372,26 @@ public class JJDicomViewerApp {
         SwingUtilities.invokeLater(() -> {
             try {
                 // HOROS-20240407準拠：BrowserControllerを起動
-                // コンストラクタ内でinitializeUIComponents()が呼び出され、
-                // その中でawakeFromNib()が呼び出されるため、ここでは呼び出す必要がない
                 BrowserController browser = new BrowserController();
+
+                // HOROS-20240407準拠：AppController.m 2217行目 - DICOMリスナーを起動
+                try {
+                    com.jj.dicomviewer.model.DicomNodeManager manager = com.jj.dicomviewer.model.DicomNodeManager
+                            .getInstance();
+                    int port = manager.getLocalPort();
+                    com.jj.dicomviewer.model.DicomService.getInstance().startListener(port);
+                } catch (Exception e) {
+                    System.err.println("Failed to start DICOM Listener: " + e.getMessage());
+                }
+
+                // データベース接続を確実に閉じるためのシャットダウンフック
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase
+                            .activeLocalDatabase();
+                    if (db != null) {
+                        db.close();
+                    }
+                }));
 
                 // ウィンドウを表示
                 // componentShownイベントが発生するまで待機するため、

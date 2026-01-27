@@ -58,6 +58,10 @@ public class DCMView extends JPanel {
         return dcmPixList;
     }
 
+    public List<Object> getDcmFilesList() {
+        return dcmFilesList;
+    }
+
     public float getScaleValue() {
         return scaleValue;
     }
@@ -84,6 +88,9 @@ public class DCMView extends JPanel {
     // HOROS-20240407準拠: DCMView.m 531行目 - @synthesize mouseXPos, mouseYPos;
     protected float mouseXPos = 0;
     protected float mouseYPos = 0;
+
+    // --- 背景読み込み管理 ---
+    private Thread backgroundLoadThread;
 
     // HOROS-20240407準拠: BrowserControllerへの参照は不要
     // HOROS-20240407準拠: DCMView.m - BrowserController.currentBrowserを使用
@@ -266,12 +273,18 @@ public class DCMView extends JPanel {
 
         // HOROS-20240407準拠: 有効なROI（サイズが0でない等）のみ保存する
         if (curDCM != null && newRoi.isValid()) {
-            // 新規作成時も統計情報を計算
-            if (newRoi.getType() == ToolMode.tOval || newRoi.getType() == ToolMode.tROI ||
-                    newRoi.getType() == ToolMode.tCPolygon || newRoi.getType() == ToolMode.tPencil ||
-                    newRoi.getType() == ToolMode.tOPolygon || newRoi.getType() == ToolMode.tBrush ||
-                    newRoi.getType() == ToolMode.t2DPoint) {
-                curDCM.computeROIStatistics(newRoi);
+            final com.jj.dicomviewer.model.ROI roiToCompute = newRoi;
+            final DicomPix currentPix = curDCM;
+
+            // 新規作成時も統計情報を計算 (非同期)
+            if (roiToCompute.getType() == ToolMode.tOval || roiToCompute.getType() == ToolMode.tROI ||
+                    roiToCompute.getType() == ToolMode.tCPolygon || roiToCompute.getType() == ToolMode.tPencil ||
+                    roiToCompute.getType() == ToolMode.tOPolygon || roiToCompute.getType() == ToolMode.tBrush ||
+                    roiToCompute.getType() == ToolMode.t2DPoint) {
+                new Thread(() -> {
+                    currentPix.computeROIStatistics(roiToCompute);
+                    javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                }).start();
             }
 
             // ROIを現在の画像のSOP Instance UIDに関連付ける
@@ -383,7 +396,7 @@ public class DCMView extends JPanel {
                 // HOROS-20240407準拠: 3D位置を同期 (DCMView.m 4070-4112行目相当)
                 // isKeyViewの場合のみ同期メッセージを送信 (DCMView.m 6725行目相当)
                 if (isKeyView) {
-                    sync3DPosition(mouseXPos, mouseYPos);
+                    sync3DPosition(mouseXPos, mouseYPos, false);
 
                     // マウスを動かした際、自分がKeyViewなら他のビューの交差線を更新するために再描画を促す
                     for (ViewerController vc : ViewerController.getDisplayedViewers()) {
@@ -443,6 +456,18 @@ public class DCMView extends JPanel {
                             }
                         }
 
+                        repaint();
+                    }
+                    return;
+                }
+
+                // --- Crosshair (tCross) ツールのドラッグ ---
+                if (currentTool == ToolMode.tCross) {
+                    java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                    if (imgPt != null) {
+                        mouseXPos = imgPt.x;
+                        mouseYPos = imgPt.y;
+                        sync3DPosition(mouseXPos, mouseYPos, true);
                         repaint();
                     }
                     return;
@@ -541,7 +566,12 @@ public class DCMView extends JPanel {
                         if (selectedRoi.getType() == ToolMode.tOval || selectedRoi.getType() == ToolMode.tROI ||
                                 selectedRoi.getType() == ToolMode.tCPolygon
                                 || selectedRoi.getType() == ToolMode.tPencil) {
-                            curDCM.computeROIStatistics(selectedRoi);
+                            final com.jj.dicomviewer.model.ROI roiToCompute = selectedRoi;
+                            final DicomPix currentPix = curDCM;
+                            new Thread(() -> {
+                                currentPix.computeROIStatistics(roiToCompute);
+                                javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                            }).start();
                         }
 
                         repaint();
@@ -623,6 +653,12 @@ public class DCMView extends JPanel {
 
                 // --- 1. ROI作成中の次点追加 または 既存ROI選択 ---
                 if (is2DViewer()) {
+                    if (currentTool == ToolMode.tCross) {
+                        sync3DPosition(imgPt.x, imgPt.y, true);
+                        repaint();
+                        return;
+                    }
+
                     if (currentTool == ToolMode.tRepulsor) {
                         // HOROS-20240407準拠: Repulsorツールの開始 (DCMView.m 4380行目付近)
                         if (curRoiList != null) {
@@ -782,7 +818,13 @@ public class DCMView extends JPanel {
                                 selectedRoi.getType() == ToolMode.tCPolygon ||
                                 selectedRoi.getType() == ToolMode.tPencil ||
                                 selectedRoi.getType() == ToolMode.tOPolygon)) {
-                            curDCM.computeROIStatistics(selectedRoi);
+
+                            final com.jj.dicomviewer.model.ROI roiToCompute = selectedRoi;
+                            final DicomPix currentPix = curDCM;
+                            new Thread(() -> {
+                                currentPix.computeROIStatistics(roiToCompute);
+                                javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                            }).start();
                         }
 
                         repaint();
@@ -1060,13 +1102,10 @@ public class DCMView extends JPanel {
                 // HOROS-20240407準拠: DCMView.m 2192行目 - volumicData = -1;
                 this.volumicData = -1;
 
-                // HOROS-20240407準拠: DCMView.m 2197-2222行目 - dcmPixListの設定
-                // HOROS-20240407準拠: dcmPixList != pixels の比較は参照比較
-                // Javaでは、同じオブジェクト参照でない場合、常に新しいArrayListを作成する
                 // HOROS-20240407準拠: [dcmPixList release]; dcmPixList = [pixels retain];
-                // Javaでは、pixelsがnullでない場合、常に新しいArrayListを作成する
+                // 改版: コピーせず参照を保持することで、バックグラウンドでの読み込み結果を即座に反映させる
                 if (this.dcmPixList != pixels) {
-                    this.dcmPixList = pixels != null ? new ArrayList<>(pixels) : new ArrayList<>();
+                    this.dcmPixList = pixels;
 
                     // HOROS-20240407準拠: DCMView.m 2202行目 - volumicSeries = YES;
                     this.volumicSeries = true;
@@ -1074,7 +1113,7 @@ public class DCMView extends JPanel {
                     // HOROS-20240407準拠: DCMView.m 2214-2221行目 -
                     // stringIDが"previewDatabase"でない場合のvolumicSeries判定
                     if (!"previewDatabase".equals(this.stringID)) {
-                        if (this.dcmPixList.size() > 1) {
+                        if (this.dcmPixList != null && this.dcmPixList.size() > 1) {
                             // HOROS-20240407準拠: sliceLocationが同じ場合はvolumicSeries = NO
                             // TODO: DicomPixにgetSliceLocation()メソッドを追加する必要がある
                             // 現時点では、volumicSeriesの判定をスキップ
@@ -1254,19 +1293,70 @@ public class DCMView extends JPanel {
                     if (this.curImage >= 0 && this.curImage < this.dcmPixList.size()) {
                         DicomPix oldCurDCM = this.curDCM;
                         this.curDCM = this.dcmPixList.get(this.curImage);
-                        System.out.println("[DEBUG] DCMView.setIndex() - curDCM: "
-                                + (this.curDCM != null ? "not null" : "null") + ", curImage: " + this.curImage
-                                + ", oldCurDCM: " + (oldCurDCM != null ? "not null" : "null"));
 
-                        // HOROS-20240407準拠: DCMView.m 2564行目
-                        // [self.curDCM CheckLoad];
-                        // DicomPixの画像が読み込まれていることを確認
-                        if (this.curDCM != null) {
-                            // CheckLoadは画像の読み込みを確認するメソッド
-                            // Javaでは、非同期読み込みを待たずに現在の状態のみを確認する
-                            // スケール値の計算などはwidth/heightがあれば可能 (readHeader済み)
-                        } else {
-                            System.out.println("[DEBUG] DCMView.setIndex() - curDCM is null at index " + this.curImage);
+                        // プレビュー表示などでpixelsがnullの場合、ファイルリストから遅延生成する
+                        if (this.curDCM == null && this.dcmFilesList != null
+                                && this.curImage < this.dcmFilesList.size()) {
+                            Object fileObj = this.dcmFilesList.get(this.curImage);
+                            if (fileObj instanceof com.jj.dicomviewer.model.DicomImage) {
+                                this.curDCM = new DicomPix((com.jj.dicomviewer.model.DicomImage) fileObj);
+                                this.dcmPixList.set(this.curImage, this.curDCM);
+                            }
+                        }
+
+                        // HOROS-20240407準拠: [self.curDCM CheckLoad];
+                        // 優先的に画像をロードする
+                        if (this.curDCM != null && this.curDCM.getBufferedImageNoLoad() == null) {
+                            DicomPix pixToLoad = this.curDCM;
+                            System.out.println(
+                                    "[DEBUG] DCMView.setIndex() - launching background load for image " + index);
+
+                            // 既存のスレッドがあれば停止
+                            if (backgroundLoadThread != null && backgroundLoadThread.isAlive()) {
+                                backgroundLoadThread.interrupt();
+                                try {
+                                    // 少し待機して中断を確認
+                                    backgroundLoadThread.join(10);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            }
+
+                            backgroundLoadThread = new Thread(() -> {
+                                try {
+                                    if (Thread.currentThread().isInterrupted())
+                                        return;
+
+                                    pixToLoad.loadImage();
+
+                                    if (Thread.currentThread().isInterrupted())
+                                        return;
+
+                                    if (pixToLoad.getBufferedImageNoLoad() != null) {
+                                        System.out
+                                                .println("[DEBUG] DCMView background load success for image " + index);
+                                        // ロード完了後に再描画
+                                        SwingUtilities.invokeLater(() -> repaint());
+                                    }
+                                } catch (Exception e) {
+                                    if (!(e instanceof InterruptedException)) {
+                                        System.err.println(
+                                                "[ERROR] DCMView background load exception for image " + index);
+                                        e.printStackTrace();
+                                    }
+                                }
+                            });
+                            backgroundLoadThread.setName("DCMView-Load-" + index);
+                            // ユーザーが停止している時は高く、移動中は低めにしたいが、
+                            // 今は「最新の1つ」だけが走るように制御したので NORM で良い
+                            backgroundLoadThread.setPriority(Thread.NORM_PRIORITY);
+                            backgroundLoadThread.start();
+                        } else if (this.curDCM != null) {
+                            System.out.println(
+                                    "[DEBUG] DCMView.setIndex() - image already loaded or null (pixToLoad.getBufferedImageNoLoad()="
+                                            + (this.curDCM != null ? this.curDCM.getBufferedImageNoLoad()
+                                                    : "pix-is-null")
+                                            + ")");
                         }
 
                         // HOROS-20240407準拠: curRoiList = [curDCM annotations];
@@ -1305,6 +1395,14 @@ public class DCMView extends JPanel {
                         // Java Swingでは、repaint()を呼び出す
                         System.out.println("[DEBUG] DCMView.setIndex() - calling repaint()");
                         repaint();
+
+                        // インデックスが変更されたことを親ウィンドウ（ViewerController）に通知してスライダーを同期
+                        SwingUtilities.invokeLater(() -> {
+                            java.awt.Component parent = SwingUtilities.getAncestorOfClass(ViewerController.class, this);
+                            if (parent instanceof ViewerController) {
+                                ((ViewerController) parent).adjustSlider();
+                            }
+                        });
 
                         // HOROS-20240407準拠: インデックス変更時に同期メッセージを送信 (DCMView.m 2582行目相当)
                         if (isKeyView && is2DViewer()) {
@@ -1437,7 +1535,8 @@ public class DCMView extends JPanel {
         float scaleX = (float) viewWidth / w;
         float scaleY = (float) viewHeight / (h * (float) pixelRatio);
 
-        float result = Math.min(scaleX, scaleY);
+        // HOROS-20240407準拠: 画面端に少し余白を持たせて綺麗に見せる
+        float result = Math.min(scaleX, scaleY) * 0.98f;
 
         System.out.println("[DEBUG] scaleToFitForDCMPix: viewSize=" + viewWidth + "x" + viewHeight
                 + ", imageSize=" + w + "x" + h
@@ -1543,6 +1642,8 @@ public class DCMView extends JPanel {
      * HOROS-20240407準拠: DCMView.m scrollWheel: メソッド
      */
     protected void scrollWheel(java.awt.event.MouseWheelEvent e) {
+        System.out.println(
+                "[DEBUG] DCMView.scrollWheel() - rotation: " + e.getWheelRotation() + ", curImage: " + curImage);
         // HOROS-20240407準拠: 操作したビューをアクティブにする
         if (!isKeyView) {
             becomeFirstResponder();
@@ -1616,14 +1717,6 @@ public class DCMView extends JPanel {
 
         // HOROS-20240407準拠: setIndexを呼び出して画像を切り替える
         setIndex(newImage);
-
-        // HOROS-20240407準拠: is2DViewerの場合はViewerControllerのスライダーを更新
-        if (is2DViewer()) {
-            javax.swing.JFrame window = (javax.swing.JFrame) javax.swing.SwingUtilities.getWindowAncestor(this);
-            if (window instanceof ViewerController) {
-                ((ViewerController) window).adjustSlider();
-            }
-        }
 
         // HOROS-20240407準拠: DCMView.m scrollWheel: 5122行目
         // inc（移動量）を渡すことで、相対同期（REL）などが正しく動作するようにする
@@ -1737,6 +1830,11 @@ public class DCMView extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
+        // 読み込み進捗が反映されるよう、リストから現在の画像オブジェクトを再取得
+        if (dcmPixList != null && curImage >= 0 && curImage < dcmPixList.size()) {
+            curDCM = dcmPixList.get(curImage);
+        }
+
         if (curDCM == null || dcmPixList == null || dcmPixList.isEmpty()) {
             if (whiteBackground) {
                 g.setColor(java.awt.Color.WHITE);
@@ -1763,10 +1861,12 @@ public class DCMView extends JPanel {
                 // + ", frontMost: " + frontMost);
             }
 
-            // アンチエイリアスを有効化
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            // アンチエイリアスと高品質スケーリングを有効化 (HOROS-20240407準拠の美しさ)
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
+            g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
             // 画像の読み込み状態を確認 (非同期読み込みを待たない)
             java.awt.image.BufferedImage image = curDCM.getBufferedImageNoLoad();
@@ -2989,12 +3089,13 @@ public class DCMView extends JPanel {
 
                                 // HOROS-20240407準拠: 単なるマウス移動(Hover)ではスライスを遷移させない。
                                 // ツールがtCrossの場合や、ドラッグ中の通知（isDrag=true）の場合のみ遷移させる。
-                                // ここでは一旦、ポイント同期による自動スライス遷移を無効化し、交差線の表示更新のみに留める。
-                                /*
-                                 * if (hitIndex != -1 && syncro != syncroOFF) {
-                                 * newImage = hitIndex;
-                                 * }
-                                 */
+                                boolean isDrag = userInfo.containsKey("isDrag") ? (boolean) userInfo.get("isDrag")
+                                        : false;
+                                ToolMode senderTool = (ToolMode) userInfo.get("currentTool");
+
+                                if (hitIndex != -1 && (isDrag || senderTool == ToolMode.tCross)) {
+                                    newImage = hitIndex;
+                                }
 
                                 // 2D座標に変換して保存 (緑色の十字描画用)
                                 if (hitIndex != -1) {
@@ -3388,7 +3489,7 @@ public class DCMView extends JPanel {
     /**
      * 3D位置を同期
      */
-    public void sync3DPosition(double mouseX, double mouseY) {
+    public void sync3DPosition(double mouseX, double mouseY, boolean isDrag) {
         if (curDCM == null)
             return;
 
@@ -3407,6 +3508,8 @@ public class DCMView extends JPanel {
         userInfo.put("sender", this);
         userInfo.put("view", this); // DCMView.m では "view" キーも使われる
         userInfo.put("offsetsync", 0.0f); // DCMView.m で必要とされる場合がある
+        userInfo.put("isDrag", isDrag);
+        userInfo.put("currentTool", currentTool);
 
         NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixDCMViewSyncNotification, this,
                 userInfo);

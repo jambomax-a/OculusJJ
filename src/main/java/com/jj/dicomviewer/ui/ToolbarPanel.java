@@ -13,7 +13,8 @@ import java.awt.event.*;
 public class ToolbarPanel extends JFrame {
 
     // HOROS-20240407準拠: ToolbarPanel.m 50行目
-    private static final int FIXED_HEIGHT = 92;
+    // メニューバーを統合しつつ、他ウィンドウを圧迫しないよう高さを詰める (140 -> 100)
+    private static final int FIXED_HEIGHT = 100;
 
     // HOROS-20240407準拠: ToolbarPanel.m 61-62行目
     private static final int HIDDEN_HEIGHT = 15;
@@ -77,13 +78,234 @@ public class ToolbarPanel extends JFrame {
      */
     private void initializeUI() {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        // 背景色をHorosのツールバーに近い色に変更し、境界線を追加して視認性を確保
+        getContentPane().setBackground(new Color(240, 240, 240));
         setUndecorated(true);
         setLayout(new BorderLayout());
+
+        // HOROS-20240407準拠: ツールバーウィンドウのメニューバー
+        // メニューバー本体の色も調整
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null && browser.getJMenuBar() != null) {
+            JMenuBar menuBar = ViewerController.replicateMenuBar(browser.getJMenuBar());
+            // Windowsでメニュー項目が見えにくい問題を修正するため、不透明度と色を設定
+            menuBar.setOpaque(true);
+            menuBar.setBackground(new Color(240, 240, 240));
+            menuBar.setForeground(Color.BLACK);
+            // 下側に境界線を入れてメニューの終わりを明確にする
+            menuBar.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY),
+                    BorderFactory.createEmptyBorder(2, 0, 2, 0)));
+
+            // 重要: WindowsではsetJMenuBarを使用するとウィンドウタイトルバーがない場合に
+            // 配置が不安定になることがあるため、直接ContainerのNORTHに配置を試みる
+            JPanel menuWrapper = new JPanel(new BorderLayout());
+            menuWrapper.add(menuBar, BorderLayout.CENTER);
+            add(menuWrapper, BorderLayout.NORTH);
+        }
 
         // ツールバーを作成
         toolbar = new JToolBar();
         toolbar.setFloatable(false);
+        toolbar.setBackground(new Color(240, 240, 240));
+        toolbar.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
 
+        // --- ツールボタンを追加 ---
+
+        // Selector ツール
+        JButton selectorButton = new JButton("Select");
+        selectorButton.setToolTipText("Selector / Edit (S)");
+        selectorButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tPlain;
+        });
+        toolbar.add(selectorButton);
+
+        toolbar.addSeparator();
+
+        // WLWW ツール
+        JButton wlwwButton = new JButton("WL/WW");
+        wlwwButton.setToolTipText("Window Level/Width (W)");
+        wlwwButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tWLWW;
+        });
+        toolbar.add(wlwwButton);
+
+        // パン ツール
+        JButton panButton = new JButton("Pan");
+        panButton.setToolTipText("Pan (P)");
+        panButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tTranslate;
+        });
+        toolbar.add(panButton);
+
+        // ズーム ツール
+        JButton zoomButton = new JButton("Zoom");
+        zoomButton.setToolTipText("Zoom (Z)");
+        zoomButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tZoom;
+        });
+        toolbar.add(zoomButton);
+
+        toolbar.addSeparator();
+
+        // --- ROI ツール ---
+
+        // 長さ計測 ツール
+        JButton measureButton = new JButton("Measure");
+        measureButton.setToolTipText("Length Measurement (M)");
+        measureButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tMesure;
+        });
+        toolbar.add(measureButton);
+
+        // 矩形 ツール
+        JButton rectButton = new JButton("Rect");
+        rectButton.setToolTipText("Rectangle ROI (R)");
+        rectButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tROI;
+        });
+        toolbar.add(rectButton);
+
+        // 楕円 ツール
+        JButton ovalButton = new JButton("Oval");
+        ovalButton.setToolTipText("Oval ROI (O)");
+        ovalButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tOval;
+        });
+        toolbar.add(ovalButton);
+
+        // 多角形 ツール (閉)
+        JButton cPolyButton = new JButton("Poly");
+        cPolyButton.setToolTipText("Closed Polygon ROI");
+        cPolyButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tCPolygon;
+        });
+        toolbar.add(cPolyButton);
+
+        // 多角形 ツール (開)
+        JButton oPolyButton = new JButton("O-Poly");
+        oPolyButton.setToolTipText("Open Polygon ROI");
+        oPolyButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tOPolygon;
+        });
+        toolbar.add(oPolyButton);
+
+        // 角度 ツール
+        JButton angleButton = new JButton("Angle");
+        angleButton.setToolTipText("Angle Measurement (A)");
+        angleButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tAngle;
+        });
+        toolbar.add(angleButton);
+
+        // 矢印 ツール
+        JButton arrowButton = new JButton("Arrow");
+        arrowButton.setToolTipText("Arrow Annotation");
+        arrowButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tArrow;
+        });
+        toolbar.add(arrowButton);
+
+        // 鉛筆 ツール
+        JButton pencilButton = new JButton("Pencil");
+        pencilButton.setToolTipText("Pencil / Freehand ROI");
+        pencilButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tPencil;
+        });
+        toolbar.add(pencilButton);
+
+        // ポイント ツール
+        JButton pointButton = new JButton("Point");
+        pointButton.setToolTipText("2D Point / Crosshair");
+        pointButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.t2DPoint;
+        });
+        toolbar.add(pointButton);
+
+        // テキスト ツール
+        JButton textButton = new JButton("Text");
+        textButton.setToolTipText("Text Annotation (T)");
+        textButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tText;
+        });
+        toolbar.add(textButton);
+
+        // Axis ツール
+        JButton axisButton = new JButton("Axis");
+        axisButton.setToolTipText("Axis ROI / Tumor measurement");
+        axisButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tAxis;
+        });
+        toolbar.add(axisButton);
+
+        // Dynamic Angle ツール
+        JButton dAngleButton = new JButton("D-Angle");
+        dAngleButton.setToolTipText("Dynamic Angle Measurement");
+        dAngleButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tDynamicAngle;
+        });
+        toolbar.add(dAngleButton);
+
+        // Perpendicular ツール
+        JButton perpButton = new JButton("Perp");
+        perpButton.setToolTipText("Perpendicular Lines");
+        perpButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tPerpendicular;
+        });
+        toolbar.add(perpButton);
+
+        // Brush ツール
+        JButton brushButton = new JButton("Brush");
+        brushButton.setToolTipText("Brush ROI / Pixel Mask");
+        brushButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tBrush;
+            Window owner = SwingUtilities.getWindowAncestor(this);
+            BrushPaletteDialog.showPalette(owner instanceof Frame ? (Frame) owner : null);
+        });
+        toolbar.add(brushButton);
+
+        // Repulsor ツール
+        JButton repulsorButton = new JButton("Repulse");
+        repulsorButton.setToolTipText("Repulsor / ROI Sculpting Tool (E)");
+        repulsorButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tRepulsor;
+        });
+        toolbar.add(repulsorButton);
+
+        toolbar.addSeparator();
+
+        // --- 3D / MPR ツール ---
+        // HOROS-20240407準拠: 3D MIP
+        JButton mipButton = new JButton("3D MIP");
+        mipButton.setToolTipText("Maximum Intensity Projection");
+        mipButton.addActionListener(e -> {
+            if (viewer != null) {
+                Viewer3DController.openMIP(viewer);
+            }
+        });
+        toolbar.add(mipButton);
+
+        // HOROS-20240407準拠: 3D Volume Rendering
+        JButton vrButton = new JButton("3D VR");
+        vrButton.setToolTipText("Volume Rendering");
+        vrButton.addActionListener(e -> {
+            if (viewer != null) {
+                Viewer3DController.openVR(viewer);
+            }
+        });
+        toolbar.add(vrButton);
+
+        // HOROS-20240407準拠: 2D MPR (3D MPR)
+        JButton mprButton = new JButton("MPR");
+        mprButton.setToolTipText("Multi-Planar Reconstruction (3D MPR)");
+        mprButton.addActionListener(e -> {
+            if (viewer != null) {
+                MPRController.openMPR(viewer);
+            }
+        });
+        toolbar.add(mprButton);
+
+        // ツールバーを中央（メニューの下）に配置
         add(toolbar, BorderLayout.CENTER);
 
         // 背景色を設定
@@ -111,7 +333,9 @@ public class ToolbarPanel extends JFrame {
      * HOROS-20240407準拠: ToolbarPanel.m 65-67行目 - exposedHeight
      */
     public int getExposedHeight() {
-        return FIXED_HEIGHT - HIDDEN_HEIGHT;
+        // Windows環境ではHIDDEN_HEIGHT（画面外への隠し領域）を使用しないため
+        // FIXED_HEIGHTをそのまま返す
+        return FIXED_HEIGHT;
     }
 
     /**
@@ -119,7 +343,7 @@ public class ToolbarPanel extends JFrame {
      * HOROS-20240407準拠: ToolbarPanel.m 69-71行目 - exposedHeight
      */
     public static int exposedHeight() {
-        return FIXED_HEIGHT - HIDDEN_HEIGHT;
+        return FIXED_HEIGHT;
     }
 
     /**
@@ -147,8 +371,9 @@ public class ToolbarPanel extends JFrame {
         int x = screenBounds.x + screenInsets.left;
         int width = screenBounds.width - screenInsets.left - screenInsets.right;
         int height = FIXED_HEIGHT;
-        // ツールバーの上部をHIDDEN_HEIGHT分画面外に配置（HOROS準拠）
-        int y = screenBounds.y + screenInsets.top - HIDDEN_HEIGHT;
+        // Windows環境でのメニュー切れを修正: HIDDEN_HEIGHTによるマイナスオフセットを削除し、
+        // 画面上端にぴったり配置する
+        int y = screenBounds.y + screenInsets.top;
 
         setBounds(x, y, width, height);
     }
@@ -162,13 +387,11 @@ public class ToolbarPanel extends JFrame {
         // if( [[viewer window] isVisible])
         if (viewer != null && viewer.isVisible()) {
             // HOROS-20240407準拠: ToolbarPanel.m 178行目
-            // [[viewer window] makeKeyAndOrderFront: self];
+            // viewerを前面にだすが、ツールバーが常に一番上にあるようにする
             viewer.toFront();
+            this.toFront();
+            // フォーカスはビューワーに渡す
             viewer.requestFocus();
-
-            // HOROS-20240407準拠: ToolbarPanel.m 179行目
-            // [self.window orderBack: self];
-            toBack();
         } else {
             // HOROS-20240407準拠: ToolbarPanel.m 183行目
             // [self.window orderOut: self];

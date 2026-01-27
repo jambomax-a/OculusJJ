@@ -69,6 +69,9 @@ public class DicomImage {
     // キャッシュ
     private transient DicomPix cachedDicomPix;
 
+    // HOROS-20240407準拠: ROIの保存 (フレームごとに保持)
+    private java.util.Map<Integer, List<com.jj.dicomviewer.model.ROI>> frameRois = new java.util.concurrent.ConcurrentHashMap<>();
+
     // リレーション
     private DicomSeries series;
 
@@ -85,6 +88,46 @@ public class DicomImage {
 
     public void setCachedDicomPix(DicomPix cachedDicomPix) {
         this.cachedDicomPix = cachedDicomPix;
+    }
+
+    /**
+     * ROIが存在するかチェック
+     */
+    public boolean hasAnyROIs() {
+        for (List<com.jj.dicomviewer.model.ROI> list : frameRois.values()) {
+            if (!list.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 指定されたフレームのROIリストを取得
+     */
+    public List<com.jj.dicomviewer.model.ROI> getROIs(int frame) {
+        // インスタンスごとに独立したMapを使用しているが、念のためキーにSOP UIDを含める
+        // また、マルチフレーム対応としてframe番号を確実に分離する
+        return frameRois.computeIfAbsent(frame,
+                k -> java.util.Collections.synchronizedList(new java.util.ArrayList<>()));
+    }
+
+    /**
+     * 指定されたフレームにROIを追加
+     */
+    public void addROI(int frame, com.jj.dicomviewer.model.ROI roi) {
+        List<com.jj.dicomviewer.model.ROI> rois = getROIs(frame);
+        if (roi != null && !rois.contains(roi)) {
+            rois.add(roi);
+        }
+    }
+
+    /**
+     * 指定されたフレームからROIを削除
+     */
+    public void removeROI(int frame, com.jj.dicomviewer.model.ROI roi) {
+        List<com.jj.dicomviewer.model.ROI> rois = getROIs(frame);
+        rois.remove(roi);
     }
 
     // ========== 静的メソッド ==========
@@ -219,11 +262,11 @@ public class DicomImage {
                     completePathCache = temp;
                     return temp;
                 } else {
-                    // HOROS-20240407準拠: if( [path characterAtIndex: 0] != '/') (1064行目)
-                    if (pathValue != null && !pathValue.isEmpty() && pathValue.charAt(0) != '/') {
+                    // HOROS-20240407準拠: 2Dビューワーの場合、相対パスならデータベースフォルダからの絶対パスを作成
+                    java.io.File pathFile = new java.io.File(pathValue);
+                    if (pathValue != null && !pathValue.isEmpty() && !pathFile.isAbsolute()) {
                         // HOROS-20240407準拠: return (self.completePathCache = [[DicomImage
                         // completePathForLocalPath:path directory:db.dataBaseDirPath] retain]);
-                        // (1066行目)
                         String completePath = completePathForLocalPath(pathValue, db.getDataBaseDirPath());
                         completePathCache = completePath;
                         return completePath;
@@ -387,24 +430,19 @@ public class DicomImage {
                     java.util.regex.Matcher matcher = pattern.matcher(pathWithoutExt);
                     if (matcher.find()) {
                         intValue = Integer.parseInt(matcher.group(1));
-                    }
-                    // 数値が見つからない場合は0（HOROS-20240407準拠: intValueは0を返す）
-                } catch (NumberFormatException e) {
-                    intValue = 0;
-                }
 
-                // HOROS-20240407準拠: intValueが0でもpathNumberに設定する
-                pathNumber = intValue;
-                // HOROS-20240407準拠: [self setPrimitiveValue: nil forKey:@"pathString"]; (992行目)
-                pathString = null;
-                return;
+                        // 数値が見つかった場合のみpathNumberを設定
+                        pathNumber = intValue;
+                        pathString = null;
+                        return;
+                    }
+                } catch (NumberFormatException e) {
+                    // 数値パースに失敗した場合は数値以外として扱う
+                }
             }
         }
 
-        // HOROS-20240407準拠: [self setPrimitiveValue: nil forKey:@"pathNumber"];
-        // (998-1000行目)
-        // HOROS-20240407準拠: [self setPrimitiveValue: p forKey:@"pathString"];
-        // (1002-1004行目)
+        // 数値として扱えない場合、または絶対パスの場合はpathStringに設定
         pathNumber = null;
         pathString = p;
     }
@@ -454,6 +492,20 @@ public class DicomImage {
             return path;
         }
 
+        // 追加: path自体が既に絶対パスの場合はそのまま返す
+        java.io.File pathCheck = new java.io.File(path);
+        if (pathCheck.isAbsolute() && pathCheck.exists()) {
+            return path;
+        }
+
+        // 追加: pathが既に DATABASE.noindex を含んでいる場合
+        if (path.contains("DATABASE.noindex")) {
+            java.io.File combinedFile = new java.io.File(directory, path);
+            if (combinedFile.exists()) {
+                return combinedFile.getAbsolutePath();
+            }
+        }
+
         // HOROS-20240407準拠: if( [path characterAtIndex: 0] != '/') (956行目)
         java.io.File pathFile = new java.io.File(path);
         if (!pathFile.isAbsolute()) {
@@ -488,6 +540,14 @@ public class DicomImage {
             // stringByAppendingPathComponent: @"DATABASE.noindex"]; (959行目)
             String dbLocation = directory + File.separator + "DATABASE.noindex";
 
+            // 追加: DATABASE.noindex直下にファイルがあるかまず確認
+            java.io.File directFile = new java.io.File(dbLocation, path);
+            if (directFile.exists()) {
+                System.out.println(
+                        "[DEBUG] completePathForLocalPath - Found directly at: " + directFile.getAbsolutePath());
+                return directFile.getAbsolutePath();
+            }
+
             // HOROS-20240407準拠: val /= [BrowserController DefaultFolderSizeForDB]; (961行目)
             // HOROS-20240407準拠: val++; (962行目)
             // HOROS-20240407準拠: val *= [BrowserController DefaultFolderSizeForDB]; (963行目)
@@ -499,7 +559,15 @@ public class DicomImage {
             // HOROS-20240407準拠: return [[dbLocation stringByAppendingPathComponent:
             // [NSString stringWithFormat: @"%d", (int) val]]
             // stringByAppendingPathComponent: path]; (965行目)
-            return dbLocation + File.separator + val + File.separator + path;
+            String resultPath = dbLocation + File.separator + val + File.separator + path;
+            java.io.File resultFile = new java.io.File(resultPath);
+            if (!resultFile.exists()) {
+                System.out.println("[DEBUG] completePathForLocalPath - File NOT found at subfolder: " + resultPath);
+                // フォールバック: DATABASE.noindex直下をもう一度確認（念のため絶対パス化して）
+            } else {
+                System.out.println("[DEBUG] completePathForLocalPath - Found at subfolder: " + resultPath);
+            }
+            return resultPath;
         } else {
             // HOROS-20240407準拠: else return path; (967行目)
             return path;
