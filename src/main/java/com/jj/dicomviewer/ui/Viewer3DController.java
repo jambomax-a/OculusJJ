@@ -6,6 +6,7 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.stream.IntStream;
 import com.jj.dicomviewer.model.DicomPix;
 
 /**
@@ -18,14 +19,34 @@ public class Viewer3DController extends JFrame {
     private List<DicomPix> pixList;
     private short[][][] volume; // [z][y][x]
     private int dimX, dimY, dimZ;
-    private double spacingX = 1.0, spacingY = 1.0, spacingZ = 1.0;
+    private double spacingZ = 1.0;
 
     private RenderingPanel renderingPanel;
-    private String mode = "MIP"; // "MIP", "VR"
+    private String mode = "MIP"; // "MIP", "VR", "MinIP", "Average", "ISO"
+    private boolean shadingEnabled = true;
+
+    // Window Level/Width
+    private float windowLevel = 40;
+    private float windowWidth = 400;
+
+    // ISO Threshold for Surface Rendering
+    private int isoThreshold = 300;
+    private double resolution = 0.5;
 
     // 視点回転パラメータ
-    private double rotateX = 0;
+    private double rotateX = -Math.PI / 2; // デフォルトを正面(Coronal)向きに調整
     private double rotateY = 0;
+    private double zoom = 1.0;
+
+    private boolean isDragging = false;
+
+    public void updateWindow(float dLevel, float dWidth) {
+        this.windowLevel += dLevel;
+        this.windowWidth += dWidth;
+        if (this.windowWidth < 1)
+            this.windowWidth = 1;
+        repaint();
+    }
 
     public Viewer3DController(ViewerController viewer2D, String mode) {
         super("3D Viewer - " + mode);
@@ -38,7 +59,6 @@ public class Viewer3DController extends JFrame {
 
     private void initializeData() {
         // ViewerControllerからピクセルリストを取得
-        // 簡易的に最初のシリーズを使用
         List<List<DicomPix>> allPix = viewer2D.getPixList();
         if (allPix != null && !allPix.isEmpty()) {
             this.pixList = new ArrayList<>(allPix.get(0));
@@ -53,17 +73,23 @@ public class Viewer3DController extends JFrame {
         dimY = first.getHeight();
         dimZ = pixList.size();
 
-        spacingX = first.getPixelSpacingX();
-        spacingY = first.getPixelSpacingY();
-        spacingZ = first.getSliceThickness(); // 簡易的にSliceThicknessを使用
+        spacingZ = first.getSliceThickness();
+        if (spacingZ <= 0.1)
+            spacingZ = 1.0;
 
         volume = new short[dimZ][dimY][dimX];
+
         for (int z = 0; z < dimZ; z++) {
             DicomPix pix = pixList.get(z);
             short[] src = pix.getShortData();
             if (src != null) {
+                float s = pix.getRescaleSlope();
+                float i = pix.getRescaleIntercept();
                 for (int y = 0; y < dimY; y++) {
-                    System.arraycopy(src, y * dimX, volume[z][y], 0, dimX);
+                    for (int x = 0; x < dimX; x++) {
+                        // HU値に変換して格納
+                        volume[z][y][x] = (short) (src[y * dimX + x] * s + i);
+                    }
                 }
             }
         }
@@ -77,7 +103,27 @@ public class Viewer3DController extends JFrame {
         // HOROS-20240407準拠: 3D Viewerも独立したメニューバーを持つ（Windows環境）
         BrowserController browser = BrowserController.currentBrowser();
         if (browser != null && browser.getJMenuBar() != null) {
-            setJMenuBar(ViewerController.replicateMenuBar(browser.getJMenuBar()));
+            JMenuBar replicated = ViewerController.replicateMenuBar(browser.getJMenuBar());
+            // 3D固有のメニューを追加
+            JMenu modeMenu = new JMenu("3D Mode");
+            modeMenu.setForeground(Color.BLACK);
+
+            JMenuItem mipItem = new JMenuItem("MIP");
+            mipItem.addActionListener(e -> {
+                this.mode = "MIP";
+                repaint();
+            });
+            modeMenu.add(mipItem);
+
+            JMenuItem vrItem = new JMenuItem("Volume Rendering");
+            vrItem.addActionListener(e -> {
+                this.mode = "VR";
+                repaint();
+            });
+            modeMenu.add(vrItem);
+
+            replicated.add(modeMenu); // 最後に配置
+            setJMenuBar(replicated);
         }
 
         setLayout(new BorderLayout());
@@ -87,10 +133,98 @@ public class Viewer3DController extends JFrame {
         vrToolbar.setFloatable(false);
         vrToolbar.setBackground(new Color(240, 240, 240));
 
-        vrToolbar.add(new JButton("Reset"));
-        vrToolbar.add(new JButton("Shading"));
-        vrToolbar.add(new JButton("Projection"));
-        vrToolbar.add(new JButton("Movie"));
+        JButton btnMIP = new JButton("MIP");
+        btnMIP.addActionListener(e -> {
+            this.mode = "MIP";
+            setTitle("3D Viewer - MIP");
+            repaint();
+        });
+        vrToolbar.add(btnMIP);
+
+        JButton btnMinIP = new JButton("MinIP");
+        btnMinIP.addActionListener(e -> {
+            this.mode = "MinIP";
+            setTitle("3D Viewer - MinIP");
+            repaint();
+        });
+        vrToolbar.add(btnMinIP);
+
+        JButton btnAvg = new JButton("Average");
+        btnAvg.addActionListener(e -> {
+            this.mode = "Average";
+            setTitle("3D Viewer - Average");
+            repaint();
+        });
+        vrToolbar.add(btnAvg);
+
+        JButton btnVR = new JButton("Volume Rendering");
+        btnVR.addActionListener(e -> {
+            this.mode = "VR";
+            setTitle("3D Viewer - VR");
+            repaint();
+        });
+        vrToolbar.add(btnVR);
+
+        JButton btnISO = new JButton("3D Surface");
+        btnISO.addActionListener(e -> {
+            this.mode = "ISO";
+            setTitle("3D Viewer - Surface Rendering");
+            repaint();
+        });
+        vrToolbar.add(btnISO);
+
+        vrToolbar.addSeparator();
+
+        vrToolbar.add(new JLabel(" ISO: "));
+        JSpinner isoSpinner = new JSpinner(new SpinnerNumberModel(300, -1024, 3072, 50));
+        isoSpinner.addChangeListener(e -> {
+            this.isoThreshold = (int) isoSpinner.getValue();
+            repaint();
+        });
+        vrToolbar.add(isoSpinner);
+
+        vrToolbar.addSeparator();
+
+        JToggleButton tglShading = new JToggleButton("Shading", true);
+        tglShading.addActionListener(e -> {
+            this.shadingEnabled = tglShading.isSelected();
+            repaint();
+        });
+        vrToolbar.add(tglShading);
+
+        vrToolbar.addSeparator();
+
+        JButton btnReset = new JButton("Reset");
+        btnReset.addActionListener(e -> {
+            rotateX = -Math.PI / 2;
+            rotateY = 0;
+            zoom = 1.0;
+            windowLevel = 40;
+            windowWidth = 400;
+            repaint();
+        });
+        vrToolbar.add(btnReset);
+
+        vrToolbar.addSeparator();
+        vrToolbar.add(new JLabel("Presets: "));
+        String[] presets = { "Bone", "Soft Tissue", "Lung" };
+        JComboBox<String> comboPresets = new JComboBox<>(presets);
+        comboPresets.addActionListener(e -> {
+            String p = (String) comboPresets.getSelectedItem();
+            if ("Bone".equals(p)) {
+                windowLevel = 300;
+                windowWidth = 1500;
+            } else if ("Soft Tissue".equals(p)) {
+                windowLevel = 40;
+                windowWidth = 400;
+            } else if ("Lung".equals(p)) {
+                windowLevel = -600;
+                windowWidth = 1500;
+            }
+            repaint();
+        });
+        vrToolbar.add(comboPresets);
+
         add(vrToolbar, BorderLayout.NORTH);
 
         renderingPanel = new RenderingPanel();
@@ -107,11 +241,9 @@ public class Viewer3DController extends JFrame {
         });
     }
 
-    /**
-     * 3Dレンダリング用パネル
-     */
     private class RenderingPanel extends JPanel {
         private Point lastMousePos;
+        private BufferedImage image;
 
         public RenderingPanel() {
             setBackground(Color.BLACK);
@@ -120,6 +252,13 @@ public class Viewer3DController extends JFrame {
                 @Override
                 public void mousePressed(MouseEvent e) {
                     lastMousePos = e.getPoint();
+                    isDragging = true;
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    isDragging = false;
+                    repaint(); // 高画質で再描画
                 }
 
                 @Override
@@ -128,8 +267,22 @@ public class Viewer3DController extends JFrame {
                         int dx = e.getX() - lastMousePos.x;
                         int dy = e.getY() - lastMousePos.y;
 
-                        rotateY += dx * 0.01;
-                        rotateX += dy * 0.01;
+                        boolean isRight = SwingUtilities.isRightMouseButton(e);
+                        boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
+
+                        if (isRight || isShift) {
+                            // Zoom
+                            zoom *= (1.0 - dy / 200.0);
+                            if (zoom < 0.1)
+                                zoom = 0.1;
+                        } else if (SwingUtilities.isMiddleMouseButton(e)) {
+                            // WLWW
+                            updateWindow(dy * 2.0f, dx * 2.0f);
+                        } else {
+                            // Rotate
+                            rotateY += dx * 0.01;
+                            rotateX += dy * 0.01;
+                        }
 
                         lastMousePos = e.getPoint();
                         repaint();
@@ -138,6 +291,14 @@ public class Viewer3DController extends JFrame {
             };
             addMouseListener(mouseHandler);
             addMouseMotionListener(mouseHandler);
+
+            // マウスホイールでのズーム
+            addMouseWheelListener(e -> {
+                zoom *= (1.0 - e.getWheelRotation() * 0.1);
+                if (zoom < 0.1)
+                    zoom = 0.1;
+                repaint();
+            });
         }
 
         @Override
@@ -149,72 +310,203 @@ public class Viewer3DController extends JFrame {
             render3D((Graphics2D) g);
         }
 
+        private float getOpacity(int val, float low, float factor) {
+            float alpha = (val - low) * factor / 255.0f;
+            if (alpha < 0)
+                alpha = 0;
+            if (alpha > 1.0f)
+                alpha = 1.0f;
+            // 非線形な不透明度 (Horosのトランスファーファンクション風)
+            return (float) Math.pow(alpha, 2.0);
+        }
+
+        private double[] getGradient(int x, int y, int z) {
+            double dx = (getVal(x + 1, y, z) - getVal(x - 1, y, z)) / 2.0;
+            double dy = (getVal(x, y + 1, z) - getVal(x, y - 1, z)) / 2.0;
+            double dz = (getVal(x, y, z + 1) - getVal(x, y, z - 1)) / 2.0;
+            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 1e-4)
+                return new double[] { 0, 0, 0 };
+            return new double[] { dx / len, dy / len, dz / len };
+        }
+
+        private int getVal(int x, int y, int z) {
+            if (x < 0 || x >= dimX || y < 0 || y >= dimY || z < 0 || z >= dimZ)
+                return -3024;
+            return volume[z][y][x];
+        }
+
         private void render3D(Graphics2D g) {
             int w = getWidth();
             int h = getHeight();
             if (w <= 0 || h <= 0)
                 return;
 
-            BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+            if (image == null || image.getWidth() != w || image.getHeight() != h) {
+                image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+            }
 
-            // 簡易的なレイキャスティング (MIP)
-            // 数学的な最適化は省き、コンセプトを示す
-            double sinX = Math.sin(rotateX);
-            double cosX = Math.cos(rotateX);
-            double sinY = Math.sin(rotateY);
-            double cosY = Math.cos(rotateY);
+            int[] pixels = ((java.awt.image.DataBufferInt) image.getRaster().getDataBuffer()).getData();
+            java.util.Arrays.fill(pixels, 0);
 
-            // ボリューム中心
-            double cx = dimX / 2.0;
-            double cy = dimY / 2.0;
-            double cz = dimZ / 2.0;
+            // 回転行列の事前計算
+            double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+            double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
 
-            // スケーリング
-            double scale = Math.min(w / (double) dimX, h / (double) dimY) * 0.8;
+            double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+            double baseScale = Math.min(w / (double) dimX, h / (double) dimY) * 0.8;
+            double currentScale = baseScale * zoom;
 
-            for (int sy = 0; sy < h; sy += 2) { // パフォーマンスのためステップを荒く
-                for (int sx = 0; sx < w; sx += 2) {
+            float wl = windowLevel, ww = windowWidth;
+            float low = wl - ww / 2.0f;
+            float factor = 255.0f / (ww < 1 ? 1 : ww);
 
-                    double vx = (sx - w / 2.0) / scale;
-                    double vy = (sy - h / 2.0) / scale;
+            boolean isVR = "VR".equals(mode);
+            boolean isMIP = "MIP".equals(mode);
+            boolean isMinIP = "MinIP".equals(mode);
+            boolean isAvg = "Average".equals(mode);
+            boolean isISO = "ISO".equals(mode); // Surface Rendering
 
-                    int maxVal = 0;
+            // パフォーマンス最適化: ドラッグ中はステップを大きくし、レイ・マーチングの間隔も広げる
+            int currentStep = isDragging ? 6 : (int) (2.0 / resolution);
+            double rayStep = isDragging ? 4.0 : 2.0;
 
-                    // レイのサンプリング
-                    for (double vz = -cz; vz < cz; vz += 1.0) {
-                        // 回転適用
-                        // Y軸回転
+            IntStream.range(0, (h + currentStep - 1) / currentStep).parallel().forEach(yi -> {
+                int sy = yi * currentStep;
+                for (int sx = 0; sx < w; sx += currentStep) {
+                    double vx = (sx - w / 2.0) / currentScale;
+                    double vy = (sy - h / 2.0) / currentScale;
+
+                    float accR = 0, accG = 0, accB = 0, accA = 0;
+                    int maxVal = -3024;
+                    int minVal = 3024;
+                    long sumVal = 0;
+                    int countVal = 0;
+
+                    double zLimit = Math.max(dimX, Math.max(dimY, dimZ)) * 1.2;
+                    for (double vz = -zLimit; vz < zLimit; vz += rayStep) {
+                        // Ray -> Voxel coordinates
                         double tx = vx * cosY + vz * sinY;
-                        double tz = -vx * sinY + vz * cosY;
+                        double tz0 = -vx * sinY + vz * cosY;
+                        double ty = vy * cosX - tz0 * sinX;
+                        double tz = vy * sinX + tz0 * cosX;
 
-                        // X軸回転
-                        double ty = vy * cosX - tz * sinX;
-                        double finalZ = vy * sinX + tz * cosX;
-
-                        int ix = (int) (tx + cx);
-                        int iy = (int) (ty + cy);
-                        int iz = (int) (finalZ + cz);
+                        int ix = (int) (tx + cx), iy = (int) (ty + cy), iz = (int) (tz + cz);
 
                         if (ix >= 0 && ix < dimX && iy >= 0 && iy < dimY && iz >= 0 && iz < dimZ) {
-                            int val = volume[iz][iy][ix] & 0xFFFF;
-                            if (val > maxVal)
-                                maxVal = val;
+                            int val = volume[iz][iy][ix];
+                            if (isISO) {
+                                if (val >= isoThreshold) {
+                                    float r = (isoThreshold >= 200) ? 1.0f : 0.9f;
+                                    float gVal = (isoThreshold >= 200) ? 0.9f : 0.7f;
+                                    float b = (isoThreshold >= 200) ? 0.8f : 0.6f;
+
+                                    float shade = 1.0f;
+                                    double[] grad = getGradient(ix, iy, iz);
+                                    double dot = grad[0] * sinY * cosX + grad[1] * sinX + grad[2] * cosY * cosX;
+                                    shade = (float) Math.max(0.2, Math.abs(dot));
+
+                                    accR = r * shade;
+                                    accG = gVal * shade;
+                                    accB = b * shade;
+                                    accA = 1.0f;
+                                    break;
+                                }
+                            } else if (isVR) {
+                                float alpha = getOpacity(val, low, factor);
+                                if (alpha > 0.01f) {
+                                    float weight = alpha * (1.0f - accA);
+
+                                    // 簡易カラーマッピング (Horosプリセットを模倣)
+                                    float r = 0, g_val = 0, b = 0;
+                                    if (val > 250) { // Bone
+                                        r = 1.0f;
+                                        g_val = 0.9f;
+                                        b = 0.8f;
+                                    } else if (val > 100) { // Muscle/Contrast
+                                        r = 0.9f;
+                                        g_val = 0.6f;
+                                        b = 0.5f;
+                                    } else if (val > 0) { // Soft Tissue
+                                        r = 0.6f;
+                                        g_val = 0.3f;
+                                        b = 0.2f;
+                                    } else if (val > -500) { // Fat
+                                        r = 0.4f;
+                                        g_val = 0.3f;
+                                        b = 0.2f;
+                                    } else { // Lung/Air
+                                        r = 0.1f;
+                                        g_val = 0.1f;
+                                        b = 0.3f;
+                                    }
+
+                                    // Shading (Lambertian)
+                                    float shade = 1.0f;
+                                    if (shadingEnabled) {
+                                        double[] grad = getGradient(ix, iy, iz);
+                                        // カメラ方向への法線の向きを計算
+                                        double dot = grad[0] * sinY * cosX + grad[1] * sinX + grad[2] * cosY * cosX;
+                                        shade = (float) Math.max(0.2, Math.abs(dot));
+                                    }
+
+                                    accR += weight * r * shade;
+                                    accG += weight * g_val * shade;
+                                    accB += weight * b * shade;
+                                    accA += weight;
+                                    if (accA >= 0.95f)
+                                        break;
+                                }
+                            } else if (isMIP) {
+                                if (val > maxVal)
+                                    maxVal = val;
+                            } else if (isMinIP) {
+                                if (val < minVal)
+                                    minVal = val;
+                            } else if (isAvg) {
+                                sumVal += val;
+                                countVal++;
+                            }
                         }
                     }
 
-                    if (maxVal > 0) {
-                        // 簡易的な階調変換 (TODO: WLWW適用)
-                        int c = Math.min(255, maxVal / 10);
-                        int rgb = (c << 16) | (c << 8) | c;
-                        img.setRGB(sx, sy, rgb);
-                        img.setRGB(sx + 1, sy, rgb);
-                        img.setRGB(sx, sy + 1, rgb);
-                        img.setRGB(sx + 1, sy + 1, rgb);
+                    int rgb = 0;
+                    if (isVR || isISO) {
+                        rgb = ((int) (Math.min(1f, accR) * 255) << 16) |
+                                ((int) (Math.min(1f, accG) * 255) << 8) |
+                                ((int) (Math.min(1f, accB) * 255));
+                    } else if (isMIP && maxVal > -3024) {
+                        int c = (int) ((maxVal - low) * factor);
+                        c = Math.max(0, Math.min(255, c));
+                        rgb = (c << 16) | (c << 8) | c;
+                    } else if (isMinIP && minVal < 3024) {
+                        int c = (int) ((minVal - low) * factor);
+                        c = Math.max(0, Math.min(255, c));
+                        rgb = (c << 16) | (c << 8) | c;
+                    } else if (isAvg && countVal > 0) {
+                        int avg = (int) (sumVal / countVal);
+                        int c = (int) ((avg - low) * factor);
+                        c = Math.max(0, Math.min(255, c));
+                        rgb = (c << 16) | (c << 8) | c;
+                    }
+
+                    if (rgb != 0) {
+                        for (int dy = 0; dy < currentStep && (sy + dy) < h; dy++) {
+                            int offset = (sy + dy) * w;
+                            for (int dx = 0; dx < currentStep && (sx + dx) < w; dx++) {
+                                pixels[offset + (sx + dx)] = rgb;
+                            }
+                        }
                     }
                 }
-            }
+            });
+            g.drawImage(image, 0, 0, null);
 
-            g.drawImage(img, 0, 0, null);
+            g.setColor(Color.WHITE);
+            g.drawString(String.format("Mode: %s", mode), 20, 30);
+            g.drawString(String.format("WL: %.0f WW: %.0f", windowLevel, windowWidth), 20, 50);
+            g.drawString(String.format("Zoom: %.2f", zoom), 20, 70);
+            g.drawString("Rotate: Mouse Drag | Zoom: Right Drag/Wheel | WLWW: Middle Drag", 20, h - 20);
         }
     }
 
@@ -230,5 +522,33 @@ public class Viewer3DController extends JFrame {
             Viewer3DController v3d = new Viewer3DController(viewer, "VR");
             v3d.setVisible(true);
         });
+    }
+
+    public static void openISO(ViewerController viewer) {
+        // HOROS-20240407準拠: Surface Renderingの開始前に設定ダイアログを表示
+        JPanel panel = new JPanel(new GridLayout(0, 2, 5, 5));
+        panel.add(new JLabel("Surface 1 Threshold (HU):"));
+        JSpinner thresholdSpinner = new JSpinner(new SpinnerNumberModel(300, -1024, 3072, 50));
+        panel.add(thresholdSpinner);
+
+        panel.add(new JLabel("Resolution (0.1-1.0):"));
+        JSpinner resSpinner = new JSpinner(new SpinnerNumberModel(0.5, 0.1, 1.0, 0.1));
+        panel.add(resSpinner);
+
+        panel.add(new JLabel("Smoothing:"));
+        JCheckBox smoothCheck = new JCheckBox("", true);
+        panel.add(smoothCheck);
+
+        int result = JOptionPane.showConfirmDialog(null, panel, "3D Surface Rendering Settings",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.OK_OPTION) {
+            SwingUtilities.invokeLater(() -> {
+                Viewer3DController v3d = new Viewer3DController(viewer, "ISO");
+                v3d.isoThreshold = (int) thresholdSpinner.getValue();
+                v3d.resolution = (double) resSpinner.getValue();
+                v3d.setVisible(true);
+            });
+        }
     }
 }

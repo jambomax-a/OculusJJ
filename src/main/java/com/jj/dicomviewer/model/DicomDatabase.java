@@ -986,9 +986,6 @@ public class DicomDatabase {
                         }
                     }
 
-                    // Imageを読み込む
-                    loadImagesForSeries(series, rs.getInt("id"));
-
                     study.addSeriesObject(series);
                 }
                 logger.debug("loadSeriesForStudy: Loaded {} series for study: {}", count, study.getName());

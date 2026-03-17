@@ -120,6 +120,14 @@ public class ToolbarPanel extends JFrame {
         });
         toolbar.add(selectorButton);
 
+        // Curved MPR ツール (HOROS-20240407)
+        JButton curvedButtonTop = new JButton("Curved");
+        curvedButtonTop.setToolTipText("Curved MPR ROI (Click nodes, double-click to finish)");
+        curvedButtonTop.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tCurvedROI;
+        });
+        toolbar.add(curvedButtonTop);
+
         toolbar.addSeparator();
 
         // WLWW ツール
@@ -254,6 +262,14 @@ public class ToolbarPanel extends JFrame {
         });
         toolbar.add(perpButton);
 
+        // Curved MPR ツール (HOROS-20240407)
+        JButton curvedButton = new JButton("Curved");
+        curvedButton.setToolTipText("Curved MPR ROI (Click nodes, double-click to finish)");
+        curvedButton.addActionListener(e -> {
+            DCMView.currentTool = DCMView.ToolMode.tCurvedROI;
+        });
+        toolbar.add(curvedButton);
+
         // Brush ツール
         JButton brushButton = new JButton("Brush");
         brushButton.setToolTipText("Brush ROI / Pixel Mask");
@@ -275,28 +291,8 @@ public class ToolbarPanel extends JFrame {
         toolbar.addSeparator();
 
         // --- 3D / MPR ツール ---
-        // HOROS-20240407準拠: 3D MIP
-        JButton mipButton = new JButton("3D MIP");
-        mipButton.setToolTipText("Maximum Intensity Projection");
-        mipButton.addActionListener(e -> {
-            if (viewer != null) {
-                Viewer3DController.openMIP(viewer);
-            }
-        });
-        toolbar.add(mipButton);
-
-        // HOROS-20240407準拠: 3D Volume Rendering
-        JButton vrButton = new JButton("3D VR");
-        vrButton.setToolTipText("Volume Rendering");
-        vrButton.addActionListener(e -> {
-            if (viewer != null) {
-                Viewer3DController.openVR(viewer);
-            }
-        });
-        toolbar.add(vrButton);
-
         // HOROS-20240407準拠: 2D MPR (3D MPR)
-        JButton mprButton = new JButton("MPR");
+        JButton mprButton = new JButton("3D MPR");
         mprButton.setToolTipText("Multi-Planar Reconstruction (3D MPR)");
         mprButton.addActionListener(e -> {
             if (viewer != null) {
@@ -304,6 +300,37 @@ public class ToolbarPanel extends JFrame {
             }
         });
         toolbar.add(mprButton);
+
+        // HOROS-20240407準拠: Curved MPR (3D Curved)
+        JButton cprButton = new JButton("3D Curved");
+        cprButton.setToolTipText("Curved Planar Reconstruction (3D Curved)");
+        cprButton.addActionListener(e -> {
+            BrowserController current = BrowserController.currentBrowser();
+            if (current != null) {
+                current.cprViewer(null);
+            }
+        });
+        toolbar.add(cprButton);
+
+        // HOROS-20240407準拠: 3D MIP
+        JButton mipButton = new JButton("3D MIP");
+        mipButton.setToolTipText("Maximum Intensity Projection (3D MIP)");
+        mipButton.addActionListener(e -> {
+            if (viewer != null) {
+                Viewer3DController.openMIP(viewer);
+            }
+        });
+        toolbar.add(mipButton);
+
+        // HOROS-20240407準拠: 3D VR (Volume Rendering)
+        JButton vrButton = new JButton("3D VR");
+        vrButton.setToolTipText("3D Volume Rendering");
+        vrButton.addActionListener(e -> {
+            if (viewer != null) {
+                Viewer3DController.openVR(viewer);
+            }
+        });
+        toolbar.add(vrButton);
 
         // ツールバーを中央（メニューの下）に配置
         add(toolbar, BorderLayout.CENTER);

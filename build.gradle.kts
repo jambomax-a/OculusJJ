@@ -97,6 +97,7 @@ dependencies {
 application {
     mainClass.set("com.jj.dicomviewer.JJDicomViewerApp")
     applicationDefaultJvmArgs = listOf(
+        "-Xmx4g", // HOROS-20240407準拠: 3D MPRやボリュームレンダリングのためにメモリを多めに割り当てる
         // Java 9+モジュールシステム: NativeImageReaderがFileImageInputStream.rafにアクセスするために必要
         "--add-opens=java.desktop/javax.imageio.stream=ALL-UNNAMED",
         // Java 9+モジュールシステム: NativeImageReaderがRandomAccessFile.pathにアクセスするために必要

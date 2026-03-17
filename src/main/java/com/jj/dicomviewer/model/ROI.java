@@ -94,6 +94,55 @@ public class ROI {
     // HOROS: BOOL closed
     private boolean closed = false;
 
+    public boolean isClosed() {
+        return closed;
+    }
+
+    public static class Point3D {
+        public double x, y, z;
+
+        public Point3D(double x, double y, double z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
+
+    public static class Segment {
+        public Point3D p1, p2;
+
+        public Segment(Point3D p1, Point3D p2) {
+            this.p1 = p1;
+            this.p2 = p2;
+        }
+    }
+
+    public List<Segment> getSegments() {
+        List<Segment> segments = new ArrayList<>();
+        if (points == null || points.size() < 2)
+            return segments;
+
+        // ボリューム空間でのスライス位置 (インデックス) を取得
+        // DicomPix が sliceIndex を持っていると仮定
+        double z = (sourcePix != null) ? sourcePix.getSliceIndex() : 0;
+
+        for (int i = 0; i < points.size() - 1; i++) {
+            Point2D.Float p1 = points.get(i);
+            Point2D.Float p2 = points.get(i + 1);
+            segments.add(new Segment(new Point3D(p1.x, p1.y, z), new Point3D(p2.x, p2.y, z)));
+        }
+        if (closed && points.size() > 2) {
+            Point2D.Float p1 = points.get(points.size() - 1);
+            Point2D.Float p2 = points.get(0);
+            segments.add(new Segment(new Point3D(p1.x, p1.y, z), new Point3D(p2.x, p2.y, z)));
+        }
+        return segments;
+    }
+
+    public void setClosed(boolean closed) {
+        this.closed = closed;
+    }
+
     // HOROS: NSString *name
     private String name = "";
 
@@ -109,6 +158,13 @@ public class ROI {
     private DCMView parentView = null;
 
     private boolean isEraseMode = false;
+
+    // HOROS-20240407: 3D coordinates for Curved MPR nodes
+    private List<Point3D> points3D = new ArrayList<>();
+
+    public void addPoint3D(Point3D p) {
+        points3D.add(p);
+    }
 
     public void setEraseMode(boolean erase) {
         this.isEraseMode = erase;
@@ -250,6 +306,27 @@ public class ROI {
                 updateRect();
                 needsUpdate = true;
             }
+        } finally {
+            roiLock.unlock();
+        }
+    }
+
+    public void updatePoint3D(int index, Point3D pt) {
+        roiLock.lock();
+        try {
+            if (index >= 0 && index < points3D.size()) {
+                points3D.set(index, pt);
+                needsUpdate = true;
+            }
+        } finally {
+            roiLock.unlock();
+        }
+    }
+
+    public List<Point3D> getPoints3D() {
+        roiLock.lock();
+        try {
+            return new ArrayList<>(points3D);
         } finally {
             roiLock.unlock();
         }
@@ -495,6 +572,67 @@ public class ROI {
 
                     if (!suppressLabels)
                         drawTextBox(g2d, text, anchorX, anchorY, currentScale, selected, currentColor);
+                }
+                break;
+
+            case tCurvedROI:
+                if (points.size() >= 2) {
+                    List<Point2D.Float> drawPoints = (isSpline && points.size() >= 3) ? cachedSplinePoints : points;
+                    if (drawPoints == null)
+                        drawPoints = points;
+
+                    Path2D.Float path = new Path2D.Float();
+                    path.moveTo(drawPoints.get(0).x, drawPoints.get(0).y);
+                    for (int i = 1; i < drawPoints.size(); i++) {
+                        path.lineTo(drawPoints.get(i).x, drawPoints.get(i).y);
+                    }
+
+                    // 黒の縁取り
+                    g2d.setColor(Color.BLACK);
+                    g2d.setStroke(new BasicStroke(outlineWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2d.draw(path);
+
+                    // 本体を描画 (CurvedROIは目立つように少し太めにするか、特定の色にするのがHoros流)
+                    g2d.setColor(currentColor);
+                    g2d.setStroke(new BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+                    // HOROS-20240407 準拠: Z方向の近さによって透明度を変える
+                    if (parentView != null && parentView.getCurDCM() != null && !points3D.isEmpty()) {
+                        double curZ = parentView.getCurDCM().getSliceLocation();
+                        float alpha = 1.0f;
+                        // 簡単のため、最初の点と現在のスライスの距離で判定
+                        double distZ = Math.abs(points3D.get(0).z - curZ);
+                        // スライス厚の3倍以上離れていたら半透明
+                        double thickness = parentView.getCurDCM().getSliceThickness();
+                        if (distZ > thickness * 3.0)
+                            alpha = 0.3f;
+                        else if (distZ > thickness)
+                            alpha = 0.6f;
+
+                        if (alpha < 1.0f) {
+                            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha * opacity));
+                        }
+                    }
+
+                    g2d.draw(path);
+                    g2d.setComposite(originalComposite); // 戻す
+
+                    // 補助情報
+                    if (!suppressLabels) {
+                        double totalLen = calculateLength();
+                        String text = String.format("Curved MPR: %.1f mm", totalLen);
+                        Point2D.Float lastPt = points.get(points.size() - 2); // 確定済みの最後の点
+                        if (points.size() < 2)
+                            lastPt = points.get(0);
+                        drawTextBox(g2d, text, lastPt.x, lastPt.y, currentScale, selected, currentColor);
+                    }
+
+                    // ハンドル描画
+                    if (selected) {
+                        for (int i = 0; i < points.size() - 1; i++) {
+                            drawHandle(g2d, points.get(i).x, points.get(i).y, currentScale, i);
+                        }
+                    }
                 }
                 break;
 
@@ -1322,6 +1460,19 @@ public class ROI {
      * Calculate length (for measurement ROI)
      */
     public double calculateLength() {
+        if (type == DCMView.ToolMode.tCurvedROI && !points3D.isEmpty()) {
+            double total = 0;
+            for (int i = 0; i < points3D.size() - 1; i++) {
+                Point3D p1 = points3D.get(i);
+                Point3D p2 = points3D.get(i + 1);
+                double dx = p1.x - p2.x;
+                double dy = p1.y - p2.y;
+                double dz = p1.z - p2.z;
+                total += Math.sqrt(dx * dx + dy * dy + dz * dz);
+            }
+            return total;
+        }
+
         if (points.size() < 2) {
             return 0;
         }

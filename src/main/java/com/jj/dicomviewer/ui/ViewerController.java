@@ -247,6 +247,9 @@ public class ViewerController extends JFrame {
     // HOROS-20240407準拠: 折りたたまれたスタディの管理
     private final java.util.Set<com.jj.dicomviewer.model.DicomStudy> collapsedStudies = new java.util.HashSet<>();
 
+    // マトリックス構築中フラグ
+    private boolean isBuildingMatrix = false;
+
     /**
      * スタディが折りたたまれているか確認
      */
@@ -300,14 +303,17 @@ public class ViewerController extends JFrame {
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         // HOROS-20240407準拠: 2D Viewerもメインメニューを表示する（Windowsでのアクセシビリティのため）
-        BrowserController browser = BrowserController.currentBrowser();
-        if (browser != null && browser.getJMenuBar() != null) {
-            javax.swing.JMenuBar menuBar = replicateMenuBar(browser.getJMenuBar());
-            // Windowsでの視認性向上のための設定
-            menuBar.setOpaque(true);
-            menuBar.setBackground(new Color(240, 240, 240));
-            setJMenuBar(menuBar);
-        }
+        // ユーザー要求により削除: ２Dビューワーパネルのメニューはいらない
+        /*
+         * BrowserController browser = BrowserController.currentBrowser();
+         * if (browser != null && browser.getJMenuBar() != null) {
+         * javax.swing.JMenuBar menuBar = replicateMenuBar(browser.getJMenuBar());
+         * // Windowsでの視認性向上のための設定
+         * menuBar.setOpaque(true);
+         * menuBar.setBackground(new Color(240, 240, 240));
+         * setJMenuBar(menuBar);
+         * }
+         */
 
         setLayout(new BorderLayout());
 
@@ -1130,70 +1136,88 @@ public class ViewerController extends JFrame {
      * HOROS-20240407準拠: ViewerController.m 4903行目 - buildMatrixPreview:
      */
     public void buildMatrixPreview() {
-        if (!isVisible()) {
+        if (isBuildingMatrix) {
             return;
         }
+        isBuildingMatrix = true;
 
-        // previewMatrixをクリア
-        previewMatrix.removeAll();
-
-        // HOROS-20240407準拠: 現在のシリーズからスタディを取得
+        // 現在のシリーズを保持
+        final com.jj.dicomviewer.model.DicomSeries referenceSeries;
         if (currentSeries == null) {
-            // fileListから最初の画像を取得してシリーズを特定
             if (!fileList.isEmpty() && !fileList.get(0).isEmpty()) {
-                DicomImage firstImage = fileList.get(0).get(0);
-                if (firstImage != null) {
-                    currentSeries = firstImage.getSeries();
-                }
+                referenceSeries = fileList.get(0).get(0).getSeries();
+            } else {
+                referenceSeries = null;
             }
+        } else {
+            referenceSeries = currentSeries;
         }
 
-        if (currentSeries == null) {
-            previewMatrix.revalidate();
-            previewMatrix.repaint();
+        if (referenceSeries == null) {
+            isBuildingMatrix = false;
             return;
         }
 
-        com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
-
-        // HOROS-20240407準拠: Viewerに含まれる全患者の全スタディをDBから取得して表示
-        java.util.Set<String> patientUIDs = new java.util.HashSet<>();
-        if (fileList != null) {
-            for (java.util.List<com.jj.dicomviewer.model.DicomImage> list : fileList) {
-                if (list != null && !list.isEmpty()) {
-                    com.jj.dicomviewer.model.DicomImage firstImg = list.get(0);
-                    if (firstImg != null && firstImg.getSeries() != null && firstImg.getSeries().getStudy() != null) {
-                        String uid = firstImg.getSeries().getStudy().getPatientUID();
-                        if (uid != null)
-                            patientUIDs.add(uid);
+        backgroundLoader.submit(() -> {
+            try {
+                com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
+                java.util.Set<String> patientUIDs = new java.util.HashSet<>();
+                synchronized (fileList) {
+                    for (java.util.List<com.jj.dicomviewer.model.DicomImage> list : fileList) {
+                        if (list != null && !list.isEmpty()) {
+                            com.jj.dicomviewer.model.DicomImage firstImg = list.get(0);
+                            if (firstImg != null && firstImg.getSeries() != null
+                                    && firstImg.getSeries().getStudy() != null) {
+                                String uid = firstImg.getSeries().getStudy().getPatientUID();
+                                if (uid != null)
+                                    patientUIDs.add(uid);
+                            }
+                        }
                     }
                 }
+                if (referenceSeries.getStudy() != null) {
+                    String uid = referenceSeries.getStudy().getPatientUID();
+                    if (uid != null)
+                        patientUIDs.add(uid);
+                }
+
+                java.util.Set<com.jj.dicomviewer.model.DicomStudy> studySet = new java.util.LinkedHashSet<>();
+                for (String uid : patientUIDs) {
+                    studySet.addAll(db.getStudiesByPatientUID(uid));
+                }
+
+                java.util.List<com.jj.dicomviewer.model.DicomStudy> allStudiesList = new java.util.ArrayList<>(
+                        studySet);
+                allStudiesList.sort((a, b) -> {
+                    if (a.getDate() == null)
+                        return 1;
+                    if (b.getDate() == null)
+                        return -1;
+                    return b.getDate().compareTo(a.getDate());
+                });
+
+                for (com.jj.dicomviewer.model.DicomStudy study : allStudiesList) {
+                    db.loadSeriesForStudyIfNeeded(study);
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        updateMatrixUI(allStudiesList, referenceSeries);
+                    } finally {
+                        isBuildingMatrix = false;
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                isBuildingMatrix = false;
             }
-        }
-
-        // currentSeriesからも取得 (念のため)
-        if (currentSeries != null && currentSeries.getStudy() != null) {
-            String uid = currentSeries.getStudy().getPatientUID();
-            if (uid != null)
-                patientUIDs.add(uid);
-        }
-
-        java.util.Set<com.jj.dicomviewer.model.DicomStudy> studySet = new java.util.LinkedHashSet<>();
-        for (String uid : patientUIDs) {
-            studySet.addAll(db.getStudiesByPatientUID(uid));
-        }
-
-        java.util.List<com.jj.dicomviewer.model.DicomStudy> allStudies = new java.util.ArrayList<>(studySet);
-        // スタディ日でソート（降順）
-        allStudies.sort((a, b) -> {
-            if (a.getDate() == null)
-                return 1;
-            if (b.getDate() == null)
-                return -1;
-            return b.getDate().compareTo(a.getDate());
         });
+    }
 
-        // HOROS-20240407準拠: 複数の患者が含まれているか判定
+    private void updateMatrixUI(java.util.List<com.jj.dicomviewer.model.DicomStudy> allStudies,
+            com.jj.dicomviewer.model.DicomSeries referenceSeries) {
+        previewMatrix.removeAll();
+
         boolean multiplePatients = false;
         if (!allStudies.isEmpty()) {
             String firstPatientUID = allStudies.get(0).getPatientUID();
@@ -1205,14 +1229,11 @@ public class ViewerController extends JFrame {
             }
         }
 
-        // 表示件数制限 (パフォーマンス向上のため)
-        // シリーズ数が極端に多い場合、描画負荷が非常に高くなるため制限を設ける
-        // 1000から250に減らして、サイドパネルの描画負荷を軽減する (Swingの制限)
         final int MAX_DISPLAY_SERIES = 250;
         int displayedSeriesCount = 0;
         boolean limitationReached = false;
-
         ThumbnailButton targetButton = null;
+        com.jj.dicomviewer.model.DicomDatabase db = com.jj.dicomviewer.model.DicomDatabase.defaultDatabase();
 
         for (com.jj.dicomviewer.model.DicomStudy study : allStudies) {
             if (displayedSeriesCount >= MAX_DISPLAY_SERIES) {
@@ -1220,25 +1241,16 @@ public class ViewerController extends JFrame {
                 break;
             }
 
-            // シリーズ情報を事前に読み込んでシリーズ数を確定させる
-            // スタディ情報を構築する前に1回だけ読み込む
-            db.loadSeriesForStudyIfNeeded(study);
             int seriesCount = (study.getSeries() != null) ? study.getSeries().size() : 0;
-
-            // スタディセルの作成
             ThumbnailButton studyButton = new ThumbnailButton(this);
             studyButton.setRepresentedObject(study);
 
-            // スタディ情報をテキストに設定 (Horos準拠の複数行構成)
             StringBuilder studyInfo = new StringBuilder();
-            studyInfo.append(allStudies.indexOf(study) + 1).append("\n"); // Index (空行なし)
-
+            studyInfo.append(allStudies.indexOf(study) + 1).append("\n");
             if (multiplePatients) {
-                // HOROS-20240407準拠: 複数患者の場合はPatient Nameを1段目に表示
                 studyInfo.append(study.getName() != null ? study.getName() : "Anonymous").append("\n");
                 studyInfo.append(study.getStudyName() != null ? study.getStudyName() : "No Description").append("\n");
             } else {
-                // 通常はStudy Description
                 studyInfo.append(study.getStudyName() != null ? study.getStudyName() : "No Description").append("\n");
             }
 
@@ -1250,9 +1262,8 @@ public class ViewerController extends JFrame {
             }
 
             studyInfo.append(study.getModality() != null ? study.getModality() : "??")
-                    .append(": ").append(seriesCount).append(seriesCount > 1 ? " series" : " series").append("\n");
+                    .append(": ").append(seriesCount).append(" series").append("\n");
 
-            // Show Series / Hide series の表記 (Horos準拠)
             if (collapsedStudies.contains(study)) {
                 studyInfo.append("Show Series");
             } else {
@@ -1261,22 +1272,17 @@ public class ViewerController extends JFrame {
 
             studyButton.setText(studyInfo.toString());
 
-            // 自スタディか他スタディかで背景色を変える (Horos準拠)
-            if (study.getStudyInstanceUID().equals(currentSeries.getStudy().getStudyInstanceUID())) {
-                studyButton.setBackground(new Color(230, 230, 230)); // 標準に近い色
+            if (study.getStudyInstanceUID().equals(referenceSeries.getStudy().getStudyInstanceUID())) {
+                studyButton.setBackground(new Color(230, 230, 230));
             } else {
                 studyButton.setBackground(ThumbnailButton.DIFFERENT_STUDY_COLOR);
             }
 
             previewMatrix.add(studyButton);
 
-            // スタディが折りたたまれていない場合、シリーズを表示
             if (!collapsedStudies.contains(study)) {
-                // すでに上記で読み込み済み
                 java.util.Set<com.jj.dicomviewer.model.DicomSeries> seriesSet = study.getSeries();
-
                 if (seriesSet != null) {
-                    // シリーズ番号でソート
                     java.util.List<com.jj.dicomviewer.model.DicomSeries> sortedSeries = new java.util.ArrayList<>(
                             seriesSet);
                     sortedSeries.sort((a, b) -> {
@@ -1293,27 +1299,25 @@ public class ViewerController extends JFrame {
                         ThumbnailButton button = new ThumbnailButton(this);
                         button.setRepresentedObject(series);
 
-                        // HOROS-20240407準拠: サムネイル画像を設定
                         byte[] thumbnailData = series.getThumbnail();
                         if (thumbnailData != null && thumbnailData.length > 0) {
                             try {
-                                ImageIcon icon = new ImageIcon(thumbnailData);
-                                button.setIcon(icon);
+                                button.setIcon(new ImageIcon(thumbnailData));
                             } catch (Exception e) {
-                                // 読み込み失敗時は無視
                             }
                         } else {
-                            // データベースにない場合、シリーズの最初の画像から動的に生成
-                            java.util.Set<com.jj.dicomviewer.model.DicomImage> images = series.getImages();
-                            if (images != null && !images.isEmpty()) {
-                                com.jj.dicomviewer.model.DicomImage firstImage = images.iterator().next();
-                                if (firstImage != null) {
-                                    final ThumbnailButton btn = button;
-                                    thumbnailLoader.submit(() -> {
-                                        try {
+                            int imageCount = series.getNumberOfImages() != null ? series.getNumberOfImages() : 0;
+                            if (imageCount > 0) {
+                                final ThumbnailButton btn = button;
+                                final com.jj.dicomviewer.model.DicomSeries finalSeries = series;
+                                thumbnailLoader.submit(() -> {
+                                    try {
+                                        db.loadImagesForSeriesIfNeeded(finalSeries);
+                                        java.util.Set<com.jj.dicomviewer.model.DicomImage> images = finalSeries
+                                                .getImages();
+                                        if (images != null && !images.isEmpty()) {
                                             com.jj.dicomviewer.model.DicomPix pix = new com.jj.dicomviewer.model.DicomPix(
-                                                    firstImage);
-                                            // 100x120のサムネイルを生成
+                                                    images.iterator().next());
                                             java.awt.image.BufferedImage thumb = pix.generateThumbnail(100, 120);
                                             if (thumb != null) {
                                                 SwingUtilities.invokeLater(() -> {
@@ -1321,48 +1325,38 @@ public class ViewerController extends JFrame {
                                                     btn.repaint();
                                                 });
                                             }
-                                        } catch (Exception e) {
-                                            // 生成失敗時は無視
                                         }
-                                    });
-                                }
+                                    } catch (Exception e) {
+                                    }
+                                });
                             }
                         }
 
-                        // シリーズ情報をテキストに設定 (3行: 名前\n日時\n画像数)
-                        // HOROS-20240407準拠: 1段目はSeries.name (seriesDescription)
                         StringBuilder seriesInfo = new StringBuilder();
-                        String seriesName = (series.getName() != null && !series.getName().isEmpty()) ? series.getName()
-                                : "Unnamed";
-                        seriesInfo.append(seriesName);
-
-                        seriesInfo.append("\n");
+                        seriesInfo.append((series.getName() != null && !series.getName().isEmpty()) ? series.getName()
+                                : "Unnamed").append("\n");
                         if (series.getDate() != null) {
                             seriesInfo.append(series.getDate().toLocalDate().toString());
                         } else {
                             seriesInfo.append("No Date");
                         }
-
                         seriesInfo.append("\n");
-                        int count = series.getNumberOfImages() != null ? series.getNumberOfImages() : 0;
-                        seriesInfo.append(count).append(" Images");
+                        seriesInfo.append(series.getNumberOfImages() != null ? series.getNumberOfImages() : 0)
+                                .append(" Images");
 
                         button.setText(seriesInfo.toString());
 
-                        // HOROS-20240407準拠: 自スタディか他スタディかで背景色を変える
                         if (series.getStudy().getStudyInstanceUID()
-                                .equals(currentSeries.getStudy().getStudyInstanceUID())) {
-                            button.setBackground(new Color(230, 230, 230)); // 標準色
+                                .equals(referenceSeries.getStudy().getStudyInstanceUID())) {
+                            button.setBackground(new Color(230, 230, 230));
                         } else {
-                            button.setBackground(ThumbnailButton.DIFFERENT_STUDY_COLOR); // 他スタディは暗く (0.55 gray)
+                            button.setBackground(ThumbnailButton.DIFFERENT_STUDY_COLOR);
                         }
 
-                        // 現在のシリーズをハイライト (Horos準拠: 鮭色)
-                        if (series.getSeriesInstanceUID().equals(currentSeries.getSeriesInstanceUID())) {
+                        if (series.getSeriesInstanceUID().equals(referenceSeries.getSeriesInstanceUID())) {
                             button.setBackground(ThumbnailButton.SELECTED_ITEM_COLOR);
                             targetButton = button;
                         } else {
-                            // HOROS-20240407準拠: 他のビューワーで開かれているシリーズを黄色にハイライト
                             boolean isOpenInOtherViewer = false;
                             synchronized (displayedViewers) {
                                 for (ViewerController v : displayedViewers) {
@@ -1386,9 +1380,8 @@ public class ViewerController extends JFrame {
                             break;
                         }
                     }
-                    if (limitationReached) {
+                    if (limitationReached)
                         break;
-                    }
                 }
             }
         }
@@ -1403,7 +1396,6 @@ public class ViewerController extends JFrame {
         previewMatrix.revalidate();
         previewMatrix.repaint();
 
-        // HOROS-20240407準拠: 選択されたシリーズまでスクロール
         if (targetButton != null) {
             final ThumbnailButton finalButton = targetButton;
             SwingUtilities.invokeLater(() -> {

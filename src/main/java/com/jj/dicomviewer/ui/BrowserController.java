@@ -2417,9 +2417,11 @@ public class BrowserController extends JFrame {
                     // HOROS-20240407準拠: DicomStudyが選択された場合、Seriesを遅延読み込み
                     if (item instanceof com.jj.dicomviewer.model.DicomStudy) {
                         com.jj.dicomviewer.model.DicomStudy study = (com.jj.dicomviewer.model.DicomStudy) item;
-
                         database.loadSeriesForStudyIfNeeded(study);
-
+                    } else if (item instanceof com.jj.dicomviewer.model.DicomSeries) {
+                        // HOROS-20240407準拠: DicomSeriesが選択された場合、Imageを遅延読み込み
+                        com.jj.dicomviewer.model.DicomSeries series = (com.jj.dicomviewer.model.DicomSeries) item;
+                        database.loadImagesForSeriesIfNeeded(series);
                     }
 
                     if (animationSlider != null) {
@@ -2454,21 +2456,16 @@ public class BrowserController extends JFrame {
                     List<Object> files = imagesArray(item, oFirstForFirst);
 
                     // HOROS-20240407準拠: サムネイル配列を初期化 (5081-5083行目)
-                    synchronized (previewPixThumbnails) {
-                        // HOROS-20240407準拠: for (unsigned int i = 0; i < [files count]; i++)
-                        // [previewPixThumbnails addObject:notFoundImage]; (5083行目)
-                        // HOROS-20240407準拠: clear()は呼ばれず、直接addObject:notFoundImageを追加
-                        // ただし、Javaでは毎回新しい選択が行われるため、clear()が必要（HOROS-20240407では既存の要素を上書きする）
-                        previewPixThumbnails.clear();
+                    synchronized (this) {
+                        // HOROS-20240407準拠: 既存のスレッドとの競合を防ぐため、新しいリストを作成
+                        // これにより、古い読み込みスレッドが旧リストの参照(context)と比較して更新を停止する
+                        previewPixThumbnails = Collections.synchronizedList(new ArrayList<>());
                         for (int i = 0; i < files.size(); i++) {
                             previewPixThumbnails.add(notFoundImage);
                         }
                         // HOROS-20240407準拠:
                         // previewPixも同様に初期化（HOROS-20240407では明示的に初期化されていないが、matrixLoadIconsで使用される）
-                        if (previewPix == null) {
-                            previewPix = Collections.synchronizedList(new ArrayList<>());
-                        }
-                        previewPix.clear();
+                        previewPix = Collections.synchronizedList(new ArrayList<>());
                         for (int i = 0; i < files.size(); i++) {
                             previewPix.add(null);
                         }
@@ -2713,6 +2710,10 @@ public class BrowserController extends JFrame {
         if (parent instanceof com.jj.dicomviewer.model.DicomSeries) {
             com.jj.dicomviewer.model.DicomSeries series = (com.jj.dicomviewer.model.DicomSeries) parent;
             try {
+                // HOROS-20240407準拠: データをロード
+                if (database != null) {
+                    database.loadImagesForSeriesIfNeeded(series);
+                }
                 // HOROS-20240407準拠: NSArray *sortedArray = [item sortedImages];
                 return new ArrayList<>(series.sortedImages());
             } catch (Exception e) {
@@ -2812,6 +2813,10 @@ public class BrowserController extends JFrame {
 
                 // HOROS-20240407準拠: for( id i in childrenArray) (3720行目)
                 for (Object i : childrenArray) {
+                    if (database != null && i instanceof com.jj.dicomviewer.model.DicomSeries) {
+                        database.loadImagesForSeriesIfNeeded((com.jj.dicomviewer.model.DicomSeries) i);
+                    }
+
                     // HOROS-20240407準拠: int whichObject = preferredObject; (3722行目)
                     int whichObject = currentPreferredObject;
 
@@ -3832,12 +3837,9 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (void) matrixInit:(long) noOfImages (9391行目)
      */
     private void matrixInit(long noOfImages) {
-        synchronized (previewPixThumbnails) {
-            if (previewPix != null)
-                previewPix.clear();
-            if (previewPixThumbnails != null)
-                previewPixThumbnails.clear();
-        }
+        // HOROS-20240407準拠: インスタンスを新しくして古いスレッドからの書き込みを防止する
+        previewPix = Collections.synchronizedList(new ArrayList<>());
+        previewPixThumbnails = Collections.synchronizedList(new ArrayList<>());
 
         synchronized (this) {
             setDCMDone = false;
@@ -5011,7 +5013,7 @@ public class BrowserController extends JFrame {
 
                                 if (curItem != null && (pix != null
                                         || (curItem instanceof com.jj.dicomviewer.model.DicomSeries
-                                                && thumb != null && thumb != notFoundImage))) {
+                                                && thumb != null))) {
                                     // HOROS-20240407準拠: [self matrixNewIcon:i :[matrixViewArray objectAtIndex: i]];
                                     // (9745行目)
 
@@ -7341,6 +7343,16 @@ public class BrowserController extends JFrame {
         cprViewerItem.addActionListener(e -> cprViewer(null));
         viewer3DMenu.add(cprViewerItem);
 
+        // 3D MIP
+        javax.swing.JMenuItem mipViewerItem = new javax.swing.JMenuItem("3D MIP");
+        mipViewerItem.addActionListener(e -> MIPViewer(null));
+        viewer3DMenu.add(mipViewerItem);
+
+        // 3D Volume Rendering
+        javax.swing.JMenuItem vrViewerItem = new javax.swing.JMenuItem("3D Volume Rendering");
+        vrViewerItem.addActionListener(e -> VRViewer(null));
+        viewer3DMenu.add(vrViewerItem);
+
         // 2D Orthogonal MPR
         // HOROS-20240407準拠: MainMenu.xib 1384行目
         javax.swing.JMenuItem orthogonalMPRItem = new javax.swing.JMenuItem("2D Orthogonal MPR");
@@ -7349,29 +7361,10 @@ public class BrowserController extends JFrame {
 
         viewer3DMenu.addSeparator();
 
-        // 3D MIP
-        // HOROS-20240407準拠: MainMenu.xib 1392行目
-        javax.swing.JMenuItem mipViewerItem = new javax.swing.JMenuItem("3D MIP");
-        mipViewerItem.addActionListener(e -> VRViewer(null));
-        viewer3DMenu.add(mipViewerItem);
-
-        // 3D Volume Rendering
-        // HOROS-20240407準拠: MainMenu.xib 1397行目
-        javax.swing.JMenuItem volumeRenderingItem = new javax.swing.JMenuItem("3D Volume Rendering");
-        volumeRenderingItem.addActionListener(e -> VRViewer(null));
-        viewer3DMenu.add(volumeRenderingItem);
-
-        // 3D Surface Rendering
-        // HOROS-20240407準拠: MainMenu.xib 1402行目
+        // HOROS-20240407準拠: 3D Surface Rendering (MainMenu.xib 1402行目)
         javax.swing.JMenuItem surfaceRenderingItem = new javax.swing.JMenuItem("3D Surface Rendering");
         surfaceRenderingItem.addActionListener(e -> SRViewer(null));
         viewer3DMenu.add(surfaceRenderingItem);
-
-        // 3D Endoscopy
-        // HOROS-20240407準拠: MainMenu.xib 1407行目
-        javax.swing.JMenuItem endoscopyItem = new javax.swing.JMenuItem("3D Endoscopy");
-        endoscopyItem.addActionListener(e -> endoscopyViewer(null));
-        viewer3DMenu.add(endoscopyItem);
 
         viewer3DMenu.addSeparator();
 
@@ -8295,6 +8288,13 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) mprViewer: (id) sender
      */
     public void mprViewer(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        if (!viewers.isEmpty()) {
+            ViewerController active = viewers.get(viewers.size() - 1);
+            MPRController.openMPR(active);
+        } else {
+            JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first to launch 3D MPR.");
+        }
     }
 
     /**
@@ -8302,6 +8302,46 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) cprViewer: (id) sender
      */
     public void cprViewer(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        if (viewers.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
+            return;
+        }
+
+        ViewerController active = viewers.get(viewers.size() - 1);
+        DCMView dcmView = active.getImageView();
+
+        // 選ばれているROIまたはパスを探す
+        com.jj.dicomviewer.model.ROI curvedRoi = null;
+        for (com.jj.dicomviewer.model.DicomPix pix : dcmView.getDcmPixList()) {
+            for (com.jj.dicomviewer.model.ROI roi : pix.getROIs()) {
+                if (roi.getType() == DCMView.ToolMode.tCurvedROI) {
+                    curvedRoi = roi;
+                    break;
+                }
+            }
+            if (curvedRoi != null)
+                break;
+        }
+
+        if (curvedRoi != null) {
+            final com.jj.dicomviewer.model.ROI finalRoi = curvedRoi;
+            SwingUtilities.invokeLater(() -> {
+                // 統合された MPRController を使用するように修正 (古い CPRController は無視)
+                MPRController mpr = new MPRController(active, MPRController.LayoutType.CURVED_MPR);
+                List<double[]> pts = new java.util.ArrayList<>();
+                for (com.jj.dicomviewer.model.ROI.Point3D p : finalRoi.getPoints3D()) {
+                    pts.add(new double[] { p.x, p.y, p.z });
+                }
+                mpr.setCurvePoints(pts);
+                mpr.setVisible(true);
+            });
+        } else {
+            // 見つからない場合はツールを切り替えて案内 (MPR側でも描画可能にする)
+            DCMView.currentTool = DCMView.ToolMode.tCurvedROI;
+            JOptionPane.showMessageDialog(this,
+                    "Curved MPR requires a Curved ROI path.\nThe 'Curved' tool is now selected. Please draw a path on the image, then try again.");
+        }
     }
 
     /**
@@ -8328,6 +8368,19 @@ public class BrowserController extends JFrame {
         List<ViewerController> viewers = ViewerController.getDisplayedViewers();
         if (!viewers.isEmpty()) {
             ViewerController active = viewers.get(viewers.size() - 1);
+            Viewer3DController.openVR(active);
+        } else {
+            JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
+        }
+    }
+
+    /**
+     * MIPビューア (追加)
+     */
+    public void MIPViewer(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        if (!viewers.isEmpty()) {
+            ViewerController active = viewers.get(viewers.size() - 1);
             Viewer3DController.openMIP(active);
         } else {
             JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
@@ -8339,6 +8392,13 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) SRViewer: (id) sender
      */
     public void SRViewer(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        if (!viewers.isEmpty()) {
+            ViewerController active = viewers.get(viewers.size() - 1);
+            Viewer3DController.openISO(active);
+        } else {
+            JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
+        }
     }
 
     /**

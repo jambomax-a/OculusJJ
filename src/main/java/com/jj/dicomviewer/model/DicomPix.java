@@ -31,6 +31,16 @@ public class DicomPix {
 
     private Path path;
     private int imageIndex;
+    private int sliceIndex;
+
+    public int getSliceIndex() {
+        return sliceIndex;
+    }
+
+    public void setSliceIndex(int sliceIndex) {
+        this.sliceIndex = sliceIndex;
+    }
+
     private int numberOfImages;
     private int frameNumber;
     private int seriesId;

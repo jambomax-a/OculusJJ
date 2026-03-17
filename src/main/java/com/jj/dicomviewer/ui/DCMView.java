@@ -136,6 +136,28 @@ public class DCMView extends JPanel {
         }
     }
 
+    public ViewerController getController() {
+        java.awt.Component c = this;
+        while (c != null) {
+            if (c instanceof ViewerController) {
+                return (ViewerController) c;
+            }
+            c = c.getParent();
+        }
+        return null;
+    }
+
+    private void openCurvedMPR(com.jj.dicomviewer.model.ROI roi) {
+        ViewerController vc = getController();
+        if (vc != null) {
+            SwingUtilities.invokeLater(() -> {
+                CPRController cpr = new CPRController(vc);
+                cpr.setCurve(roi.getPoints3D());
+                cpr.setVisible(true);
+            });
+        }
+    }
+
     // HOROS-20240407準拠: 同期モード定数 (DCMView.h 72行目付近相当)
     public static final int syncroOFF = 0;
     public static final int syncroABS = 1;
@@ -239,7 +261,8 @@ public class DCMView extends JPanel {
         tBonesRemovalTool4, // 骨除去ツール4
         tRepulsorTool4, // リパルサーツール4
         t3DPointTool4, // 3Dポイントツール4
-        t3DPolygonTool4 // 3D多角形ツール4
+        t3DPolygonTool4, // 3D多角形ツール4
+        tCurvedROI // Curved MPR ROI (HOROS-20240407)
     }
 
     // HOROS-20240407準拠: 現在のツール（デフォルトはWL/WW）
@@ -257,7 +280,7 @@ public class DCMView extends JPanel {
                 tool == ToolMode.tArrow || tool == ToolMode.tText || tool == ToolMode.tOPolygon
                 || tool == ToolMode.tCPolygon || tool == ToolMode.tROI || tool == ToolMode.tPencil
                 || tool == ToolMode.t2DPoint || tool == ToolMode.tAxis || tool == ToolMode.tDynamicAngle
-                || tool == ToolMode.tPerpendicular || tool == ToolMode.tBrush;
+                || tool == ToolMode.tPerpendicular || tool == ToolMode.tBrush || tool == ToolMode.tCurvedROI;
     }
 
     /**
@@ -301,6 +324,10 @@ public class DCMView extends JPanel {
                     .activeLocalDatabase();
             if (db != null) {
                 db.saveROI(newRoi, sopUID, curDCM.getFrameNumber());
+            }
+
+            if (newRoi.getType() == ToolMode.tCurvedROI) {
+                openCurvedMPR(newRoi);
             }
         }
         newRoi = null;
@@ -409,10 +436,19 @@ public class DCMView extends JPanel {
                 // --- ROI作成中のマウス移動 (追尾点) ---
                 if (newRoi != null && (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
                         currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
-                        currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular)) {
+                        currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular
+                        || currentTool == ToolMode.tCurvedROI)) {
                     if (imgPt != null && newRoi.getPoints().size() > 0) {
                         // マウスカーソルの位置に「最後の点」を更新し続ける
                         newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
+
+                        if (currentTool == ToolMode.tCurvedROI && curDCM != null) {
+                            double px = curDCM.getOriginX() + imgPt.x * curDCM.getPixelSpacingX();
+                            double py = curDCM.getOriginY() + imgPt.y * curDCM.getPixelSpacingY();
+                            double pz = curDCM.getOriginZ();
+                            newRoi.updatePoint3D(newRoi.getPoints3D().size() - 1,
+                                    new com.jj.dicomviewer.model.ROI.Point3D(px, py, pz));
+                        }
                     }
                 }
 
@@ -474,7 +510,7 @@ public class DCMView extends JPanel {
                 }
 
                 // --- ROI作成中のドラッグ ---
-                if (newRoi != null && isROITool(currentTool)) {
+                if (newRoi != null && (isROITool(currentTool) || currentTool == ToolMode.tCurvedROI)) {
                     java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
                     if (imgPt != null) {
                         if (currentTool == ToolMode.tPencil) {
@@ -488,7 +524,21 @@ public class DCMView extends JPanel {
                             newRoi.setThickness(size);
                             newRoi.setEraseMode(isErase);
                             newRoi.addPoint(imgPt);
-                        } else if (newRoi.getPoints().size() >= 1) {
+                        } else if (currentTool == ToolMode.tCurvedROI) {
+                            // Curved MPR ROI: Dragging might move nodes, handle it like regular ROI
+                            if (newRoi.getPoints().size() >= 1) {
+                                newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
+                                // 3D座標も更新
+                                if (curDCM != null) {
+                                    double px = curDCM.getOriginX() + imgPt.x * curDCM.getPixelSpacingX();
+                                    double py = curDCM.getOriginY() + imgPt.y * curDCM.getPixelSpacingY();
+                                    double pz = curDCM.getOriginZ();
+                                    if (!newRoi.getPoints3D().isEmpty()) {
+                                        newRoi.getPoints3D().set(newRoi.getPoints3D().size() - 1,
+                                                new com.jj.dicomviewer.model.ROI.Point3D(px, py, pz));
+                                    }
+                                }
+                            }
                             // 最後の点を更新 (Measure, Oval, ROI, Arrow, Angle, Polygon等)
                             newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
                         }
@@ -733,7 +783,8 @@ public class DCMView extends JPanel {
                     } else if (newRoi != null
                             && (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
                                     currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
-                                    currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular)) {
+                                    currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular ||
+                                    currentTool == ToolMode.tCurvedROI)) {
 
                         // --- 終了判定 ---
                         // HOROS: 既存の点（特に直前の確定点）と非常に近い場所をクリックしたら終了
@@ -780,6 +831,18 @@ public class DCMView extends JPanel {
                             // まだ続くなら、現在の位置を確定させ、次の追尾用の点を同じ場所に重ねて追加
                             newRoi.updatePoint(currentPts.size() - 1, imgPt);
                             newRoi.addPoint(imgPt);
+
+                            // Curved MPR ROI の場合は3D座標も保存
+                            if (currentTool == ToolMode.tCurvedROI && curDCM != null) {
+                                double[] orient = curDCM.getOrientation();
+                                double px = curDCM.getOriginX() + (imgPt.x * curDCM.getPixelSpacingX() * orient[0])
+                                        + (imgPt.y * curDCM.getPixelSpacingY() * orient[3]);
+                                double py = curDCM.getOriginY() + (imgPt.x * curDCM.getPixelSpacingX() * orient[1])
+                                        + (imgPt.y * curDCM.getPixelSpacingY() * orient[4]);
+                                double pz = curDCM.getOriginZ() + (imgPt.x * curDCM.getPixelSpacingX() * orient[2])
+                                        + (imgPt.y * curDCM.getPixelSpacingY() * orient[5]);
+                                newRoi.addPoint3D(new com.jj.dicomviewer.model.ROI.Point3D(px, py, pz));
+                            }
                         }
 
                         repaint();
@@ -870,6 +933,23 @@ public class DCMView extends JPanel {
                                 newRoi.recalculatePerpendicular();
                                 selectedRoi = newRoi;
                                 completeNewRoi();
+                            } else if (currentTool == ToolMode.tCurvedROI) {
+                                // Curved MPR ROI: P0は即座に確定、P1は追尾用。3D座標も記録
+                                newRoi.addPoint(imgPt); // P0
+                                newRoi.addPoint(imgPt); // P1 (追尾)
+                                if (curDCM != null) {
+                                    double[] orient = curDCM.getOrientation();
+                                    double px = curDCM.getOriginX() + (imgPt.x * curDCM.getPixelSpacingX() * orient[0])
+                                            + (imgPt.y * curDCM.getPixelSpacingY() * orient[3]);
+                                    double py = curDCM.getOriginY() + (imgPt.x * curDCM.getPixelSpacingX() * orient[1])
+                                            + (imgPt.y * curDCM.getPixelSpacingY() * orient[4]);
+                                    double pz = curDCM.getOriginZ() + (imgPt.x * curDCM.getPixelSpacingX() * orient[2])
+                                            + (imgPt.y * curDCM.getPixelSpacingY() * orient[5]);
+
+                                    newRoi.addPoint3D(new com.jj.dicomviewer.model.ROI.Point3D(px, py, pz));
+                                    newRoi.addPoint3D(new com.jj.dicomviewer.model.ROI.Point3D(px, py, pz)); // P1用
+                                }
+                                newRoi.setIsSpline(true);
                             } else {
                                 // HOROS: mouseRoiDownIn 準拠
                                 if (currentTool == ToolMode.tAxis || currentTool == ToolMode.tDynamicAngle
