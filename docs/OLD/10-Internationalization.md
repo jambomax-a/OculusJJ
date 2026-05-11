@@ -9,7 +9,7 @@
 ### 2.1 ファイル配置
 
 ```
-JJDicomViewer/
+OculusJJ/
 ├── resources/
 │   └── i18n/
 │       ├── messages_ja.properties    # 日本語
@@ -21,7 +21,7 @@ JJDicomViewer/
 **messages_ja.properties**:
 ```properties
 # アプリケーション
-app.name=JJDicomViewer
+app.name=OculusJJ
 app.title=DICOMビューワー
 
 # メニュー
@@ -115,7 +115,7 @@ operation.window.level=ウィンドウレベル: SHIFT + 左クリック + ド�
 **messages_en.properties**:
 ```properties
 # Application
-app.name=JJDicomViewer
+app.name=OculusJJ
 app.title=DICOM Viewer
 
 # Menu

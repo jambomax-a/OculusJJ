@@ -35,7 +35,7 @@
 
 ```powershell
 .\gradlew.bat build
-java -jar build\libs\JJDicomViewer-1.0.0.jar
+java -jar build\libs\OculusJJ-1.0.0.jar
 ```
 
 ### 2. ログファイルを確認
@@ -47,9 +47,9 @@ java -jar build\libs\JJDicomViewer-1.0.0.jar
 アプリケーション起動時とDICOMファイルを開いた時に、以下のようなログが出力されます：
 
 ```
-HH:mm:ss.SSS [main] DEBUG com.jj.dicomviewer.dicom.DicomImageReader - DICOM画像の読み込みを開始: ...
-HH:mm:ss.SSS [main] INFO  com.jj.dicomviewer.dicom.DicomImageReader - ImageIOでDICOM画像を読み込みました: ... (512x512)
-HH:mm:ss.SSS [AWT-EventQueue-0] INFO  com.jj.dicomviewer.ui.ImageViewerPanel - DICOMファイルを読み込みました: ...
+HH:mm:ss.SSS [main] DEBUG com.oculus.jj.dicom.DicomImageReader - DICOM画像の読み込みを開始: ...
+HH:mm:ss.SSS [main] INFO  com.oculus.jj.dicom.DicomImageReader - ImageIOでDICOM画像を読み込みました: ... (512x512)
+HH:mm:ss.SSS [AWT-EventQueue-0] INFO  com.oculus.jj.ui.ImageViewerPanel - DICOMファイルを読み込みました: ...
 ```
 
 ### 4. 問題の特定
@@ -58,15 +58,15 @@ HH:mm:ss.SSS [AWT-EventQueue-0] INFO  com.jj.dicomviewer.ui.ImageViewerPanel - D
 
 - **画像が読み込まれていない場合**:
   ```
-  ERROR com.jj.dicomviewer.dicom.DicomImageReader - すべての方法でDICOM画像の読み込みに失敗しました
-  ERROR com.jj.dicomviewer.ui.ImageViewerPanel - 画像の読み込みに失敗しました
+  ERROR com.oculus.jj.dicom.DicomImageReader - すべての方法でDICOM画像の読み込みに失敗しました
+  ERROR com.oculus.jj.ui.ImageViewerPanel - 画像の読み込みに失敗しました
   ```
 
 - **画像は読み込まれているが表示されていない場合**:
   ```
-  INFO  com.jj.dicomviewer.dicom.DicomImageReader - ImageIOでDICOM画像を読み込みました: ... (512x512)
-  INFO  com.jj.dicomviewer.ui.ImageViewerPanel - 表示画像を更新しました: 512x512
-  DEBUG com.jj.dicomviewer.ui.ImageViewerPanel - paintComponent: 画像を描画します (512x512)
+  INFO  com.oculus.jj.dicom.DicomImageReader - ImageIOでDICOM画像を読み込みました: ... (512x512)
+  INFO  com.oculus.jj.ui.ImageViewerPanel - 表示画像を更新しました: 512x512
+  DEBUG com.oculus.jj.ui.ImageViewerPanel - paintComponent: 画像を描画します (512x512)
   ```
 
 ## よくある問題と対処法

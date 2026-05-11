@@ -242,7 +242,7 @@ Vet-SystemのDICOMビューワー部分も仕様からの独自ロジックで�
 ## 6. プロジェクト構造
 
 ```
-JJDicomViewer/
+OculusJJ/
 ├── docs/                    # ドキュメント
 │   ├── 00-Project-Overview.md
 │   ├── 01-Architecture-Overview.md

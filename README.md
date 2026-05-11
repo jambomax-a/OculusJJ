@@ -1,10 +1,10 @@
-# JJDicomViewer
+# OculusJJ
 
 HOROS-20240407を参考にしたJava SwingベースのDICOMビューワー
 
 ## 概要
 
-JJDicomViewerは、獣医向けDICOMビューワーとして開発されているJava Swingアプリケーションです。
+OculusJJは、獣医向けDICOMビューワーとして開発されているJava Swingアプリケーションです。
 HOROS-20240407のソースコードを詳細に解析し、Java Swingへの移植を行っています。
 
 ## 主な機能
@@ -59,25 +59,25 @@ HOROS-20240407のソースコードを詳細に解析し、Java Swingへの移�
 または、ビルドされたJARファイルを直接実行：
 
 ```bash
-java -jar build/libs/JJDicomViewer-1.0.0.jar
+java -jar build/libs/OculusJJ-1.0.0.jar
 ```
 
 ## プロジェクト構造
 
 ```
-JJDicomViewer/
+OculusJJ/
 ├── src/
 │   ├── main/
 │   │   ├── java/
-│   │   │   └── com/jj/dicomviewer/
-│   │   │       └── JJDicomViewerApp.java
+│   │   │   └── com/oculus/jj/
+│   │   │       └── OculusJJApp.java
 │   │   └── resources/
 │   │       └── i18n/
 │   │           ├── messages_ja.properties
 │   │           └── messages_en.properties
 │   └── test/
 │       └── java/
-│           └── com/jj/dicomviewer/
+│           └── com/oculus/jj/
 ├── docs/              # ドキュメント
 ├── build.gradle.kts   # Gradleビルド設定
 └── settings.gradle.kts

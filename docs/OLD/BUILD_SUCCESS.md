@@ -30,11 +30,11 @@ dcm4cheが必要になったら、以下のいずれかの方法で追加でき�
 ## 現在のプロジェクト構造
 
 ```
-JJDicomViewer/
+OculusJJ/
 ├── src/
 │   ├── main/
 │   │   ├── java/com/jj/dicomviewer/
-│   │   │   └── JJDicomViewerApp.java
+│   │   │   └── OculusJJApp.java
 │   │   └── resources/i18n/
 │   │       ├── messages_ja.properties
 │   │       └── messages_en.properties

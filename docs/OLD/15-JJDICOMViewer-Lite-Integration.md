@@ -354,7 +354,7 @@ JJDICOMViewer-Lite 使用方法
 
 ## 7. 参考資料
 
-- JJDICOMViewer-Liteソースコード: `C:\Users\jam11\JJDicomViewer-Lite\`
+- JJDICOMViewer-Liteソースコード: `C:\Users\jam11\OculusJJ-Lite\`
 - 画像表示パネル: `src/main/java/com/jjdicomviewer/ui/ImageViewerPanel.java`
 - 詳細は[画像表示・レンダリング](03-Image-Display-Rendering.md)を参照
 

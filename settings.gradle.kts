@@ -1,2 +1,2 @@
-rootProject.name = "JJDicomViewer"
+rootProject.name = "OculusJJ"
 

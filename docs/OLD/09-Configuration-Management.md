@@ -9,7 +9,7 @@
 ### 2.1 設定ファイルの場所
 
 ```
-JJDicomViewer/
+OculusJJ/
 ├── config/
 │   ├── application.properties    # アプリケーション設定
 │   └── database.properties       # データベース設定
@@ -23,12 +23,12 @@ JJDicomViewer/
 **application.properties**:
 ```properties
 # アプリケーション設定
-app.name=JJDicomViewer
+app.name=OculusJJ
 app.version=1.0.0
 
 # データフォルダ設定
-data.dicom.folder=${user.home}/JJDicomViewer/data/dicom
-data.database.folder=${user.home}/JJDicomViewer/data/database
+data.dicom.folder=${user.home}/OculusJJ/data/dicom
+data.database.folder=${user.home}/OculusJJ/data/database
 
 # UI設定
 ui.language=ja
@@ -116,9 +116,9 @@ public class ConfigurationManager {
         // デフォルト値の設定
         String userHome = System.getProperty("user.home");
         appProperties.setProperty("data.dicom.folder", 
-            Paths.get(userHome, "JJDicomViewer", "data", "dicom").toString());
+            Paths.get(userHome, "OculusJJ", "data", "dicom").toString());
         appProperties.setProperty("data.database.folder", 
-            Paths.get(userHome, "JJDicomViewer", "data", "database").toString());
+            Paths.get(userHome, "OculusJJ", "data", "database").toString());
         appProperties.setProperty("ui.language", "ja");
         appProperties.setProperty("ui.theme", "system");
         appProperties.setProperty("window.width", "1200");
@@ -192,7 +192,7 @@ public class ConfigurationManager {
     
     public void saveProperties() {
         try (OutputStream os = Files.newOutputStream(appPropertiesFile)) {
-            appProperties.store(os, "JJDicomViewer Application Properties");
+            appProperties.store(os, "OculusJJ Application Properties");
         } catch (IOException e) {
             throw new RuntimeException("Failed to save application properties", e);
         }
@@ -200,7 +200,7 @@ public class ConfigurationManager {
     
     public void saveDatabaseProperties() {
         try (OutputStream os = Files.newOutputStream(dbPropertiesFile)) {
-            dbProperties.store(os, "JJDicomViewer Database Properties");
+            dbProperties.store(os, "OculusJJ Database Properties");
         } catch (IOException e) {
             throw new RuntimeException("Failed to save database properties", e);
         }

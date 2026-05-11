@@ -3,7 +3,7 @@ plugins {
     application
 }
 
-group = "com.jj"
+group = "com.oculus"
 version = "1.0.0"
 
 java {
@@ -95,7 +95,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("com.jj.dicomviewer.JJDicomViewerApp")
+    mainClass.set("com.oculus.jj.OculusJJApp")
     applicationDefaultJvmArgs = listOf(
         "-Xmx4g", // HOROS-20240407準拠: 3D MPRやボリュームレンダリングのためにメモリを多めに割り当てる
         // Java 9+モジュールシステム: NativeImageReaderがFileImageInputStream.rafにアクセスするために必要

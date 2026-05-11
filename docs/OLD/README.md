@@ -215,7 +215,7 @@
 
 詳細は[画像表示・レンダリング](03-Image-Display-Rendering.md)を参照してください。
 
-**注意**: JJDICOMViewer-Liteの実装（`C:\Users\jam11\JJDicomViewer-Lite\src\main\java\com\jjdicomviewer\ui\ImageViewerPanel.java`）を基準としています。
+**注意**: JJDICOMViewer-Liteの実装（`C:\Users\jam11\OculusJJ-Lite\src\main\java\com\jjdicomviewer\ui\ImageViewerPanel.java`）を基準としています。
 
 ### キーボードショートカット（HOROS準拠）
 
