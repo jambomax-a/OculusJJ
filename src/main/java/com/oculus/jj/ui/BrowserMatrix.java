@@ -261,7 +261,7 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
                 selectCellWithTag(cellIndex);
                 // HOROS-20240407準拠: matrixPressedを呼び出す
                 // 注: selectCellWithTagを呼び出した後、selectedCell()が正しく動作するようにする
-                System.out.println("[DEBUG] BrowserMatrix.addActionListener() - cellIndex: " + cellIndex + ", cell: " + cell);
+                // // System.out.println("[DEBUG] BrowserMatrix.addActionListener() - cellIndex: " + cellIndex + ", cell: " + cell);
                 if (browserController != null) {
                     // 少し遅延させてからmatrixPressedを呼び出す（selectedCell()が正しく動作するように）
                     javax.swing.SwingUtilities.invokeLater(() -> {
@@ -353,11 +353,11 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
             // HOROS-20240407準拠: selectCellWithTag()でsetOpaque(true)とsetBackground()を設定しているため、
             // isOpaque()とgetBackground()をチェックする
             if (cell.isVisible() && cell.isOpaque() && cell.getBackground() != null) {
-                System.out.println("[DEBUG] BrowserMatrix.selectedCell() - found selected cell: " + cell + ", tag: " + cell.getClientProperty("tag"));
+                // // System.out.println("[DEBUG] BrowserMatrix.selectedCell() - found selected cell: " + cell + ", tag: " + cell.getClientProperty("tag"));
                 return cell;
             }
         }
-        System.out.println("[DEBUG] BrowserMatrix.selectedCell() - no selected cell found");
+        // // System.out.println("[DEBUG] BrowserMatrix.selectedCell() - no selected cell found");
         return null;
     }
     

@@ -153,7 +153,7 @@ public class DicomPix {
                 org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
                 if (fmi != null) {
                     String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
-                    System.out.println("[DEBUG] DicomPix.readHeader() - Transfer Syntax: " + tsuid);
+                    // // System.out.println("[DEBUG] DicomPix.readHeader() - Transfer Syntax: " + tsuid);
                 }
                 attrs = dis.readDataset();
                 dis.close();
@@ -174,8 +174,8 @@ public class DicomPix {
             this.height = attrs.getInt(org.dcm4che3.data.Tag.Rows, 0);
             this.isSigned = attrs.getInt(org.dcm4che3.data.Tag.PixelRepresentation, 0) == 1;
 
-            System.out.println("[DEBUG] DicomPix.readHeader() - dimensions: " + width + "x" + height + ", isSigned: "
-                    + isSigned + ", path: " + path);
+            // // System.out.println("[DEBUG] DicomPix.readHeader() - dimensions: " + width + "x" + height + ", isSigned: "
+// //                     + isSigned + ", path: " + path);
             this.modality = attrs.getString(org.dcm4che3.data.Tag.Modality);
             this.photometricInterpretation = attrs.getString(org.dcm4che3.data.Tag.PhotometricInterpretation,
                     "MONOCHROME2");
@@ -220,7 +220,7 @@ public class DicomPix {
             // VOI LUT
             org.dcm4che3.data.Sequence voiLutSeq = attrs.getSequence(org.dcm4che3.data.Tag.VOILUTSequence);
             if (voiLutSeq != null && !voiLutSeq.isEmpty()) {
-                System.out.println("[DEBUG] DicomPix.readHeader() - Found VOI LUT sequence. High priority.");
+                // // System.out.println("[DEBUG] DicomPix.readHeader() - Found VOI LUT sequence. High priority.");
                 // VOI LUTがある場合は、後で適用することを検討するか、BestFitを促す
             }
 
@@ -341,7 +341,7 @@ public class DicomPix {
             this.transferSyntaxUID = attrs.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
 
         } catch (Exception e) {
-            logger.error("readHeader error: {}", e.getMessage());
+            // // logger.error("readHeader error: {}", e.getMessage());
         }
     }
 
@@ -357,7 +357,7 @@ public class DicomPix {
             this.path = Paths.get(path);
         } else {
             this.path = null;
-            logger.warn("DicomPix constructor: path is null");
+            // // logger.warn("DicomPix constructor: path is null");
         }
         this.imageIndex = imageIndex;
         this.numberOfImages = numberOfImages;
@@ -483,22 +483,22 @@ public class DicomPix {
             return; // 既に読み込み済み
         }
         String absolutePath = (path != null ? path.toAbsolutePath().toString() : "null");
-        System.out.println("[DEBUG] DicomPix.loadImage() - attempting to load: " + absolutePath);
+        // // System.out.println("[DEBUG] DicomPix.loadImage() - attempting to load: " + absolutePath);
 
         if (path == null) {
-            logger.warn("loadImage: path is null");
+            // // logger.warn("loadImage: path is null");
             return;
         }
 
         java.io.File dicomFile = path.toFile();
         if (!dicomFile.exists()) {
-            System.err.println("[ERROR] DicomPix.loadImage() - DICOM file not found at: " + absolutePath);
-            logger.warn("loadImage: DICOM file not found: {}", absolutePath);
+            // // System.err.println("[ERROR] DicomPix.loadImage() - DICOM file not found at: " + absolutePath);
+            // // logger.warn("loadImage: DICOM file not found: {}", absolutePath);
             return;
         }
 
-        System.out.println("[DEBUG] DicomPix.loadImage() - File size: " + dicomFile.length() + " bytes");
-        logger.info("loadImage: Loading DICOM image from {}", absolutePath);
+        // // System.out.println("[DEBUG] DicomPix.loadImage() - File size: " + dicomFile.length() + " bytes");
+        // // logger.info("loadImage: Loading DICOM image from {}", absolutePath);
 
         try {
             // Weasisのアプローチを参考に、dcm4che3のImageIO APIを使用
@@ -516,9 +516,9 @@ public class DicomPix {
                 java.util.Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("DICOM");
                 if (readers.hasNext()) {
                     reader = readers.next();
-                    logger.info("Using ImageReader: {}", reader.getClass().getName());
+                    // // logger.info("Using ImageReader: {}", reader.getClass().getName());
                 } else {
-                    logger.warn("No ImageReader found for format DICOM, falling back to DicomImageReader");
+                    // // logger.warn("No ImageReader found for format DICOM, falling back to DicomImageReader");
                     reader = new DicomImageReader(null);
                 }
 
@@ -534,7 +534,7 @@ public class DicomPix {
                 int frameIndex = frameNumber >= 0 ? frameNumber : 0;
 
                 try {
-                    logger.debug("Attempting to read raw frame {} from DICOM file", frameIndex);
+                    // // logger.debug("Attempting to read raw frame {} from DICOM file", frameIndex);
                     // HOROS-20240407準拠: ライブラリによるPhotometric Interpretationの自動変換を避けるため
                     // read() ではなく readRaster() を使用して生のピクセルデータを取得する
                     java.awt.image.Raster raster = reader.readRaster(frameIndex, param);
@@ -582,10 +582,10 @@ public class DicomPix {
                         // 現在のWL/WWをメモリ内で適用
                         applyWLWWInMemory();
 
-                        logger.debug("Successfully loaded and processed raw DICOM raster: {}x{}", width, height);
+                        // // logger.debug("Successfully loaded and processed raw DICOM raster: {}x{}", width, height);
                     }
                 } catch (Exception e) {
-                    logger.warn("readRaster failed, falling back to read(): {}", e.getMessage());
+                    // // logger.warn("readRaster failed, falling back to read(): {}", e.getMessage());
                     BufferedImage rawImg = reader.read(frameIndex, param);
                     if (rawImg != null) {
                         width = rawImg.getWidth();
@@ -637,9 +637,9 @@ public class DicomPix {
                         width = bufferedImage.getWidth();
                         height = bufferedImage.getHeight();
                     }
-                    logger.debug("Loaded DICOM image: {}x{} from {}", width, height, path);
+                    // // logger.debug("Loaded DICOM image: {}x{} from {}", width, height, path);
                 } else {
-                    logger.warn("Failed to read DICOM image from {}", path);
+                    // // logger.warn("Failed to read DICOM image from {}", path);
                 }
 
             } finally {
@@ -650,13 +650,13 @@ public class DicomPix {
                     try {
                         iis.close();
                     } catch (IOException e) {
-                        logger.warn("Failed to close ImageInputStream", e);
+                        // // logger.warn("Failed to close ImageInputStream", e);
                     }
                 }
             }
 
         } catch (Exception e) {
-            logger.error("Error loading DICOM image from {}: {}", path, e.getMessage(), e);
+            // // logger.error("Error loading DICOM image from {}: {}", path, e.getMessage(), e);
             bufferedImage = null;
         }
     }
@@ -823,9 +823,9 @@ public class DicomPix {
         this.defaultWW = this.windowWidth;
         this.defaultWL = this.windowLevel;
 
-        System.out.println(String.format(
-                "[DEBUG] computeBestFit() - Absolute Min: %.1f, Max: %.1f -> WL: %.1f, WW: %.1f (isInverse: %b)",
-                min, max, windowLevel, windowWidth, isInverse));
+        // // System.out.println(String.format(
+// //                 "[DEBUG] computeBestFit() - Absolute Min: %.1f, Max: %.1f -> WL: %.1f, WW: %.1f (isInverse: %b)",
+// //                 min, max, windowLevel, windowWidth, isInverse));
     }
 
     /**
@@ -1077,7 +1077,7 @@ public class DicomPix {
 
             val = (r + g + b) / 3.0f;
         } catch (Exception e) {
-            logger.error("getPixelValueX: Error getting pixel value at ({}, {}): {}", x, y, e.getMessage());
+            // // logger.error("getPixelValueX: Error getting pixel value at ({}, {}): {}", x, y, e.getMessage());
             val = 0.0f;
         }
 
@@ -1089,13 +1089,13 @@ public class DicomPix {
      */
     public BufferedImage getThumbnailImage() {
         if (thumbnailImage == null) {
-            logger.debug("getThumbnailImage: Generating thumbnail for {}", path);
+            // // logger.debug("getThumbnailImage: Generating thumbnail for {}", path);
             thumbnailImage = generateThumbnail(105, 113); // BrowserMatrixのセルサイズに合わせる
             if (thumbnailImage == null) {
-                logger.warn("getThumbnailImage: Failed to generate thumbnail for {}", path);
+                // // logger.warn("getThumbnailImage: Failed to generate thumbnail for {}", path);
             } else {
-                logger.debug("getThumbnailImage: Generated thumbnail {}x{} for {}",
-                        thumbnailImage.getWidth(), thumbnailImage.getHeight(), path);
+                // // logger.debug("getThumbnailImage: Generated thumbnail {}x{} for {}",
+// //                         thumbnailImage.getWidth(), thumbnailImage.getHeight(), path);
             }
         }
         return thumbnailImage;

@@ -543,8 +543,8 @@ public class DicomImage {
             // 追加: DATABASE.noindex直下にファイルがあるかまず確認
             java.io.File directFile = new java.io.File(dbLocation, path);
             if (directFile.exists()) {
-                System.out.println(
-                        "[DEBUG] completePathForLocalPath - Found directly at: " + directFile.getAbsolutePath());
+                // // System.out.println(
+// //                         "[DEBUG] completePathForLocalPath - Found directly at: " + directFile.getAbsolutePath());
                 return directFile.getAbsolutePath();
             }
 
@@ -562,10 +562,10 @@ public class DicomImage {
             String resultPath = dbLocation + File.separator + val + File.separator + path;
             java.io.File resultFile = new java.io.File(resultPath);
             if (!resultFile.exists()) {
-                System.out.println("[DEBUG] completePathForLocalPath - File NOT found at subfolder: " + resultPath);
+                // // System.out.println("[DEBUG] completePathForLocalPath - File NOT found at subfolder: " + resultPath);
                 // フォールバック: DATABASE.noindex直下をもう一度確認（念のため絶対パス化して）
             } else {
-                System.out.println("[DEBUG] completePathForLocalPath - Found at subfolder: " + resultPath);
+                // // System.out.println("[DEBUG] completePathForLocalPath - Found at subfolder: " + resultPath);
             }
             return resultPath;
         } else {

@@ -76,8 +76,8 @@ public class OculusJJApp {
                 opencvPath = "opencv/build/java/x64/libopencv_javaXXX.so";
             }
         } else {
-            System.err.println("WARNING: Unsupported operating system: " + osName);
-            System.err.println("WARNING: OpenCV native library may not be available.");
+            // // System.err.println("WARNING: Unsupported operating system: " + osName);
+            // // System.err.println("WARNING: OpenCV native library may not be available.");
             return;
         }
 
@@ -89,7 +89,7 @@ public class OculusJJApp {
                 File libFile = new File(path, libraryFileName);
                 if (libFile.exists()) {
                     System.loadLibrary(libraryName);
-                    System.out.println("INFO: OpenCV native library loaded from: " + libFile.getAbsolutePath());
+                    // // System.out.println("INFO: OpenCV native library loaded from: " + libFile.getAbsolutePath());
                     return;
                 }
             }
@@ -116,7 +116,7 @@ public class OculusJJApp {
 
                         // 一時ファイルからロード
                         System.load(tempLib.toAbsolutePath().toString());
-                        System.out.println("INFO: OpenCV native library loaded from JAR resources: " + tryResourcePath);
+                        // // System.out.println("INFO: OpenCV native library loaded from JAR resources: " + tryResourcePath);
                         // 注意: 一時ファイルはアプリケーション終了時に削除される
                         tempLib.toFile().deleteOnExit();
                         tempDir.toFile().deleteOnExit();
@@ -128,14 +128,14 @@ public class OculusJJApp {
             }
 
             if (osName.contains("mac")) {
-                System.out.println("INFO: OpenCV native library not found in JAR resources (tried .dylib and .jnilib)");
+                // // System.out.println("INFO: OpenCV native library not found in JAR resources (tried .dylib and .jnilib)");
                 if (osArch.contains("aarch64") || osArch.contains("arm64")) {
-                    System.out.println(
-                            "INFO: Note: ARM64 native library may not be available in OculusJJ bundle.");
-                    System.out.println("INFO:       You can use x86_64 version with Rosetta 2, or build from source.");
+                    // // System.out.println(
+// //                             "INFO: Note: ARM64 native library may not be available in OculusJJ bundle.");
+                    // // System.out.println("INFO:       You can use x86_64 version with Rosetta 2, or build from source.");
                 }
             } else {
-                System.out.println("INFO: OpenCV native library not found in JAR resources: " + resourcePath);
+                // // System.out.println("INFO: OpenCV native library not found in JAR resources: " + resourcePath);
             }
 
             // System.loadLibraryを試みる（システムの標準的なライブラリ検索パスからも検索）
@@ -149,35 +149,35 @@ public class OculusJJApp {
             }
 
             // すべての方法で見つからない場合
-            System.out.println("INFO: OpenCV native library (" + libraryFileName + ") not found.");
+            // // System.out.println("INFO: OpenCV native library (" + libraryFileName + ") not found.");
             if (osName.contains("mac")) {
-                System.out.println("INFO: Note: macOS also supports .jnilib format (libopencv_java.jnilib)");
+                // // System.out.println("INFO: Note: macOS also supports .jnilib format (libopencv_java.jnilib)");
             }
-            System.out.println("INFO: To enable JPEG compressed DICOM image support, please:");
-            System.out.println("INFO: 1. Place " + libraryFileName + " in src/main/resources" + resourcePath);
+            // // System.out.println("INFO: To enable JPEG compressed DICOM image support, please:");
+            // // System.out.println("INFO: 1. Place " + libraryFileName + " in src/main/resources" + resourcePath);
             if (osName.contains("mac")) {
-                System.out.println("INFO:    Or place libopencv_java.jnilib in src/main/resources"
-                        + resourcePath.replace(".dylib", ".jnilib"));
+                // // System.out.println("INFO:    Or place libopencv_java.jnilib in src/main/resources"
+// //                         + resourcePath.replace(".dylib", ".jnilib"));
             }
-            System.out.println("INFO:    (The library will be automatically extracted from JAR at runtime)");
-            System.out.println("INFO: 2. Or download OpenCV and extract " + libraryFileName + " from " + opencvPath);
-            System.out.println("INFO: 3. Or place " + libraryFileName + " in a directory in java.library.path");
-            System.out.println("INFO:    or set -Djava.library.path=<path-to-" + libraryFileName + ">");
+            // // System.out.println("INFO:    (The library will be automatically extracted from JAR at runtime)");
+            // // System.out.println("INFO: 2. Or download OpenCV and extract " + libraryFileName + " from " + opencvPath);
+            // // System.out.println("INFO: 3. Or place " + libraryFileName + " in a directory in java.library.path");
+            // // System.out.println("INFO:    or set -Djava.library.path=<path-to-" + libraryFileName + ">");
             if (osName.contains("nix") || osName.contains("nux")) {
-                System.out.println("INFO:    or set LD_LIBRARY_PATH environment variable");
+                // // System.out.println("INFO:    or set LD_LIBRARY_PATH environment variable");
             } else if (osName.contains("mac")) {
-                System.out.println("INFO:    or set DYLD_LIBRARY_PATH environment variable");
+                // // System.out.println("INFO:    or set DYLD_LIBRARY_PATH environment variable");
             }
             System.out
                     .println("INFO: Note: OpenCV pre-built binaries for macOS/Linux may require building from source.");
-            System.out.println("INFO:       Alternatively, extract from Weasis binary release or use package manager.");
+            // // System.out.println("INFO:       Alternatively, extract from Weasis binary release or use package manager.");
         } catch (UnsatisfiedLinkError e) {
-            System.err.println(
-                    "WARNING: Failed to load OpenCV native library (" + libraryFileName + "): " + e.getMessage());
-            System.err.println(
-                    "WARNING: JPEG compressed DICOM images may not be readable without OpenCV native library.");
+            // // System.err.println(
+// //                     "WARNING: Failed to load OpenCV native library (" + libraryFileName + "): " + e.getMessage());
+            // // System.err.println(
+// //                     "WARNING: JPEG compressed DICOM images may not be readable without OpenCV native library.");
         } catch (Exception e) {
-            System.err.println("WARNING: Error loading OpenCV native library: " + e.getMessage());
+            // // System.err.println("WARNING: Error loading OpenCV native library: " + e.getMessage());
         }
     }
 
@@ -207,10 +207,10 @@ public class OculusJJApp {
             try {
                 org.dcm4che3.imageio.plugins.dcm.DicomImageReaderSpi dicomSpi = new org.dcm4che3.imageio.plugins.dcm.DicomImageReaderSpi();
                 registry.registerServiceProvider(dicomSpi, ImageReaderSpi.class);
-                System.out.println(
-                        "INFO: DicomImageReaderSpi registered successfully (JPEG Baseline, JPEG Lossless, JPEG-LS support)");
+                // // System.out.println(
+// //                         "INFO: DicomImageReaderSpi registered successfully (JPEG Baseline, JPEG Lossless, JPEG-LS support)");
             } catch (Exception e) {
-                System.err.println("WARNING: Failed to register DicomImageReaderSpi: " + e.getMessage());
+                // // System.err.println("WARNING: Failed to register DicomImageReaderSpi: " + e.getMessage());
             }
 
             // HOROS-20240407準拠: NativeJPEGImageReaderSpiを登録（JPEG圧縮画像 jpeg-cvをサポート）
@@ -229,7 +229,7 @@ public class OculusJJApp {
                 // ここでは、クラスが存在するかどうかのみ確認
                 opencvAvailable = true;
             } catch (ClassNotFoundException e) {
-                System.out.println("INFO: NativeImageReader not available. Will use Java-based JPEG decompressor.");
+                // // System.out.println("INFO: NativeImageReader not available. Will use Java-based JPEG decompressor.");
                 opencvAvailable = false;
             }
 
@@ -237,21 +237,21 @@ public class OculusJJApp {
                 try {
                     org.dcm4che3.opencv.NativeJPEGImageReaderSpi jpegCvSpi = new org.dcm4che3.opencv.NativeJPEGImageReaderSpi();
                     registry.registerServiceProvider(jpegCvSpi, ImageReaderSpi.class);
-                    System.out.println(
-                            "INFO: NativeJPEGImageReaderSpi registered successfully (JPEG compressed DICOM images - jpeg-cv)");
-                    System.out.println(
-                            "INFO: Note: OpenCV native library must be available at runtime for NativeImageReader to work.");
+                    // // System.out.println(
+// //                             "INFO: NativeJPEGImageReaderSpi registered successfully (JPEG compressed DICOM images - jpeg-cv)");
+                    // // System.out.println(
+// //                             "INFO: Note: OpenCV native library must be available at runtime for NativeImageReader to work.");
                 } catch (NoClassDefFoundError e) {
-                    System.err.println(
-                            "WARNING: weasis-core-img not found. JPEG compressed DICOM images (jpeg-cv) may not be readable.");
-                    System.err.println("WARNING: Will fall back to Java-based JPEG decompressor.");
+                    // // System.err.println(
+// //                             "WARNING: weasis-core-img not found. JPEG compressed DICOM images (jpeg-cv) may not be readable.");
+                    // // System.err.println("WARNING: Will fall back to Java-based JPEG decompressor.");
                 } catch (Exception e) {
-                    System.err.println("WARNING: Failed to register NativeJPEGImageReaderSpi: " + e.getMessage());
-                    System.err.println("WARNING: Will fall back to Java-based JPEG decompressor.");
+                    // // System.err.println("WARNING: Failed to register NativeJPEGImageReaderSpi: " + e.getMessage());
+                    // // System.err.println("WARNING: Will fall back to Java-based JPEG decompressor.");
                 }
             } else {
-                System.out.println(
-                        "INFO: NativeJPEGImageReaderSpi not registered. Will use Java-based JPEG decompressor for JPEG compressed DICOM images.");
+                // // System.out.println(
+// //                         "INFO: NativeJPEGImageReaderSpi not registered. Will use Java-based JPEG decompressor for JPEG compressed DICOM images.");
             }
 
             // HOROS-20240407準拠: RLE Lossless ImageReaderSpiを登録
@@ -261,12 +261,12 @@ public class OculusJJApp {
                 Class<?> rleSpiClass = Class.forName("org.dcm4che3.imageio.plugins.rle.RLEImageReaderSpi");
                 ImageReaderSpi rleSpi = (ImageReaderSpi) rleSpiClass.getDeclaredConstructor().newInstance();
                 registry.registerServiceProvider(rleSpi, ImageReaderSpi.class);
-                System.out.println("INFO: RLEImageReaderSpi registered successfully (RLE Lossless support)");
+                // // System.out.println("INFO: RLEImageReaderSpi registered successfully (RLE Lossless support)");
             } catch (ClassNotFoundException e) {
-                System.err.println(
-                        "WARNING: dcm4che-imageio-rle not found. RLE Lossless DICOM images may not be readable.");
+                // // System.err.println(
+// //                         "WARNING: dcm4che-imageio-rle not found. RLE Lossless DICOM images may not be readable.");
             } catch (Exception e) {
-                System.err.println("WARNING: Failed to register RLEImageReaderSpi: " + e.getMessage());
+                // // System.err.println("WARNING: Failed to register RLEImageReaderSpi: " + e.getMessage());
             }
 
             // HOROS-20240407準拠: JPEG2000 ImageReaderSpiを登録（OpenJPEGまたはKakadu）
@@ -285,7 +285,7 @@ public class OculusJJApp {
                             if ("jpeg2000".equalsIgnoreCase(formatName) || "jp2".equalsIgnoreCase(formatName)
                                     || "j2k".equalsIgnoreCase(formatName)) {
                                 jpeg2000ReaderFound = true;
-                                System.out.println("INFO: JPEG2000 ImageReader found: " + spi.getClass().getName());
+                                // // System.out.println("INFO: JPEG2000 ImageReader found: " + spi.getClass().getName());
                                 break;
                             }
                         }
@@ -295,44 +295,44 @@ public class OculusJJApp {
                     }
                 }
                 if (!jpeg2000ReaderFound) {
-                    System.err.println(
-                            "WARNING: JPEG2000 ImageReader not found. JPEG2000 Lossless/Lossy DICOM images may not be readable.");
-                    System.err.println("WARNING: To enable JPEG2000 support, add OpenJPEG or Kakadu library.");
+                    // // System.err.println(
+// //                             "WARNING: JPEG2000 ImageReader not found. JPEG2000 Lossless/Lossy DICOM images may not be readable.");
+                    // // System.err.println("WARNING: To enable JPEG2000 support, add OpenJPEG or Kakadu library.");
                 }
             } catch (Exception e) {
-                System.err.println("WARNING: Failed to check JPEG2000 ImageReader: " + e.getMessage());
+                // // System.err.println("WARNING: Failed to check JPEG2000 ImageReader: " + e.getMessage());
             }
 
             // 登録されたImageReaderを確認
-            System.out.println("INFO: ImageIO plugins initialized. Supported formats:");
+            // // System.out.println("INFO: ImageIO plugins initialized. Supported formats:");
             Iterator<ImageReaderSpi> readerSpis = registry.getServiceProviders(ImageReaderSpi.class, true);
             while (readerSpis.hasNext()) {
                 ImageReaderSpi spi = readerSpis.next();
                 String[] formatNames = spi.getFormatNames();
                 if (formatNames != null && formatNames.length > 0) {
-                    System.out.println("  - " + String.join(", ", formatNames) + " (" + spi.getClass().getName() + ")");
+                    // // System.out.println("  - " + String.join(", ", formatNames) + " (" + spi.getClass().getName() + ")");
                 }
             }
 
             // OpenCVネイティブライブラリのロード状態を確認
             try {
                 Class<?> nativeImageReaderClass = Class.forName("org.dcm4che3.opencv.NativeImageReader");
-                System.out.println("INFO: NativeImageReader class found: " + nativeImageReaderClass.getName());
+                // // System.out.println("INFO: NativeImageReader class found: " + nativeImageReaderClass.getName());
 
                 // ネイティブライブラリがロードされているか確認
                 try {
                     java.lang.reflect.Method loadMethod = nativeImageReaderClass.getMethod("isAvailable");
                     Object isAvailable = loadMethod.invoke(null);
-                    System.out.println("INFO: NativeImageReader.isAvailable() = " + isAvailable);
+                    // // System.out.println("INFO: NativeImageReader.isAvailable() = " + isAvailable);
                 } catch (Exception e) {
-                    System.out.println("INFO: Could not check NativeImageReader availability: " + e.getMessage());
+                    // // System.out.println("INFO: Could not check NativeImageReader availability: " + e.getMessage());
                 }
             } catch (ClassNotFoundException e) {
-                System.out.println(
-                        "WARNING: NativeImageReader class not found. JPEG compressed DICOM images may not be readable.");
+                // // System.out.println(
+// //                         "WARNING: NativeImageReader class not found. JPEG compressed DICOM images may not be readable.");
             }
         } catch (Exception e) {
-            System.err.println("WARNING: Failed to initialize ImageIO plugins: " + e.getMessage());
+            // // System.err.println("WARNING: Failed to initialize ImageIO plugins: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -353,7 +353,7 @@ public class OculusJJApp {
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             // NullPointerExceptionの場合はスタックトレースを表示（デバッグ用）
             if (e instanceof NullPointerException) {
-                System.err.println("NullPointerException in thread: " + t.getName());
+                // // System.err.println("NullPointerException in thread: " + t.getName());
                 e.printStackTrace();
                 return;
             }
@@ -364,7 +364,7 @@ public class OculusJJApp {
                 return;
             }
             // その他の例外はログ出力
-            System.err.println("Uncaught exception in thread: " + t.getName());
+            // // System.err.println("Uncaught exception in thread: " + t.getName());
             e.printStackTrace();
         });
 
@@ -381,7 +381,7 @@ public class OculusJJApp {
                     int port = manager.getLocalPort();
                     com.oculus.jj.model.DicomService.getInstance().startListener(port);
                 } catch (Exception e) {
-                    System.err.println("Failed to start DICOM Listener: " + e.getMessage());
+                    // // System.err.println("Failed to start DICOM Listener: " + e.getMessage());
                 }
 
                 // データベース接続を確実に閉じるためのシャットダウンフック
@@ -405,7 +405,7 @@ public class OculusJJApp {
 
             } catch (Exception e) {
                 // デバッグログを出力（エラー原因を特定するため）
-                System.err.println("Failed to start OculusJJ: " + e.getMessage());
+                // // System.err.println("Failed to start OculusJJ: " + e.getMessage());
                 e.printStackTrace();
                 System.exit(1);
             }

@@ -1,0 +1,17 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- デフォルトはINFO -->
+    <root level="ERROR">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+    <!-- DICOM関連のデバッグログを抑制 -->
+    <logger name="com.oculus.jj.model.DicomPix" level="ERROR" />
+    <logger name="com.oculus.jj.model.DicomDatabase" level="ERROR" />
+    <logger name="org.dcm4che3" level="ERROR" />
+</configuration>

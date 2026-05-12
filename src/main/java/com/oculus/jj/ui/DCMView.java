@@ -345,7 +345,7 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: PreferencesからANNOTATIONSを読み込む
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(DCMView.class);
         this.annotationType = prefs.getInt("ANNOTATIONS", annotBase);
-        System.out.println("[DEBUG] DCMView() - annotationType loaded from Preferences: " + annotationType);
+        // // System.out.println("[DEBUG] DCMView() - annotationType loaded from Preferences: " + annotationType);
 
         // HOROS-20240407準拠: コンポーネントサイズ変更時にscaleToFitを呼び出す
         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -1172,8 +1172,8 @@ public class DCMView extends JPanel {
      */
     public void setPixels(List<DicomPix> pixels, List<Object> files, List<?> rois, short firstImage, char level,
             boolean reset) {
-        System.out.println("[DEBUG] DCMView.setPixels() called - pixels: " + (pixels != null ? pixels.size() : "null")
-                + ", firstImage: " + firstImage + ", reset: " + reset);
+        // // System.out.println("[DEBUG] DCMView.setPixels() called - pixels: " + (pixels != null ? pixels.size() : "null")
+// //                 + ", firstImage: " + firstImage + ", reset: " + reset);
         synchronized (drawLock) {
             try {
                 // HOROS-20240407準拠: DCMView.m 2190行目 - self.curDCM = nil;
@@ -1234,9 +1234,9 @@ public class DCMView extends JPanel {
                 }
 
                 // HOROS-20240407準拠: DCMView.m 2249行目 - [self setNeedsDisplay:true];
-                System.out.println("[DEBUG] DCMView.setPixels() - dcmPixList.size(): "
-                        + (this.dcmPixList != null ? this.dcmPixList.size() : "null") + ", curDCM: "
-                        + (this.curDCM != null ? "not null" : "null"));
+                // // System.out.println("[DEBUG] DCMView.setPixels() - dcmPixList.size(): "
+// //                         + (this.dcmPixList != null ? this.dcmPixList.size() : "null") + ", curDCM: "
+// //                         + (this.curDCM != null ? "not null" : "null"));
                 repaint();
 
                 // HOROS-20240407準拠: 画像ロード直後に同期を促す
@@ -1244,7 +1244,7 @@ public class DCMView extends JPanel {
                 // ここでは単に再描画と同期ライン更新のためにメッセージを送信する(inc=0)
                 sendSyncMessage(0);
             } catch (Exception e) {
-                System.out.println("[DEBUG] DCMView.setPixels() - exception: " + e.getMessage());
+                // // System.out.println("[DEBUG] DCMView.setPixels() - exception: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -1347,15 +1347,15 @@ public class DCMView extends JPanel {
         if (index == curImage) {
             return;
         }
-        System.out.println("[DEBUG] DCMView.setIndex() called - index: " + index + ", dcmPixList: "
-                + (this.dcmPixList != null ? this.dcmPixList.size() : "null"));
+        // // System.out.println("[DEBUG] DCMView.setIndex() called - index: " + index + ", dcmPixList: "
+// //                 + (this.dcmPixList != null ? this.dcmPixList.size() : "null"));
         synchronized (drawLock) {
             try {
                 // HOROS-20240407準拠: DCMView.m 2550行目
                 // if( dcmPixList && index > -1 && [dcmPixList count] > 0)
                 if (this.dcmPixList != null && index > -1 && this.dcmPixList.size() > 0) {
-                    System.out.println("[DEBUG] DCMView.setIndex() - dcmPixList.size(): " + this.dcmPixList.size()
-                            + ", index: " + index);
+                    // // System.out.println("[DEBUG] DCMView.setIndex() - dcmPixList.size(): " + this.dcmPixList.size()
+// //                             + ", index: " + index);
                     // HOROS-20240407準拠: DCMView.m 2557-2559行目
                     // curImage = index;
                     // if( curImage >= [dcmPixList count]) curImage = (long)[dcmPixList count] -1;
@@ -1388,8 +1388,8 @@ public class DCMView extends JPanel {
                         // 優先的に画像をロードする
                         if (this.curDCM != null && this.curDCM.getBufferedImageNoLoad() == null) {
                             DicomPix pixToLoad = this.curDCM;
-                            System.out.println(
-                                    "[DEBUG] DCMView.setIndex() - launching background load for image " + index);
+                            // // System.out.println(
+// //                                     "[DEBUG] DCMView.setIndex() - launching background load for image " + index);
 
                             // 既存のスレッドがあれば停止
                             if (backgroundLoadThread != null && backgroundLoadThread.isAlive()) {
@@ -1413,15 +1413,13 @@ public class DCMView extends JPanel {
                                         return;
 
                                     if (pixToLoad.getBufferedImageNoLoad() != null) {
-                                        System.out
-                                                .println("[DEBUG] DCMView background load success for image " + index);
                                         // ロード完了後に再描画
                                         SwingUtilities.invokeLater(() -> repaint());
                                     }
                                 } catch (Exception e) {
                                     if (!(e instanceof InterruptedException)) {
-                                        System.err.println(
-                                                "[ERROR] DCMView background load exception for image " + index);
+                                        // // System.err.println(
+// //                                                 "[ERROR] DCMView background load exception for image " + index);
                                         e.printStackTrace();
                                     }
                                 }
@@ -1432,11 +1430,11 @@ public class DCMView extends JPanel {
                             backgroundLoadThread.setPriority(Thread.NORM_PRIORITY);
                             backgroundLoadThread.start();
                         } else if (this.curDCM != null) {
-                            System.out.println(
-                                    "[DEBUG] DCMView.setIndex() - image already loaded or null (pixToLoad.getBufferedImageNoLoad()="
-                                            + (this.curDCM != null ? this.curDCM.getBufferedImageNoLoad()
-                                                    : "pix-is-null")
-                                            + ")");
+                            // // System.out.println(
+// //                                     "[DEBUG] DCMView.setIndex() - image already loaded or null (pixToLoad.getBufferedImageNoLoad()="
+// //                                             + (this.curDCM != null ? this.curDCM.getBufferedImageNoLoad()
+// //                                                     : "pix-is-null")
+// //                                             + ")");
                         }
 
                         // HOROS-20240407準拠: curRoiList = [curDCM annotations];
@@ -1473,7 +1471,7 @@ public class DCMView extends JPanel {
                         // [self setNeedsDisplay:true];
                         // HOROS-20240407準拠: setNeedsDisplayは再描画を要求する
                         // Java Swingでは、repaint()を呼び出す
-                        System.out.println("[DEBUG] DCMView.setIndex() - calling repaint()");
+                        // // System.out.println("[DEBUG] DCMView.setIndex() - calling repaint()");
                         repaint();
 
                         // インデックスが変更されたことを親ウィンドウ（ViewerController）に通知してスライダーを同期
@@ -1489,16 +1487,16 @@ public class DCMView extends JPanel {
                             sendSyncMessage(0);
                         }
                     } else {
-                        System.out.println("[DEBUG] DCMView.setIndex() - curImage out of range: " + this.curImage
-                                + ", dcmPixList.size(): " + this.dcmPixList.size());
+                        // // System.out.println("[DEBUG] DCMView.setIndex() - curImage out of range: " + this.curImage
+// //                                 + ", dcmPixList.size(): " + this.dcmPixList.size());
                     }
                 } else {
-                    System.out.println(
-                            "[DEBUG] DCMView.setIndex() - dcmPixList is null or index < 0 or dcmPixList is empty: dcmPixList="
-                                    + (this.dcmPixList != null ? this.dcmPixList.size() : "null") + ", index=" + index);
+                    // // System.out.println(
+// //                             "[DEBUG] DCMView.setIndex() - dcmPixList is null or index < 0 or dcmPixList is empty: dcmPixList="
+// //                                     + (this.dcmPixList != null ? this.dcmPixList.size() : "null") + ", index=" + index);
                 }
             } catch (Exception e) {
-                System.out.println("[DEBUG] DCMView.setIndex() - exception: " + e.getMessage());
+                // // System.out.println("[DEBUG] DCMView.setIndex() - exception: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -1581,7 +1579,7 @@ public class DCMView extends JPanel {
         int viewWidth = bounds.width > 0 ? bounds.width : getWidth();
         int viewHeight = bounds.height > 0 ? bounds.height : getHeight();
 
-        System.out.println("[DEBUG] DCMView.scaleToFitForDCMPix() - viewSize: " + viewWidth + "x" + viewHeight);
+        // // System.out.println("[DEBUG] DCMView.scaleToFitForDCMPix() - viewSize: " + viewWidth + "x" + viewHeight);
 
         if (viewWidth <= 0 || viewHeight <= 0) {
             return 1.0f;
@@ -1591,7 +1589,7 @@ public class DCMView extends JPanel {
         int w = d.getPwidth();
         int h = d.getPheight();
 
-        System.out.println("[DEBUG] DCMView.scaleToFitForDCMPix() - imageSize: " + w + "x" + h);
+        // // System.out.println("[DEBUG] DCMView.scaleToFitForDCMPix() - imageSize: " + w + "x" + h);
 
         if (w <= 0 || h <= 0) {
             return 1.0f;
@@ -1618,12 +1616,12 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: 画面端に少し余白を持たせて綺麗に見せる
         float result = Math.min(scaleX, scaleY) * 0.98f;
 
-        System.out.println("[DEBUG] scaleToFitForDCMPix: viewSize=" + viewWidth + "x" + viewHeight
-                + ", imageSize=" + w + "x" + h
-                + ", pixelRatio=" + pixelRatio
-                + ", scaleX=" + scaleX
-                + ", scaleY=" + scaleY
-                + ", result=" + result);
+        // // System.out.println("[DEBUG] scaleToFitForDCMPix: viewSize=" + viewWidth + "x" + viewHeight
+// //                 + ", imageSize=" + w + "x" + h
+// //                 + ", pixelRatio=" + pixelRatio
+// //                 + ", scaleX=" + scaleX
+// //                 + ", scaleY=" + scaleY
+// //                 + ", result=" + result);
 
         return result;
     }
@@ -1722,8 +1720,8 @@ public class DCMView extends JPanel {
      * HOROS-20240407準拠: DCMView.m scrollWheel: メソッド
      */
     protected void scrollWheel(java.awt.event.MouseWheelEvent e) {
-        System.out.println(
-                "[DEBUG] DCMView.scrollWheel() - rotation: " + e.getWheelRotation() + ", curImage: " + curImage);
+        // // System.out.println(
+// //                 "[DEBUG] DCMView.scrollWheel() - rotation: " + e.getWheelRotation() + ", curImage: " + curImage);
         // HOROS-20240407準拠: 操作したビューをアクティブにする
         if (!isKeyView) {
             becomeFirstResponder();
@@ -1937,8 +1935,8 @@ public class DCMView extends JPanel {
         try {
             // DEBUG: フォーカス状態の確認
             if (isKeyView || frontMost) {
-                // System.out.println("[DEBUG] DCMView.paintComponent - isKeyView: " + isKeyView
-                // + ", frontMost: " + frontMost);
+                // // // System.out.println("[DEBUG] DCMView.paintComponent - isKeyView: " + isKeyView
+// //                 // + ", frontMost: " + frontMost);
             }
 
             // アンチエイリアスと高品質スケーリングを有効化 (HOROS-20240407準拠の美しさ)
@@ -2120,7 +2118,7 @@ public class DCMView extends JPanel {
     private void drawRuler(Graphics2D g2d, int panelWidth, int panelHeight, int imageX, int imageY, int scaledWidth,
             int scaledHeight) {
         if (curDCM == null) {
-            System.out.println("[DEBUG] drawRuler() - curDCM is null");
+            // // System.out.println("[DEBUG] drawRuler() - curDCM is null");
             return;
         }
 
@@ -2128,8 +2126,8 @@ public class DCMView extends JPanel {
         double pixelSpacingY = curDCM.getPixelSpacingY();
         double pixelRatio = curDCM.getPixelRatio();
 
-        System.out.println("[DEBUG] drawRuler() - pixelSpacingX: " + pixelSpacingX + ", pixelSpacingY: " + pixelSpacingY
-                + ", pixelRatio: " + pixelRatio);
+        // // System.out.println("[DEBUG] drawRuler() - pixelSpacingX: " + pixelSpacingX + ", pixelSpacingY: " + pixelSpacingY
+// //                 + ", pixelRatio: " + pixelRatio);
 
         // HOROS-20240407準拠: DCMView.m 9646行目 - if( self.curDCM.pixelSpacingX != 0 &&
         // ...)
@@ -2138,7 +2136,7 @@ public class DCMView extends JPanel {
         // pixelSpacingX != 0 の場合のみ定規を表示
         // US画像でもpixelSpacingXが設定されている場合は表示される
         if (pixelSpacingX == 0.0) {
-            System.out.println("[DEBUG] drawRuler() - pixelSpacingX is 0, skipping ruler drawing");
+            // // System.out.println("[DEBUG] drawRuler() - pixelSpacingX is 0, skipping ruler drawing");
             return;
         }
 
@@ -2258,27 +2256,27 @@ public class DCMView extends JPanel {
      */
     private void drawTextualData(Graphics2D g2d, int panelWidth, int panelHeight) {
         if (curDCM == null) {
-            System.out.println("[DEBUG] drawTextualData() - curDCM is null");
+            // // System.out.println("[DEBUG] drawTextualData() - curDCM is null");
             return;
         }
 
-        System.out.println("[DEBUG] drawTextualData() - annotationType: " + annotationType + ", annotGraphics: "
-                + annotGraphics + ", annotBase: " + annotBase);
+        // // System.out.println("[DEBUG] drawTextualData() - annotationType: " + annotationType + ", annotGraphics: "
+// //                 + annotGraphics + ", annotBase: " + annotBase);
 
         // HOROS-20240407準拠: DCMView.m 8157行目 - else if( annotations > annotGraphics)
         // annotGraphicsより大きい場合のみテキスト情報を表示
         // annotationType == annotBase (2) は annotGraphics (1) より大きいので、表示される
         if (annotationType <= annotGraphics) {
-            System.out.println("[DEBUG] drawTextualData() - annotationType (" + annotationType + ") <= annotGraphics ("
-                    + annotGraphics + "), skipping text data");
+            // // System.out.println("[DEBUG] drawTextualData() - annotationType (" + annotationType + ") <= annotGraphics ("
+// //                     + annotGraphics + "), skipping text data");
             return; // annotGraphics以下の場合はテキスト情報を表示しない
         }
 
         // HOROS-20240407準拠: DCMView.m 8332行目 - stringIDが設定されている場合は一部のアノテーションを表示しない
         // プレビュー画面（previewDatabase）では最小限の情報のみ表示
         boolean isPreviewDatabase = "previewDatabase".equals(stringID);
-        System.out.println(
-                "[DEBUG] drawTextualData() - isPreviewDatabase: " + isPreviewDatabase + ", stringID: " + stringID);
+        // // System.out.println(
+// //                 "[DEBUG] drawTextualData() - isPreviewDatabase: " + isPreviewDatabase + ", stringID: " + stringID);
 
         // HOROS-20240407準拠: BrowserController.m 521行目 - + (BrowserController*)
         // currentBrowser { return browserWindow; }
@@ -2557,13 +2555,13 @@ public class DCMView extends JPanel {
             int lowerRightX = panelWidth - margin; // 右端からmarginだけ左に
 
             // browserControllerはメソッドの最初で宣言済み
-            System.out.println("[DEBUG] drawTextualData() - LowerRight: browserController="
-                    + (browserController != null ? "not null" : "null"));
+            // // System.out.println("[DEBUG] drawTextualData() - LowerRight: browserController="
+// //                     + (browserController != null ? "not null" : "null"));
             if (browserController != null) {
                 // HOROS-20240407準拠: BrowserControllerからStudy/Series情報を取得
                 Object selectedItem = browserController.getSelectedItem();
-                System.out.println("[DEBUG] drawTextualData() - LowerRight: selectedItem="
-                        + (selectedItem != null ? selectedItem.getClass().getName() : "null"));
+                // // System.out.println("[DEBUG] drawTextualData() - LowerRight: selectedItem="
+// //                         + (selectedItem != null ? selectedItem.getClass().getName() : "null"));
 
                 // HOROS-20240407準拠: DB_image.date - 画像レベルのdateを取得
                 // StudyまたはSeriesが選択されている場合に表示
@@ -2890,7 +2888,7 @@ public class DCMView extends JPanel {
         // Preferencesに保存
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(DCMView.class);
         prefs.putInt("ANNOTATIONS", annotationType);
-        System.out.println("[DEBUG] DCMView.setAnnotationType() - annotationType set to: " + annotationType);
+        // // System.out.println("[DEBUG] DCMView.setAnnotationType() - annotationType set to: " + annotationType);
         repaint(); // アノテーション表示を更新
     }
 
@@ -2921,7 +2919,7 @@ public class DCMView extends JPanel {
         // 注: ANNOTATIONSの読み込みは各DCMViewインスタンスのコンストラクタで行う
         // ここでは、必要に応じて他の設定を読み込む
 
-        System.out.println("[DEBUG] DCMView.setDefaults() called");
+        // // System.out.println("[DEBUG] DCMView.setDefaults() called");
     }
 
     /**
@@ -2947,7 +2945,7 @@ public class DCMView extends JPanel {
         // nil];
         // TODO: 通知を送信して他のビューを更新する必要がある場合はここに追加
 
-        System.out.println("[DEBUG] DCMView.annotMenu() - annotationType set to: " + annotationType);
+        // // System.out.println("[DEBUG] DCMView.annotMenu() - annotationType set to: " + annotationType);
     }
 
     /**
@@ -2988,7 +2986,7 @@ public class DCMView extends JPanel {
         isKeyView = true;
         // キービュー（操作主体）になったら、以前に受信した同期ポインタをクリア
         slicePoint3D[0] = Float.POSITIVE_INFINITY;
-        System.out.println("[DEBUG] DCMView.becomeFirstResponder() - isKeyView set to TRUE");
+        // // System.out.println("[DEBUG] DCMView.becomeFirstResponder() - isKeyView set to TRUE");
 
         // HOROS-20240407準拠: 通知を送信
         NotificationCenter.defaultCenter().postNotification(
@@ -3010,7 +3008,7 @@ public class DCMView extends JPanel {
     public boolean resignFirstResponder() {
         if (isKeyView) {
             isKeyView = false;
-            System.out.println("[DEBUG] DCMView.resignFirstResponder() - isKeyView set to FALSE");
+            // // System.out.println("[DEBUG] DCMView.resignFirstResponder() - isKeyView set to FALSE");
 
             // HOROS-20240407準拠: 同期メッセージを送信 (DCMView.m 12793行目)
             sendSyncMessage(0);
@@ -3027,8 +3025,8 @@ public class DCMView extends JPanel {
     public void newImageViewisKey(Object object) {
         if (object != this && isKeyView) {
             isKeyView = false;
-            System.out.println(
-                    "[DEBUG] DCMView.newImageViewisKey() - isKeyView set to FALSE because another view became key");
+            // // System.out.println(
+// //                     "[DEBUG] DCMView.newImageViewisKey() - isKeyView set to FALSE because another view became key");
             repaint();
         }
     }
@@ -3046,7 +3044,7 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: DCMView.m 6725行目 - isKeyView && matrix == 0 && [self
         // is2DViewer]
         if (isKeyView && is2DViewer()) {
-            System.out.println("[DEBUG] DCMView.sendSyncMessage() - inc: " + inc);
+            // // System.out.println("[DEBUG] DCMView.sendSyncMessage() - inc: " + inc);
 
             java.util.Map<String, Object> userInfo = new java.util.HashMap<>();
             // HOROS-20240407準拠: DCMView.m 6695-6710行目付近
@@ -3240,8 +3238,8 @@ public class DCMView extends JPanel {
 
                         // インデックスが変更された場合の反映
                         if (newImage != prevImage) {
-                            System.out.println("[DEBUG] DCMView.onSyncNotification() - Slice changing from " + prevImage
-                                    + " to " + newImage + " (mode=" + syncro + ")");
+                            // // System.out.println("[DEBUG] DCMView.onSyncNotification() - Slice changing from " + prevImage
+// //                                     + " to " + newImage + " (mode=" + syncro + ")");
                             final int finalImage = newImage;
 
                             Runnable run = () -> {

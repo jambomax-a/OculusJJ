@@ -52,7 +52,7 @@ public class DicomNodeManager {
             prefs.put(NODES_KEY, json);
             prefs.flush();
         } catch (Exception e) {
-            logger.error("Failed to save DICOM nodes", e);
+            // // logger.error("Failed to save DICOM nodes", e);
         }
     }
 
@@ -69,7 +69,7 @@ public class DicomNodeManager {
                 saveNodes();
             }
         } catch (Exception e) {
-            logger.error("Failed to load DICOM nodes", e);
+            // // logger.error("Failed to load DICOM nodes", e);
             nodes = new ArrayList<>();
         }
     }

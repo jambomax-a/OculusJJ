@@ -1950,7 +1950,7 @@ public class BrowserController extends JFrame {
             }
         } catch (Exception e) {
             // エラーが発生した場合はデフォルトのカラム幅を使用
-            // logger.error("Failed to restore column state", e);
+            // // // logger.error("Failed to restore column state", e);
         }
     }
 
@@ -1978,7 +1978,7 @@ public class BrowserController extends JFrame {
             }
         } catch (Exception e) {
             // エラーが発生した場合は保存をスキップ
-            // logger.error("Failed to save column state", e);
+            // // // logger.error("Failed to save column state", e);
         }
     }
 

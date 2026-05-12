@@ -49,7 +49,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
 
         File storageDir = getStorageDir();
         File file = new File(storageDir, iuid != null ? iuid : UUID.randomUUID().toString());
-        logger.info("Receiving DICOM file: {}", file.getAbsolutePath());
+        // // logger.info("Receiving DICOM file: {}", file.getAbsolutePath());
 
         try {
             try (DicomOutputStream out = new DicomOutputStream(file)) {
@@ -69,7 +69,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
 
             rsp.setInt(Tag.Status, VR.US, Status.Success);
         } catch (Exception e) {
-            logger.error("Error storing DICOM file", e);
+            // // logger.error("Error storing DICOM file", e);
             rsp.setInt(Tag.Status, VR.US, Status.ProcessingFailure);
         }
     }

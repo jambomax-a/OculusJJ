@@ -197,7 +197,7 @@ public class ToolbarPanelController extends JFrame {
         int y = visibleY;
         
         // デバッグ: 計算結果を確認
-        // System.out.println("ToolbarPanel: visibleY=" + visibleY + ", visibleHeight=" + visibleHeight + ", height=" + height + ", HIDDEN_HEIGHT=" + HIDDEN_HEIGHT + ", y=" + y);
+        // // // System.out.println("ToolbarPanel: visibleY=" + visibleY + ", visibleHeight=" + visibleHeight + ", height=" + height + ", HIDDEN_HEIGHT=" + HIDDEN_HEIGHT + ", y=" + y);
         
         // HOROS-20240407準拠: ToolbarPanel.m 97-98行目
         // if( NSEqualRects( dstframe, self.window.frame) == NO)

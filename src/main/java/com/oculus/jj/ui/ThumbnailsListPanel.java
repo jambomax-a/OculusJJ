@@ -227,8 +227,8 @@ public class ThumbnailsListPanel extends JFrame {
      * HOROS-20240407準拠: ThumbnailsListPanel.m 254行目 - setThumbnailsView:viewer:
      */
     public void setThumbnailsView(java.awt.Component tb, ViewerController v) {
-        System.out.println("===== ThumbnailsListPanel.setThumbnailsView: tb="
-                + (tb != null ? tb.getClass().getName() : "null") + ", viewer=" + (v != null ? "not null" : "null"));
+        // // System.out.println("===== ThumbnailsListPanel.setThumbnailsView: tb="
+// //                 + (tb != null ? tb.getClass().getName() : "null") + ", viewer=" + (v != null ? "not null" : "null"));
 
         // HOROS-20240407準拠: ThumbnailsListPanel.m 254行目 - setThumbnailsView:viewer:
         // 注意: ユーザー要求により、常に別ウィンドウとして実装するため、

@@ -10,7 +10,9 @@ import java.util.ArrayList;
 import java.util.stream.IntStream;
 import com.oculus.jj.model.DicomPix;
 import com.oculus.jj.model.Measurement3D;
-import com.oculus.jj.config.AppPreferences;
+import org.lwjgl.opengl.awt.AWTGLCanvas;
+import org.lwjgl.opengl.awt.GLData;
+import org.lwjgl.opengl.GL;
 
 /**
  * Viewer3DController - 3Dビューワー (MIP/VR)
@@ -25,6 +27,7 @@ public class Viewer3DController extends JFrame {
     private double spacingZ = 1.0;
 
     private RenderingPanel renderingPanel;
+    private GLViewer3D glViewer;
     private String mode = "MIP"; // "MIP", "VR", "MinIP", "Average", "ISO"
     private boolean shadingEnabled = true;
 
@@ -58,47 +61,183 @@ public class Viewer3DController extends JFrame {
     public Viewer3DController(ViewerController viewer2D, String mode) {
         super("3D Viewer - " + mode);
         this.viewer2D = viewer2D;
-        this.mode = mode;
+        setMode(mode);
 
-        initializeData();
+        // initializeData(); // Don't call here, we will do it asynchronously
         initializeUI();
+        
+        // Asynchronously prepare data and launch GPU renderer
+        startAsyncGPUInitialization();
     }
 
     private void initializeData() {
-        // ViewerControllerからピクセルリストを取得
-        List<List<DicomPix>> allPix = viewer2D.getPixList();
-        if (allPix != null && !allPix.isEmpty()) {
-            this.pixList = new ArrayList<>(allPix.get(0));
-        }
+        // Stub for compatibility, actual work moved to startAsyncGPUInitialization
+    }
 
-        if (pixList == null || pixList.isEmpty())
-            return;
+    private void startAsyncGPUInitialization() {
+        final JLabel loadingLabel = new JLabel("Preparing Volume Data (Converting to HU)...", JLabel.CENTER);
+        loadingLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+        this.add(loadingLabel, BorderLayout.CENTER);
+        this.revalidate();
 
-        // ボリューム構築
-        DicomPix first = pixList.get(0);
-        dimX = first.getWidth();
-        dimY = first.getHeight();
-        dimZ = pixList.size();
+        new Thread(() -> {
+            try {
+                List<List<DicomPix>> allPix = viewer2D.getPixList();
+                if (allPix == null || allPix.isEmpty()) return;
+                this.pixList = new ArrayList<>(allPix.get(0));
+                if (pixList == null || pixList.isEmpty()) return;
 
-        spacingZ = first.getSliceThickness();
-        if (spacingZ <= 0.1)
-            spacingZ = 1.0;
+                DicomPix first = pixList.get(0);
+                dimX = first.getWidth();
+                dimY = first.getHeight();
+                dimZ = pixList.size();
+                spacingZ = (first.getSliceThickness() <= 0.1) ? 1.0 : first.getSliceThickness();
 
-        volume = new short[dimZ][dimY][dimX];
-
-        for (int z = 0; z < dimZ; z++) {
-            DicomPix pix = pixList.get(z);
-            short[] src = pix.getShortData();
-            if (src != null) {
-                float s = pix.getRescaleSlope();
-                float i = pix.getRescaleIntercept();
-                for (int y = 0; y < dimY; y++) {
-                    for (int x = 0; x < dimX; x++) {
-                        // HU値に変換して格納
-                        volume[z][y][x] = (short) (src[y * dimX + x] * s + i);
+                volume = new short[dimZ][dimY][dimX];
+                for (int z = 0; z < dimZ; z++) {
+                    DicomPix pix = pixList.get(z);
+                    short[] src = pix.getShortData();
+                    if (src != null) {
+                        float s = pix.getRescaleSlope();
+                        float i = pix.getRescaleIntercept();
+                        for (int y = 0; y < dimY; y++) {
+                            for (int x = 0; x < dimX; x++) {
+                                volume[z][y][x] = (short) (src[y * dimX + x] * s + i);
+                            }
+                        }
                     }
                 }
+
+                SwingUtilities.invokeLater(() -> {
+                    this.remove(loadingLabel);
+                    setupGPURenderer();
+                    this.revalidate();
+                    this.repaint();
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    loadingLabel.setText("Error preparing data: " + e.getMessage());
+                });
             }
+        }).start();
+    }
+
+    private AWTGLCanvas canvas;
+    private boolean isRendering = false;
+
+    private void setMode(String newMode) {
+        this.mode = newMode;
+        if (glViewer != null) {
+            if ("MIP".equals(newMode) || "MinIP".equals(newMode) || "Average".equals(newMode)) {
+                glViewer.setRenderMode(0);
+            } else if ("VR".equals(newMode)) {
+                glViewer.setRenderMode(1);
+            } else if ("ISO".equals(newMode)) {
+                glViewer.setRenderMode(2);
+            }
+        }
+        repaint();
+    }
+
+    private void setupGPURenderer() {
+        try {
+            if (glViewer == null) {
+                glViewer = new GLViewer3D();
+                setMode(this.mode); // Apply initial mode
+                
+                GLData data = new GLData();
+                data.api = GLData.API.GL;
+                data.majorVersion = 3;
+                data.minorVersion = 3;
+                data.profile = GLData.Profile.CORE;
+                data.samples = 0;
+                
+                canvas = new AWTGLCanvas(data) {
+                    private static final long serialVersionUID = 1L;
+                    @Override
+                    public void initGL() {
+                        GL.createCapabilities();
+                        glViewer.initGL();
+                    }
+                    @Override
+                    public void paintGL() {
+                        glViewer.paintGL(getWidth(), getHeight());
+                        swapBuffers();
+                    }
+                };
+
+                if (renderingPanel != null) {
+                    remove(renderingPanel);
+                }
+                for (Component c : getContentPane().getComponents()) {
+                    if (c instanceof JLabel) {
+                        remove(c);
+                    }
+                }
+                
+                glViewer.setVolumeData(volume, dimX, dimY, dimZ, pixList);
+                
+                java.awt.event.MouseAdapter syncMouse = new java.awt.event.MouseAdapter() {
+                    private Point lastPos;
+                    @Override
+                    public void mousePressed(MouseEvent e) { lastPos = e.getPoint(); }
+                    @Override
+                    public void mouseDragged(MouseEvent e) {
+                        if (lastPos != null) {
+                            int dx = e.getX() - lastPos.x;
+                            int dy = e.getY() - lastPos.y;
+                            if (SwingUtilities.isRightMouseButton(e) || currentTool == Tool3D.ZOOM) {
+                                zoom *= (1.0 - dy / 200.0);
+                                if (zoom < 0.1) zoom = 0.1;
+                            } else if (SwingUtilities.isMiddleMouseButton(e) || currentTool == Tool3D.VR_ADJUST) {
+                                windowLevel += dy * 2.0f;
+                                windowWidth += dx * 2.0f;
+                                if (windowWidth < 1) windowWidth = 1;
+                            } else {
+                                rotateY += dx * 0.01;
+                                rotateX += dy * 0.01;
+                            }
+                            glViewer.setRotation((float)rotateX, (float)rotateY);
+                            glViewer.setZoom((float)zoom);
+                            glViewer.setWindowLevel(windowLevel, windowWidth);
+                            lastPos = e.getPoint();
+                        }
+                    }
+                    @Override
+                    public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
+                        zoom *= (1.0 - e.getWheelRotation() * 0.1);
+                        if (zoom < 0.1) zoom = 0.1;
+                        glViewer.setZoom((float)zoom);
+                    }
+                };
+                canvas.addMouseListener(syncMouse);
+                canvas.addMouseMotionListener(syncMouse);
+                canvas.addMouseWheelListener(syncMouse);
+                
+                glViewer.setRotation((float)rotateX, (float)rotateY);
+                glViewer.setZoom((float)zoom);
+                glViewer.setWindowLevel(windowLevel, windowWidth);
+
+                this.add(canvas, BorderLayout.CENTER);
+                this.revalidate();
+                this.repaint();
+                
+                isRendering = true;
+                Thread renderThread = new Thread(() -> {
+                    while (isRendering) {
+                        canvas.render();
+                        try { Thread.sleep(16); } catch (Exception e) {}
+                    }
+                });
+                renderThread.setDaemon(true);
+                renderThread.start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            this.add(new JLabel("GPU Acceleration failed: " + e.getMessage()), BorderLayout.CENTER);
+            this.revalidate();
+            this.repaint();
         }
     }
 
@@ -117,14 +256,14 @@ public class Viewer3DController extends JFrame {
 
             JMenuItem mipItem = new JMenuItem("MIP");
             mipItem.addActionListener(e -> {
-                this.mode = "MIP";
+                setMode("MIP");
                 repaint();
             });
             modeMenu.add(mipItem);
 
             JMenuItem vrItem = new JMenuItem("Volume Rendering");
             vrItem.addActionListener(e -> {
-                this.mode = "VR";
+                setMode("VR");
                 repaint();
             });
             modeMenu.add(vrItem);
@@ -142,7 +281,7 @@ public class Viewer3DController extends JFrame {
 
         JButton btnMIP = new JButton("MIP");
         btnMIP.addActionListener(e -> {
-            this.mode = "MIP";
+            setMode("MIP");
             setTitle("3D Viewer - MIP");
             repaint();
         });
@@ -150,7 +289,7 @@ public class Viewer3DController extends JFrame {
 
         JButton btnMinIP = new JButton("MinIP");
         btnMinIP.addActionListener(e -> {
-            this.mode = "MinIP";
+            setMode("MinIP");
             setTitle("3D Viewer - MinIP");
             repaint();
         });
@@ -158,7 +297,7 @@ public class Viewer3DController extends JFrame {
 
         JButton btnAvg = new JButton("Average");
         btnAvg.addActionListener(e -> {
-            this.mode = "Average";
+            setMode("Average");
             setTitle("3D Viewer - Average");
             repaint();
         });
@@ -166,7 +305,7 @@ public class Viewer3DController extends JFrame {
 
         JButton btnVR = new JButton("Volume Rendering");
         btnVR.addActionListener(e -> {
-            this.mode = "VR";
+            setMode("VR");
             setTitle("3D Viewer - VR");
             repaint();
         });
@@ -174,7 +313,7 @@ public class Viewer3DController extends JFrame {
 
         JButton btnISO = new JButton("3D Surface");
         btnISO.addActionListener(e -> {
-            this.mode = "ISO";
+            setMode("ISO");
             setTitle("3D Viewer - Surface Rendering");
             repaint();
         });
@@ -630,10 +769,12 @@ public class Viewer3DController extends JFrame {
             boolean isAvg = "Average".equals(mode);
             boolean isISO = "ISO".equals(mode); // Surface Rendering
 
-            // パフォーマンス最適化: ドラッグ中の品質を引き上げ
-            int rawStep = isDragging ? 3 : (int) (1.0 / resolution); // 6から3へ（4倍の解像度）
+            // 画質を大幅に向上させる（ユーザー様のハイスペックCPU向けに最適化）
+            // isDragging（回転中）のスキップ幅を3から2（または1）に減らし、粗さを解消
+            int rawStep = isDragging ? 1 : 1; 
             final int currentStep = Math.max(1, rawStep);
-            final double rayStep = isDragging ? 2.0 : 0.8; // 4.0から2.0へ
+            // レイが進む間隔（rayStep）も細かくし、3Dのディテールをくっきりさせる
+            final double rayStep = isDragging ? 1.0 : 0.4;
 
             IntStream.range(0, (h + currentStep - 1) / currentStep).parallel().forEach(yi -> {
                 int sy = yi * currentStep;

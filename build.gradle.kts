@@ -90,6 +90,18 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.16.1")
     
+    // GPU Acceleration (OpenGL via LWJGL 3)
+    val lwjglVersion = "3.2.3"
+    val lwjglNatives = "natives-windows"
+    implementation("org.lwjgl", "lwjgl", lwjglVersion)
+    implementation("org.lwjgl", "lwjgl-opengl", lwjglVersion)
+    implementation("org.lwjgl", "lwjgl-glfw", lwjglVersion)
+    implementation("org.lwjgl", "lwjgl-jawt", lwjglVersion)
+    runtimeOnly("org.lwjgl", "lwjgl", lwjglVersion, classifier = lwjglNatives)
+    runtimeOnly("org.lwjgl", "lwjgl-opengl", lwjglVersion, classifier = lwjglNatives)
+    runtimeOnly("org.lwjgl", "lwjgl-glfw", lwjglVersion, classifier = lwjglNatives)
+    implementation("org.lwjglx:lwjgl3-awt:0.1.8")
+    
     // Testing
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
 }
@@ -97,7 +109,9 @@ dependencies {
 application {
     mainClass.set("com.oculus.jj.OculusJJApp")
     applicationDefaultJvmArgs = listOf(
-        "-Xmx4g", // HOROS-20240407準拠: 3D MPRやボリュームレンダリングのためにメモリを多めに割り当てる
+        "-Xmx12g", // 3D MPRや大容量ボリュームレンダリングのためにメモリを12GB割り当てる
+        "-Dsun.java2d.d3d=false",
+        "-Dsun.java2d.opengl=true",
         // Java 9+モジュールシステム: NativeImageReaderがFileImageInputStream.rafにアクセスするために必要
         "--add-opens=java.desktop/javax.imageio.stream=ALL-UNNAMED",
         // Java 9+モジュールシステム: NativeImageReaderがRandomAccessFile.pathにアクセスするために必要

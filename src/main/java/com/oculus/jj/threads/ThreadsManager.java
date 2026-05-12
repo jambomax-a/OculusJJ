@@ -122,7 +122,7 @@ public class ThreadsManager {
                 // HOROS-20240407準拠: if (![NSThread isMainThread]) (116行目)
                 if (!SwingUtilities.isEventDispatchThread()) {
                     // 警告ログは条件付きで出力（必要に応じて有効化）
-                    // System.err.println("***** ThreadsManager.subAddThread should be on MAIN thread");
+                    // // // System.err.println("***** ThreadsManager.subAddThread should be on MAIN thread");
                 }
                 
                 // HOROS-20240407準拠: if ([_threadsController.arrangedObjects containsObject:thread] || [thread isFinished]) (119行目)
@@ -132,7 +132,7 @@ public class ThreadsManager {
                 if (threads.contains(thread)) {
                     // 既に登録されているスレッドは追加しない（HOROS-20240407準拠）
                     // デバッグログは条件付きで出力（必要に応じて有効化）
-                    // System.err.println("ThreadsManager.subAddThread: thread already registered: " + thread.getName() + " (id=" + thread.getId() + ")");
+                    // // // System.err.println("ThreadsManager.subAddThread: thread already registered: " + thread.getName() + " (id=" + thread.getId() + ")");
                     return;
                 }
                 if (thread.getState() == Thread.State.TERMINATED) {
@@ -167,7 +167,7 @@ public class ThreadsManager {
                             // HOROS-20240407準拠: [_threadsController addObject:thread]; (134行目)
                             threads.add(thread);
                             // デバッグログは条件付きで出力（必要に応じて有効化）
-                            // System.err.println("ThreadsManager.subAddThread: added thread: " + thread.getName() + " (id=" + thread.getId() + "), total=" + threads.size());
+                            // // // System.err.println("ThreadsManager.subAddThread: added thread: " + thread.getName() + " (id=" + thread.getId() + "), total=" + threads.size());
                             notifyListeners();
                         }
                         // HOROS-20240407準拠: if (!isExe && !isDone) { // not executing, not done executing... execute now (136行目)
@@ -234,7 +234,7 @@ public class ThreadsManager {
                 // HOROS-20240407準拠: if (![NSThread isMainThread])
                 if (!SwingUtilities.isEventDispatchThread()) {
                     // 警告ログは条件付きで出力（必要に応じて有効化）
-                    // System.err.println("***** ThreadsManager.subRemoveThread should be on MAIN thread");
+                    // // // System.err.println("***** ThreadsManager.subRemoveThread should be on MAIN thread");
                 }
                 
                 // HOROS-20240407準拠: if ([_threadsController.content containsObject:thread]) {
@@ -246,12 +246,12 @@ public class ThreadsManager {
                     // HOROS-20240407準拠: スレッド情報も削除
                     threadInfoMap.remove(thread);
                     // デバッグログは条件付きで出力（必要に応じて有効化）
-                    // System.err.println("ThreadsManager.subRemoveThread: removed thread: " + thread.getName() + " (id=" + thread.getId() + "), total=" + threads.size());
+                    // // // System.err.println("ThreadsManager.subRemoveThread: removed thread: " + thread.getName() + " (id=" + thread.getId() + "), total=" + threads.size());
                     // HOROS-20240407準拠: リスナーに通知（重複登録を防ぐため重要）
                     notifyListeners();
                 } else {
                     // デバッグログは条件付きで出力（必要に応じて有効化）
-                    // System.err.println("ThreadsManager.subRemoveThread: thread not found: " + thread.getName() + " (id=" + thread.getId() + ")");
+                    // // // System.err.println("ThreadsManager.subRemoveThread: thread not found: " + thread.getName() + " (id=" + thread.getId() + ")");
                 }
             }
         }

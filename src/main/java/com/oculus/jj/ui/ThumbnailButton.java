@@ -137,13 +137,13 @@ public class ThumbnailButton extends JButton {
         addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
-                System.out.println("ThumbnailButton.mousePressed: button=" + e.getButton() + ", isRightMouseButton="
-                        + javax.swing.SwingUtilities.isRightMouseButton(e));
+                // // System.out.println("ThumbnailButton.mousePressed: button=" + e.getButton() + ", isRightMouseButton="
+// //                         + javax.swing.SwingUtilities.isRightMouseButton(e));
                 // HOROS-20240407準拠: ThumbnailCell.m 65-66行目
                 // rightClick = YES; [self performClick: self];
                 if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
                     rightClick = true;
-                    System.out.println("ThumbnailButton.mousePressed: RIGHT CLICK, calling matrixPreviewPressed");
+                    // // System.out.println("ThumbnailButton.mousePressed: RIGHT CLICK, calling matrixPreviewPressed");
                     // Java SwingではJButtonのActionListenerは右クリックで発火しないため、直接呼び出す
                     if (viewer != null) {
                         viewer.matrixPreviewPressed(ThumbnailButton.this);
@@ -156,8 +156,8 @@ public class ThumbnailButton extends JButton {
 
         // HOROS-20240407準拠: 左クリック時にmatrixPreviewPressedを呼び出す
         addActionListener(e -> {
-            System.out.println("ThumbnailButton.actionPerformed: LEFT CLICK - "
-                    + (representedObject != null ? representedObject.toString() : "null"));
+            // // System.out.println("ThumbnailButton.actionPerformed: LEFT CLICK - "
+// //                     + (representedObject != null ? representedObject.toString() : "null"));
             if (viewer != null) {
                 viewer.matrixPreviewPressed(this);
             }

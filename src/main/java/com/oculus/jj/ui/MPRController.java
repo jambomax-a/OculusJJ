@@ -322,7 +322,7 @@ public class MPRController extends JFrame {
             spacingZ = 1.0;
         }
 
-        System.out.println("[DEBUG] MPR Spacing: X=" + spacingX + ", Y=" + spacingY + ", Z=" + spacingZ);
+        // // System.out.println("[DEBUG] MPR Spacing: X=" + spacingX + ", Y=" + spacingY + ", Z=" + spacingZ);
 
         windowLevel = first.getWindowLevel();
         windowWidth = first.getWindowWidth();
@@ -342,7 +342,7 @@ public class MPRController extends JFrame {
             }
         }
 
-        System.out.println("[DEBUG] MPR Window: Level=" + windowLevel + ", Width=" + windowWidth);
+        // // System.out.println("[DEBUG] MPR Window: Level=" + windowLevel + ", Width=" + windowWidth);
 
         volume = new short[dimZ][dimY][dimX];
         for (int z = 0; z < dimZ; z++) {
@@ -360,8 +360,8 @@ public class MPRController extends JFrame {
                     System.arraycopy(src, y * dimX, volume[z][y], 0, dimX);
                 }
             } else {
-                System.err.println("[ERROR] MPR Slice " + z + " failed. Reason: "
-                        + (src == null ? "null data" : "size mismatch " + src.length + " vs " + (dimX * dimY)));
+                // // System.err.println("[ERROR] MPR Slice " + z + " failed. Reason: "
+// //                         + (src == null ? "null data" : "size mismatch " + src.length + " vs " + (dimX * dimY)));
                 if (z > 0) {
                     // 前のスライスをコピーして「空隙」を目立たなくする
                     for (int y = 0; y < dimY; y++) {
@@ -835,6 +835,8 @@ public class MPRController extends JFrame {
     }
 
     private double getInterpolatedVoxelByIndex(double x, double y, double z) {
+        if (this.volume == null) return 0;
+        
         int x0 = (int) Math.floor(x);
         int y0 = (int) Math.floor(y);
         int z0 = (int) Math.floor(z);

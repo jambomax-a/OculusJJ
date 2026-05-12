@@ -64,14 +64,14 @@ public class DicomService {
         ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
         conn.setPort(port);
         device.bindConnections();
-        logger.info(
-                "DICOM Listener started on port {} (AET: {}). Ensure your PACS is configured to send to this AET, IP and Port.",
-                port, ae.getAETitle());
+        // // logger.info(
+// //                 "DICOM Listener started on port {} (AET: {}). Ensure your PACS is configured to send to this AET, IP and Port.",
+// //                 port, ae.getAETitle());
     }
 
     public void stopListener() {
         device.unbindConnections();
-        logger.info("DICOM Listener stopped");
+        // // logger.info("DICOM Listener stopped");
     }
 
     /**
@@ -79,7 +79,7 @@ public class DicomService {
      */
     public boolean echo(DicomNode remoteNode)
             throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
-        logger.info("Starting C-ECHO to {}:{}", remoteNode.getAddress(), remoteNode.getPort());
+        // // logger.info("Starting C-ECHO to {}:{}", remoteNode.getAddress(), remoteNode.getPort());
 
         DicomNodeManager manager = DicomNodeManager.getInstance();
         ae.setAETitle(manager.getLocalAET());
@@ -104,7 +104,7 @@ public class DicomService {
      */
     public List<Attributes> find(DicomNode remoteNode, Attributes keys)
             throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
-        logger.info("Starting C-FIND to {}:{}", remoteNode.getAddress(), remoteNode.getPort());
+        // // logger.info("Starting C-FIND to {}:{}", remoteNode.getAddress(), remoteNode.getPort());
         final List<Attributes> results = new ArrayList<>();
 
         DicomNodeManager manager = DicomNodeManager.getInstance();
@@ -198,7 +198,7 @@ public class DicomService {
                         String statusHex = Integer.toHexString(status);
                         String errorMsg = "C-MOVE failed with status: 0x" + statusHex
                                 + ". This often means the PACS (Orthanc) cannot connect back to HOROS_JAVA. Check AET/IP/Port mapping in Orthanc.";
-                        logger.error(errorMsg);
+                        // // logger.error(errorMsg);
                         tm.setThreadStatus(currentThread, "Retrieve Failed (Status: 0x" + statusHex + ")");
                     }
                 }

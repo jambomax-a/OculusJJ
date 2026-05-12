@@ -181,7 +181,7 @@ public class ThreadCell {
         
         // HOROS-20240407準拠: if( [NSThread isMainThread] == NO)
         if (!SwingUtilities.isEventDispatchThread()) {
-            System.err.println("ThreadCell.cleanup should be on MAIN thread");
+            // // System.err.println("ThreadCell.cleanup should be on MAIN thread");
         }
         
         // HOROS-20240407準拠: @synchronized( _thread)
