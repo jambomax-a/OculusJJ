@@ -2,6 +2,7 @@ package com.oculus.jj.config;
 
 import java.util.prefs.Preferences;
 import java.awt.Color;
+import java.io.File;
 
 /**
  * AppPreferences - アプリケーションの設定管理クラス
@@ -26,11 +27,11 @@ public class AppPreferences {
     private static final int DEFAULT_ROI_COLOR = Color.YELLOW.getRGB();
 
     public static String getDefaultDicomFolder() {
-        return System.getProperty("user.home") + File.separator + "OculusJJ" + File.separator + "DICOM";
+        return System.getProperty("user.home") + File.separator + "OculusJJ Data" + File.separator + "DICOM";
     }
 
     public static String getDefaultDatabaseFolder() {
-        return System.getProperty("user.home") + File.separator + "OculusJJ" + File.separator + "Database";
+        return System.getProperty("user.home") + File.separator + "OculusJJ Data";
     }
 
     public static double get3DResolution() {
@@ -64,6 +65,22 @@ public class AppPreferences {
 
     public static void setMeasureUnit(String unit) {
         prefs.put(KEY_MEASURE_UNIT, unit);
+    }
+
+    public static String getDicomFolder() {
+        return prefs.get(KEY_DICOM_FOLDER, getDefaultDicomFolder());
+    }
+
+    public static void setDicomFolder(String path) {
+        prefs.put(KEY_DICOM_FOLDER, path);
+    }
+
+    public static String getDatabaseFolder() {
+        return prefs.get(KEY_DATABASE_FOLDER, getDefaultDatabaseFolder());
+    }
+
+    public static void setDatabaseFolder(String path) {
+        prefs.put(KEY_DATABASE_FOLDER, path);
     }
     
     /**

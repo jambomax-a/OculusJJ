@@ -7575,16 +7575,46 @@ public class BrowserController extends JFrame {
 
         windowMenu.addSeparator();
 
-        // Bring All to Front
-        // HOROS-20240407準拠: MainMenu.xib 1949行目
-        javax.swing.JMenuItem bringAllToFrontItem = new javax.swing.JMenuItem("Bring All to Front");
-        bringAllToFrontItem.addActionListener(e -> {
-        });
-        windowMenu.add(bringAllToFrontItem);
-
         menuBar.add(windowMenu);
 
+        // ========== Helpメニュー ==========
+        javax.swing.JMenu helpMenu = new javax.swing.JMenu("Help");
+
+        javax.swing.JMenuItem shortcutsItem = new javax.swing.JMenuItem("Shortcuts & Mouse Controls...");
+        shortcutsItem.addActionListener(e -> showShortcutsDialog());
+        helpMenu.add(shortcutsItem);
+
+        helpMenu.addSeparator();
+
+        javax.swing.JMenuItem aboutItem = new javax.swing.JMenuItem("About OculusJJ");
+        aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(this, "OculusJJ - Advanced DICOM Viewer\nVersion 1.0\nBased on Horos-20240407 Architecture"));
+        helpMenu.add(aboutItem);
+
+        menuBar.add(helpMenu);
+
         setJMenuBar(menuBar);
+    }
+
+    private void showShortcutsDialog() {
+        String msg = "<html>" +
+                "<h3>Mouse Controls</h3>" +
+                "<b>[2D Viewer]</b><br>" +
+                "- Left Drag: Window Level / Width (WL/WW)<br>" +
+                "- Right Drag / Ctrl+Drag: Zoom<br>" +
+                "- Middle Drag / Shift+Drag: Pan<br>" +
+                "- Scroll Wheel: Change Image/Slice<br><br>" +
+                "<b>[3D Viewer]</b><br>" +
+                "- Left Drag: Rotate<br>" +
+                "- Right Drag / Shift+Drag: Zoom<br>" +
+                "- Middle Drag (Wheel Click): <b>Adjust Meat (WL/WW)</b><br>" +
+                "- Scroll Wheel: Zoom<br><br>" +
+                "<h3>Keyboard Shortcuts</h3>" +
+                "- [R]: Reset to Initial View<br>" +
+                "- [Shift+R]: Revert Series<br>" +
+                "- [Delete]: Delete selected ROI<br>" +
+                "- [Arrow Keys]: Navigate Studies/Images<br>" +
+                "</html>";
+        JOptionPane.showMessageDialog(this, msg, "Shortcuts & Mouse Controls", JOptionPane.INFORMATION_MESSAGE);
     }
 
     // ========== メニューアクションメソッド（HOROS-20240407準拠） ==========

@@ -3,6 +3,7 @@ package com.oculus.jj.ui;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.ArrayList;
@@ -558,6 +559,46 @@ public class Viewer3DController extends JFrame {
             return volume[z][y][x];
         }
 
+        /**
+         * 三線形補間 (Trilinear Interpolation) でボクセル値を取得
+         * 画質を滑らかにするためのコアロジック
+         */
+        private double getValTrilinear(double x, double y, double z) {
+            int x0 = (int) Math.floor(x);
+            int y0 = (int) Math.floor(y);
+            int z0 = (int) Math.floor(z);
+            int x1 = x0 + 1;
+            int y1 = y0 + 1;
+            int z1 = z0 + 1;
+
+            if (x0 < 0 || x1 >= dimX || y0 < 0 || y1 >= dimY || z0 < 0 || z1 >= dimZ) {
+                return getVal((int) x, (int) y, (int) z);
+            }
+
+            double dx = x - x0;
+            double dy = y - y0;
+            double dz = z - z0;
+
+            double v000 = volume[z0][y0][x0];
+            double v100 = volume[z0][y0][x1];
+            double v010 = volume[z0][y1][x0];
+            double v110 = volume[z0][y1][x1];
+            double v001 = volume[z1][y0][x0];
+            double v101 = volume[z1][y0][x1];
+            double v011 = volume[z1][y1][x0];
+            double v111 = volume[z1][y1][x1];
+
+            double v00 = v000 * (1 - dx) + v100 * dx;
+            double v10 = v010 * (1 - dx) + v110 * dx;
+            double v01 = v001 * (1 - dx) + v101 * dx;
+            double v11 = v011 * (1 - dx) + v111 * dx;
+
+            double v0 = v00 * (1 - dy) + v10 * dy;
+            double v1 = v01 * (1 - dy) + v11 * dy;
+
+            return v0 * (1 - dz) + v1 * dz;
+        }
+
         private void render3D(Graphics2D g) {
             int w = getWidth();
             int h = getHeight();
@@ -589,9 +630,10 @@ public class Viewer3DController extends JFrame {
             boolean isAvg = "Average".equals(mode);
             boolean isISO = "ISO".equals(mode); // Surface Rendering
 
-            // パフォーマンス最適化: ドラッグ中はステップを大きくし、レイ・マーチングの間隔も広げる
-            int currentStep = isDragging ? 6 : (int) (2.0 / resolution);
-            double rayStep = isDragging ? 4.0 : 2.0;
+            // パフォーマンス最適化: ドラッグ中の品質を引き上げ
+            int rawStep = isDragging ? 3 : (int) (1.0 / resolution); // 6から3へ（4倍の解像度）
+            final int currentStep = Math.max(1, rawStep);
+            final double rayStep = isDragging ? 2.0 : 0.8; // 4.0から2.0へ
 
             IntStream.range(0, (h + currentStep - 1) / currentStep).parallel().forEach(yi -> {
                 int sy = yi * currentStep;
@@ -613,10 +655,19 @@ public class Viewer3DController extends JFrame {
                         double ty = vy * cosX - tz0 * sinX;
                         double tz = vy * sinX + tz0 * cosX;
 
-                        int ix = (int) (tx + cx), iy = (int) (ty + cy), iz = (int) (tz + cz);
+                        if (tx + cx >= 0 && tx + cx < dimX && ty + cy >= 0 && ty + cy < dimY && tz + cz >= 0 && tz + cz < dimZ) {
+                            // 補間計算用の実数座標
+                            double curX = tx + cx;
+                            double curY = ty + cy;
+                            double curZ = tz + cz;
+                            
+                            // 陰影計算（getGradient）用の整数座標
+                            int ix = (int) curX;
+                            int iy = (int) curY;
+                            int iz = (int) curZ;
 
-                        if (ix >= 0 && ix < dimX && iy >= 0 && iy < dimY && iz >= 0 && iz < dimZ) {
-                            int val = volume[iz][iy][ix];
+                            // 画質重視：ドラッグ中も常に補間計算を行う
+                            int val = (int) getValTrilinear(curX, curY, curZ);
                             if (isISO) {
                                 if (val >= isoThreshold) {
                                     float r = (isoThreshold >= 200) ? 1.0f : 0.9f;

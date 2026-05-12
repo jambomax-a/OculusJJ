@@ -90,7 +90,6 @@ public class PreferencesController extends JFrame {
         createOnDemandPane();
 
         // Placeholders for others
-        contentPanel.add(new JLabel("Database Settings Placeholder"), "Database");
         contentPanel.add(new JLabel("Viewers Settings Placeholder"), "Viewers");
 
         add(contentPanel, BorderLayout.CENTER);
@@ -107,6 +106,74 @@ public class PreferencesController extends JFrame {
         generalPane = new JPanel(new FlowLayout(FlowLayout.LEFT));
         generalPane.add(new JLabel("General Settings (Horos-20240407 Style)"));
         contentPanel.add(generalPane, "General");
+
+        // Database Pane
+        createDatabasePane();
+    }
+
+    private void createDatabasePane() {
+        JPanel databasePane = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+
+        // DICOM Folder
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        databasePane.add(new JLabel("DICOM Files Storage Path:"), gbc);
+
+        gbc.gridy = 1;
+        JTextField dicomPathField = new JTextField(com.oculus.jj.config.AppPreferences.getDicomFolder());
+        dicomPathField.setEditable(false);
+        databasePane.add(dicomPathField, gbc);
+
+        gbc.gridx = 1;
+        JButton changeDicomBtn = new JButton("Change...");
+        changeDicomBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser(dicomPathField.getText());
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                String path = chooser.getSelectedFile().getAbsolutePath();
+                dicomPathField.setText(path);
+                com.oculus.jj.config.AppPreferences.setDicomFolder(path);
+                com.oculus.jj.config.AppPreferences.saveAll();
+            }
+        });
+        databasePane.add(changeDicomBtn, gbc);
+
+        // Database Folder
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        databasePane.add(new JLabel("Database (Index) Path:"), gbc);
+
+        gbc.gridy = 3;
+        JTextField dbPathField = new JTextField(com.oculus.jj.config.AppPreferences.getDatabaseFolder());
+        dbPathField.setEditable(false);
+        databasePane.add(dbPathField, gbc);
+
+        gbc.gridx = 1;
+        JButton changeDbBtn = new JButton("Change...");
+        changeDbBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser(dbPathField.getText());
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                String path = chooser.getSelectedFile().getAbsolutePath();
+                dbPathField.setText(path);
+                com.oculus.jj.config.AppPreferences.setDatabaseFolder(path);
+                com.oculus.jj.config.AppPreferences.saveAll();
+                JOptionPane.showMessageDialog(this, "Restart application to apply database path changes.");
+            }
+        });
+        databasePane.add(changeDbBtn, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 4;
+        gbc.gridwidth = 2;
+        databasePane.add(new JLabel("<html><i>Note: Moving the database path requires manual migration of existing data.</i></html>"), gbc);
+
+        contentPanel.add(new JScrollPane(databasePane), "Database");
     }
 
     private void createListenerPane() {

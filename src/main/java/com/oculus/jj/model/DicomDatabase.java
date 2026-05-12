@@ -210,7 +210,7 @@ public class DicomDatabase {
      * デフォルトのベースディレクトリパスを取得
      */
     public static String defaultBaseDirPath() {
-        return System.getProperty("user.home") + File.separator + OSIRIX_DATA_DIR_NAME;
+        return com.oculus.jj.config.AppPreferences.getDatabaseFolder();
     }
 
     /**
