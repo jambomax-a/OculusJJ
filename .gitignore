@@ -54,3 +54,7 @@ Desktop.ini
 *.sqlite3
 data/
 logs/
+
+# Reference source code (local only)
+Weasis-4.6.5/
+horos-20240407/
