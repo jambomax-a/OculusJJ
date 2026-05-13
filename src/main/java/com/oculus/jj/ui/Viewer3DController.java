@@ -45,7 +45,11 @@ public class Viewer3DController extends JFrame {
     private double zoom = 1.0;
 
     private boolean isDragging = false;
-    private enum Tool3D { ROTATE, ZOOM, PAN, WLWW, MEASURE, ROI_POINT, VR_ADJUST }
+
+    private enum Tool3D {
+        ROTATE, ZOOM, PAN, WLWW, MEASURE, ROI_POINT, VR_ADJUST
+    }
+
     private Tool3D currentTool = Tool3D.ROTATE;
     private List<com.oculus.jj.model.ROI> roiList = new ArrayList<>();
     private com.oculus.jj.model.ROI activeRoi = null;
@@ -65,7 +69,7 @@ public class Viewer3DController extends JFrame {
 
         // initializeData(); // Don't call here, we will do it asynchronously
         initializeUI();
-        
+
         // Asynchronously prepare data and launch GPU renderer
         startAsyncGPUInitialization();
     }
@@ -83,9 +87,11 @@ public class Viewer3DController extends JFrame {
         new Thread(() -> {
             try {
                 List<List<DicomPix>> allPix = viewer2D.getPixList();
-                if (allPix == null || allPix.isEmpty()) return;
+                if (allPix == null || allPix.isEmpty())
+                    return;
                 this.pixList = new ArrayList<>(allPix.get(0));
-                if (pixList == null || pixList.isEmpty()) return;
+                if (pixList == null || pixList.isEmpty())
+                    return;
 
                 DicomPix first = pixList.get(0);
                 dimX = first.getWidth();
@@ -145,21 +151,23 @@ public class Viewer3DController extends JFrame {
             if (glViewer == null) {
                 glViewer = new GLViewer3D();
                 setMode(this.mode); // Apply initial mode
-                
+
                 GLData data = new GLData();
                 data.api = GLData.API.GL;
                 data.majorVersion = 3;
                 data.minorVersion = 3;
                 data.profile = GLData.Profile.CORE;
                 data.samples = 0;
-                
+
                 canvas = new AWTGLCanvas(data) {
                     private static final long serialVersionUID = 1L;
+
                     @Override
                     public void initGL() {
                         GL.createCapabilities();
                         glViewer.initGL();
                     }
+
                     @Override
                     public void paintGL() {
                         glViewer.paintGL(getWidth(), getHeight());
@@ -175,13 +183,17 @@ public class Viewer3DController extends JFrame {
                         remove(c);
                     }
                 }
-                
+
                 glViewer.setVolumeData(volume, dimX, dimY, dimZ, pixList);
-                
+
                 java.awt.event.MouseAdapter syncMouse = new java.awt.event.MouseAdapter() {
                     private Point lastPos;
+
                     @Override
-                    public void mousePressed(MouseEvent e) { lastPos = e.getPoint(); }
+                    public void mousePressed(MouseEvent e) {
+                        lastPos = e.getPoint();
+                    }
+
                     @Override
                     public void mouseDragged(MouseEvent e) {
                         if (lastPos != null) {
@@ -189,45 +201,58 @@ public class Viewer3DController extends JFrame {
                             int dy = e.getY() - lastPos.y;
                             if (SwingUtilities.isRightMouseButton(e) || currentTool == Tool3D.ZOOM) {
                                 zoom *= (1.0 - dy / 200.0);
-                                if (zoom < 0.1) zoom = 0.1;
-                            } else if (SwingUtilities.isMiddleMouseButton(e) || currentTool == Tool3D.VR_ADJUST) {
-                                windowLevel += dy * 2.0f;
-                                windowWidth += dx * 2.0f;
-                                if (windowWidth < 1) windowWidth = 1;
+                                if (zoom < 0.1)
+                                    zoom = 0.1;
+                                                        } else if (SwingUtilities.isMiddleMouseButton(e)) {
+                                boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
+                                if (isShift) {
+                                    windowLevel += dy * 2.0f;
+                                    windowWidth += dx * 2.0f;
+                                    if (windowWidth < 1) windowWidth = 1;
+                                } else {
+                                    float sensitivity = 0.001f;
+                                    glViewer.addOffset((float)(lastPos.x - e.getX()) * sensitivity, (float)(lastPos.y - e.getY()) * sensitivity, 0);
+                                }
+                                repaint();
                             } else {
                                 rotateY += dx * 0.01;
                                 rotateX += dy * 0.01;
                             }
-                            glViewer.setRotation((float)rotateX, (float)rotateY);
-                            glViewer.setZoom((float)zoom);
+                            glViewer.setRotation((float) rotateX, (float) rotateY);
+                            glViewer.setZoom((float) zoom);
                             glViewer.setWindowLevel(windowLevel, windowWidth);
                             lastPos = e.getPoint();
                         }
                     }
+
                     @Override
                     public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
                         zoom *= (1.0 - e.getWheelRotation() * 0.1);
-                        if (zoom < 0.1) zoom = 0.1;
-                        glViewer.setZoom((float)zoom);
+                        if (zoom < 0.1)
+                            zoom = 0.1;
+                        glViewer.setZoom((float) zoom);
                     }
                 };
                 canvas.addMouseListener(syncMouse);
                 canvas.addMouseMotionListener(syncMouse);
                 canvas.addMouseWheelListener(syncMouse);
-                
-                glViewer.setRotation((float)rotateX, (float)rotateY);
-                glViewer.setZoom((float)zoom);
+
+                glViewer.setRotation((float) rotateX, (float) rotateY);
+                glViewer.setZoom((float) zoom);
                 glViewer.setWindowLevel(windowLevel, windowWidth);
 
                 this.add(canvas, BorderLayout.CENTER);
                 this.revalidate();
                 this.repaint();
-                
+
                 isRendering = true;
                 Thread renderThread = new Thread(() -> {
                     while (isRendering) {
                         canvas.render();
-                        try { Thread.sleep(16); } catch (Exception e) {}
+                        try {
+                            Thread.sleep(16);
+                        } catch (Exception e) {
+                        }
                     }
                 });
                 renderThread.setDaemon(true);
@@ -442,7 +467,8 @@ public class Viewer3DController extends JFrame {
                         break;
                     case KeyEvent.VK_M:
                         currentTool = Tool3D.MEASURE;
-                        activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1, new Point2D.Float(0, 0));
+                        activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1,
+                                new Point2D.Float(0, 0));
                         activeRoi.setName("3D Measurement " + (roiList.size() + 1));
                         break;
                     case KeyEvent.VK_P:
@@ -470,7 +496,8 @@ public class Viewer3DController extends JFrame {
                         com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
                         if (pt != null) {
                             if (activeRoi == null || activeRoi.getPoints3D().size() >= 2) {
-                                activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1, new Point2D.Float(0, 0));
+                                activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1,
+                                        new Point2D.Float(0, 0));
                                 activeRoi.setName("3D Length " + (roiList.size() + 1));
                                 roiList.add(activeRoi);
                             }
@@ -481,7 +508,8 @@ public class Viewer3DController extends JFrame {
                     } else if (currentTool == Tool3D.ROI_POINT) {
                         com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
                         if (pt != null) {
-                            com.oculus.jj.model.ROI pRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.t2DPoint, 1, 1, new Point2D.Float(0, 0));
+                            com.oculus.jj.model.ROI pRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.t2DPoint, 1, 1,
+                                    new Point2D.Float(0, 0));
                             pRoi.setName("3D Point " + (roiList.size() + 1));
                             pRoi.addPoint3D(pt);
                             roiList.add(pRoi);
@@ -623,7 +651,8 @@ public class Viewer3DController extends JFrame {
 
             for (com.oculus.jj.model.ROI roi : roiList) {
                 List<com.oculus.jj.model.ROI.Point3D> points = roi.getPoints3D();
-                if (points.isEmpty()) continue;
+                if (points.isEmpty())
+                    continue;
 
                 Point prevP = null;
                 com.oculus.jj.model.ROI.Point3D prevV = null;
@@ -660,7 +689,8 @@ public class Viewer3DController extends JFrame {
                                 spacingZ);
 
                         String unit = com.oculus.jj.config.AppPreferences.getMeasureUnit();
-                        if ("cm".equals(unit)) dist /= 10.0;
+                        if ("cm".equals(unit))
+                            dist /= 10.0;
 
                         String label = String.format("%.2f %s", dist, unit);
                         g.drawString(label, (prevP.x + sx) / 2 + 5, (prevP.y + sy) / 2 - 5);
@@ -771,7 +801,7 @@ public class Viewer3DController extends JFrame {
 
             // 画質を大幅に向上させる（ユーザー様のハイスペックCPU向けに最適化）
             // isDragging（回転中）のスキップ幅を3から2（または1）に減らし、粗さを解消
-            int rawStep = isDragging ? 1 : 1; 
+            int rawStep = isDragging ? 1 : 1;
             final int currentStep = Math.max(1, rawStep);
             // レイが進む間隔（rayStep）も細かくし、3Dのディテールをくっきりさせる
             final double rayStep = isDragging ? 1.0 : 0.4;
@@ -796,12 +826,13 @@ public class Viewer3DController extends JFrame {
                         double ty = vy * cosX - tz0 * sinX;
                         double tz = vy * sinX + tz0 * cosX;
 
-                        if (tx + cx >= 0 && tx + cx < dimX && ty + cy >= 0 && ty + cy < dimY && tz + cz >= 0 && tz + cz < dimZ) {
+                        if (tx + cx >= 0 && tx + cx < dimX && ty + cy >= 0 && ty + cy < dimY && tz + cz >= 0
+                                && tz + cz < dimZ) {
                             // 補間計算用の実数座標
                             double curX = tx + cx;
                             double curY = ty + cy;
                             double curZ = tz + cz;
-                            
+
                             // 陰影計算（getGradient）用の整数座標
                             int ix = (int) curX;
                             int iy = (int) curY;
@@ -835,17 +866,27 @@ public class Viewer3DController extends JFrame {
                                     // WindowLevel/Widthによって組織の強調度合いが変わるように調整
                                     float r = 0, g_val = 0, b = 0;
                                     float relVal = val - low; // 0 at low threshold, ww at full opacity
-                                    
+
                                     if (val > 400 + (wl - 300)) { // Bone
-                                        r = 1.0f; g_val = 0.9f; b = 0.8f;
+                                        r = 1.0f;
+                                        g_val = 0.9f;
+                                        b = 0.8f;
                                     } else if (val > 150 + (wl - 100)) { // Contrast/Muscle
-                                        r = 0.9f; g_val = 0.6f; b = 0.4f;
+                                        r = 0.9f;
+                                        g_val = 0.6f;
+                                        b = 0.4f;
                                     } else if (val > 20 + (wl - 40)) { // Soft Tissue
-                                        r = 0.7f; g_val = 0.4f; b = 0.3f;
+                                        r = 0.7f;
+                                        g_val = 0.4f;
+                                        b = 0.3f;
                                     } else if (val > -100 + (wl - 0)) { // Fat
-                                        r = 0.4f; g_val = 0.3f; b = 0.2f;
+                                        r = 0.4f;
+                                        g_val = 0.3f;
+                                        b = 0.2f;
                                     } else { // Air/Lung
-                                        r = 0.1f; g_val = 0.1f; b = 0.2f;
+                                        r = 0.1f;
+                                        g_val = 0.1f;
+                                        b = 0.2f;
                                     }
 
                                     // Shading (Lambertian)
