@@ -69,6 +69,7 @@ public class Viewer3DController extends JFrame {
         this.windowWidth += dWidth;
         if (this.windowWidth < 1)
             this.windowWidth = 1;
+        if (glViewer != null) glViewer.setWindowLevel(windowLevel, windowWidth);
         repaint();
     }
 
@@ -228,6 +229,7 @@ public class Viewer3DController extends JFrame {
                                     windowLevel += dy * 2.0f;
                                     windowWidth += dx * 2.0f;
                                     if (windowWidth < 1) windowWidth = 1;
+                                    if (glViewer != null) glViewer.setWindowLevel(windowLevel, windowWidth);
                                 } else {
                                     float sensitivity = 0.001f;
                                     glViewer.addOffset((float)(lastPos.x - e.getX()) * sensitivity, (float)(lastPos.y - e.getY()) * sensitivity, 0);
@@ -391,6 +393,7 @@ public class Viewer3DController extends JFrame {
             zoom = 1.0;
             windowLevel = 40;
             windowWidth = 400;
+            if (glViewer != null) glViewer.setWindowLevel(windowLevel, windowWidth);
             repaint();
         });
         vrToolbar.add(btnReset);
@@ -471,22 +474,6 @@ public class Viewer3DController extends JFrame {
         vrToolbar.add(tglGPU);
 
         add(vrToolbar, BorderLayout.NORTH);
-
-        // --- Clipping Side Panel (HOROS: VRController clipping sliders) ---
-        JPanel sidePanel = new JPanel();
-        sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
-        sidePanel.setBorder(BorderFactory.createTitledBorder("Clipping"));
-        sidePanel.setPreferredSize(new Dimension(240, 0));
-        sidePanel.setBackground(new Color(230, 232, 235));
-        sidePanel.add(makeClipSlider("X Min", 0,   v -> { clipMinX = v/100f; applyClipping(); }));
-        sidePanel.add(makeClipSlider("X Max", 100, v -> { clipMaxX = v/100f; applyClipping(); }));
-        sidePanel.add(Box.createVerticalStrut(6));
-        sidePanel.add(makeClipSlider("Y Min", 0,   v -> { clipMinY = v/100f; applyClipping(); }));
-        sidePanel.add(makeClipSlider("Y Max", 100, v -> { clipMaxY = v/100f; applyClipping(); }));
-        sidePanel.add(Box.createVerticalStrut(6));
-        sidePanel.add(makeClipSlider("Z Min", 0,   v -> { clipMinZ = v/100f; applyClipping(); }));
-        sidePanel.add(makeClipSlider("Z Max", 100, v -> { clipMaxZ = v/100f; applyClipping(); }));
-        add(sidePanel, BorderLayout.EAST);
 
         renderingPanel = new RenderingPanel();
         add(renderingPanel, BorderLayout.CENTER);

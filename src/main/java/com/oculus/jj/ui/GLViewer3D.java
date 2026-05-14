@@ -34,6 +34,10 @@ public class GLViewer3D {
     // Phase 2: Phong ライト方向
     private float lightX = -0.577f, lightY = -0.577f, lightZ = 0.577f;
 
+    // WW/WL (HOROS準拠: TFのルックアップ範囲を制御)
+    private float windowLevel = 40.0f;
+    private float windowWidth = 400.0f;
+
     // Clipping
     private float clipMinX = 0, clipMaxX = 1;
     private float clipMinY = 0, clipMaxY = 1;
@@ -74,6 +78,8 @@ public class GLViewer3D {
         this.transferFunction = tf; this.tfDirty = true;
     }
     public void setIsoThreshold(float t) { this.isoThreshold = t; }
+    /** HOROS準拠: WW/WL でTFの参照範囲をシフト・スケールする */
+    public void setWindowLevel(float wl, float ww) { this.windowLevel = wl; this.windowWidth = Math.max(1, ww); }
 
     // --- シェーダー ---
     private static final String VERT = "#version 330 core\n" +
@@ -97,8 +103,10 @@ public class GLViewer3D {
         "uniform float stepSize;\n" +
         "uniform int renderMode;\n" +
         "uniform float isoThreshold;\n" +
+        "uniform float windowLevel;\n" +
+        "uniform float windowWidth;\n" +
         "uniform vec3 uOffset;\n" +
-        "uniform vec3 lightDir;\n" +         // Phase 2
+        "uniform vec3 lightDir;\n" +
         "uniform vec3 clipMin, clipMax;\n" +
         "void main(){\n" +
         "  vec3 ray=normalize(vTex-vCam);\n" +
@@ -111,7 +119,8 @@ public class GLViewer3D {
         "    if(pos.x<0||pos.x>1||pos.y<0||pos.y>1||pos.z<0||pos.z>1) break;\n" +
         "    if(pos.x>=clipMin.x&&pos.x<=clipMax.x&&pos.y>=clipMin.y&&pos.y<=clipMax.y&&pos.z>=clipMin.z&&pos.z<=clipMax.z){\n" +
         "      float raw=texture(volumeTex,pos).r*65535.0-32768.0;\n" +
-        "      float t=clamp((raw+1024.0)/4096.0,0,1);\n" +
+        "      // HOROS準拠: WW/WLでTFルックアップ座標をシフト・スケール\n" +
+        "      float t=clamp((raw-(windowLevel-windowWidth*0.5))/windowWidth,0.0,1.0);\n" +
         "      if(renderMode==0){\n" +
         "        maxV=max(maxV,t);\n" +
         "      } else if(renderMode==1){\n" +
@@ -263,6 +272,8 @@ public class GLViewer3D {
         u1f("stepSize",0.003f);
         u1i("renderMode",renderMode);
         u1f("isoThreshold",isoThreshold);
+        u1f("windowLevel",windowLevel);
+        u1f("windowWidth",windowWidth);
         u3f("uOffset",offsetX,offsetY,offsetZ);
         u3f("lightDir",lightX,lightY,lightZ);
         u3f("clipMin",clipMinX,clipMinY,clipMinZ);
