@@ -115,7 +115,7 @@ public class GLViewer3D {
         "  float maxV=0;\n" +
         "  float jit=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);\n" +
         "  pos+=ray*stepSize*jit;\n" +
-        "  for(int i=0;i<500;i++){\n" +
+        "  for(int i=0;i<800;i++){\n" +
         "    if(pos.x<0||pos.x>1||pos.y<0||pos.y>1||pos.z<0||pos.z>1) break;\n" +
         "    if(pos.x>=clipMin.x&&pos.x<=clipMax.x&&pos.y>=clipMin.y&&pos.y<=clipMax.y&&pos.z>=clipMin.z&&pos.z<=clipMax.z){\n" +
         "      float raw=texture(volumeTex,pos).r*65535.0-32768.0;\n" +
@@ -269,7 +269,7 @@ public class GLViewer3D {
         float[] mdl  = multiply(rotate(rotateX,1,0,0), rotate(rotateY,0,1,0));
 
         setMat4("projection",proj); setMat4("view",view); setMat4("model",mdl);
-        u1f("stepSize",0.003f);
+        u1f("stepSize",0.002f);
         u1i("renderMode",renderMode);
         u1f("isoThreshold",isoThreshold);
         u1f("windowLevel",windowLevel);

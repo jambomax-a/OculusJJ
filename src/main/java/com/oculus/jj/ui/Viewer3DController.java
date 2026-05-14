@@ -464,14 +464,16 @@ public class Viewer3DController extends JFrame {
         vrToolbar.add(comboTF);
 
         vrToolbar.addSeparator();
-        JToggleButton tglGPU = new JToggleButton("GPU", true);
-        tglGPU.setToolTipText("GPU/CPU レンダリング切り替え");
-        tglGPU.addActionListener(e -> {
-            useGPU = tglGPU.isSelected();
-            tglGPU.setText(useGPU ? "GPU" : "CPU");
-            repaint();
-        });
-        vrToolbar.add(tglGPU);
+        vrToolbar.add(new JLabel("Engine: "));
+        JRadioButton rbGPU = new JRadioButton("GPU", true);
+        JRadioButton rbCPU = new JRadioButton("CPU", false);
+        ButtonGroup bgEngine = new ButtonGroup();
+        bgEngine.add(rbGPU); bgEngine.add(rbCPU);
+        rbGPU.setOpaque(false); rbCPU.setOpaque(false);
+        rbGPU.addActionListener(e -> { useGPU = true;  repaint(); });
+        rbCPU.addActionListener(e -> { useGPU = false; repaint(); });
+        vrToolbar.add(rbGPU);
+        vrToolbar.add(rbCPU);
 
         add(vrToolbar, BorderLayout.NORTH);
 
@@ -628,9 +630,136 @@ public class Viewer3DController extends JFrame {
                 return;
 
             Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             render3D(g2d);
             drawMeasurements(g2d);
+            drawOrientationOverlay(g2d);
         }
+
+        /** HOROS準拠: 方位ラベル(S/I/A/P/L/R)・Rボックス・WL情報を描画 */
+        private void drawOrientationOverlay(Graphics2D g) {
+            int w = getWidth(), h = getHeight();
+
+            // ---- 方位ラベル計算 ----
+            // デフォルト視点(rotateX=-π/2): 上=S(Superior), 下=I, 左=A(Anterior後面なのでP), 右=A
+            // 回転に応じてどのラベルが各辺に来るかを計算
+            double rx = rotateX, ry = rotateY;
+            // 体軸方向ベクトル: 上方向(screen Y-)がどの解剖学的方向かを計算
+            // 簡略化: HOROSと同様に主要8方向から最近傍を選択
+            String[] anatomicalLabels = computeOrientationLabels(rx, ry);
+            String labelTop    = anatomicalLabels[0]; // 画面上
+            String labelBottom = anatomicalLabels[1]; // 画面下
+            String labelLeft   = anatomicalLabels[2]; // 画面左
+            String labelRight  = anatomicalLabels[3]; // 画面右
+
+            // ---- 描画スタイル ----
+            Font oriFont = new Font("SansSerif", Font.BOLD, 16);
+            g.setFont(oriFont);
+            FontMetrics fm = g.getFontMetrics(oriFont);
+
+            int margin = 12;
+            // 影付きで描画（見やすくするため）
+            g.setColor(Color.BLACK);
+            // Top (S)
+            int lw = fm.stringWidth(labelTop);
+            g.drawString(labelTop, w/2 - lw/2 + 1, margin + fm.getAscent() + 1);
+            // Bottom (I)
+            lw = fm.stringWidth(labelBottom);
+            g.drawString(labelBottom, w/2 - lw/2 + 1, h - margin + 1);
+            // Left
+            g.drawString(labelLeft, margin + 1, h/2 + fm.getAscent()/2 + 1);
+            // Right
+            lw = fm.stringWidth(labelRight);
+            g.drawString(labelRight, w - margin - lw + 1, h/2 + fm.getAscent()/2 + 1);
+
+            g.setColor(Color.WHITE);
+            lw = fm.stringWidth(labelTop);
+            g.drawString(labelTop, w/2 - lw/2, margin + fm.getAscent());
+            lw = fm.stringWidth(labelBottom);
+            g.drawString(labelBottom, w/2 - lw/2, h - margin);
+            g.drawString(labelLeft, margin, h/2 + fm.getAscent()/2);
+            lw = fm.stringWidth(labelRight);
+            g.drawString(labelRight, w - margin - lw, h/2 + fm.getAscent()/2);
+
+            // ---- Rボックス（右上） HOROS準拠 ----
+            int bx = w - 50, by = 10, bw = 38, bh = 38;
+            g.setColor(new Color(0, 100, 0, 200));           // 濃い緑背景
+            g.fillRoundRect(bx, by, bw, bh, 6, 6);
+            g.setColor(new Color(0, 180, 0));                // 緑枠
+            g.setStroke(new BasicStroke(2));
+            g.drawRoundRect(bx, by, bw, bh, 6, 6);
+            g.setColor(Color.WHITE);
+            Font rFont = new Font("SansSerif", Font.BOLD, 22);
+            g.setFont(rFont);
+            FontMetrics rfm = g.getFontMetrics(rFont);
+            String rLabel = "R";
+            g.drawString(rLabel, bx + (bw - rfm.stringWidth(rLabel))/2, by + rfm.getAscent() + (bh - rfm.getHeight())/2);
+
+            // ---- WL/WW 左上 ----
+            Font infoFont = new Font("Monospaced", Font.PLAIN, 12);
+            g.setFont(infoFont);
+            g.setColor(Color.WHITE);
+            g.drawString(String.format("WL: %.0f  WW: %.0f", windowLevel, windowWidth), 10, 20);
+            g.drawString(String.format("Mode: %s | %s", mode, useGPU ? "GPU" : "CPU"), 10, 36);
+            g.drawString(String.format("Zoom: %.2fx", zoom), 10, 52);
+
+            // ---- 座標表示（右下） HOROS準拠 ----
+            g.setFont(infoFont);
+            g.setColor(Color.WHITE);
+            FontMetrics ifm = g.getFontMetrics(infoFont);
+            String[] coordLines = {
+                String.format("S-I  %.1f", -rotateX),
+                String.format("L-R  %.1f", rotateY),
+                String.format("ROI T %.1f", zoom)
+            };
+            int cy2 = h - margin - ifm.getHeight() * (coordLines.length - 1);
+            for (String line : coordLines) {
+                int cw = ifm.stringWidth(line);
+                g.drawString(line, w - cw - margin, cy2);
+                cy2 += ifm.getHeight();
+            }
+        }
+
+        /** 回転角から画面の各辺に表示する解剖方位ラベルを計算 */
+        private String[] computeOrientationLabels(double rx, double ry) {
+            // 画面上方向ベクトル(0,-1,0)を逆回転してボリューム座標に変換
+            // 簡略: rx が主に頭足方向、ryが左右を制御
+            // 上画面: -Y軸方向 → rx回転で体軸に沿う
+            double cosX = Math.cos(rx), sinX = Math.sin(rx);
+            double cosY = Math.cos(ry), sinY = Math.sin(ry);
+
+            // 上方向ベクトル(スクリーン) = (0,-1,0) をボリューム空間に逆変換
+            // RotX^-1: (x, y*cosX + z*sinX, -y*sinX + z*cosX)
+            // RotY^-1: (x*cosY - z*sinY, y, x*sinY + z*cosY)
+            double ux = 0, uy = -1, uz = 0;
+            // RotX逆
+            double ux1 = ux, uy1 = uy * cosX + uz * sinX, uz1 = -uy * sinX + uz * cosX;
+            // RotY逆
+            double ux2 = ux1 * cosY - uz1 * sinY, uy2 = uy1, uz2 = ux1 * sinY + uz1 * cosY;
+            // uz2: Superior方向(+z=Superior), uy2: Anterior方向(+y=Posterior), ux2: Right方向
+
+            String top    = dominantAxis(ux2, uy2, uz2);
+            String bottom = opposite(top);
+            // 右方向ベクトル(1,0,0)を同様に変換
+            double rx2 = cosY, ry2 = 0, rz2 = sinY;
+            double rx3 = rx2, ry3 = ry2 * cosX + rz2 * sinX, rz3 = -ry2 * sinX + rz2 * cosX;
+            String right2 = dominantAxis(rx3, ry3, rz3);
+            String left2  = opposite(right2);
+            return new String[]{top, bottom, left2, right2};
+        }
+
+        private String dominantAxis(double x, double y, double z) {
+            double ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+            if (az >= ax && az >= ay) return z >= 0 ? "S" : "I";   // Superior/Inferior
+            if (ax >= ay)             return x >= 0 ? "R" : "L";   // Right/Left
+            return y >= 0 ? "P" : "A";                              // Posterior/Anterior
+        }
+        private String opposite(String s) {
+            switch(s) { case "S": return "I"; case "I": return "S";
+                        case "R": return "L"; case "L": return "R";
+                        case "A": return "P"; default:  return "A"; }
+        }
+
 
         private com.oculus.jj.model.ROI.Point3D getVoxelUnderMouse(int sx, int sy) {
             int w = getWidth();
@@ -998,12 +1127,6 @@ public class Viewer3DController extends JFrame {
                 }
             });
             g.drawImage(image, 0, 0, null);
-
-            g.setColor(Color.WHITE);
-            g.drawString(String.format("Mode: %s | Tool: %s", mode, currentTool), 20, 30);
-            g.drawString(String.format("WL: %.0f WW: %.0f", windowLevel, windowWidth), 20, 50);
-            g.drawString(String.format("Zoom: %.2f", zoom), 20, 70);
-            g.drawString("Rotate: Left Drag | VR Adjust: Tool/Middle Drag | Zoom: Right Drag/Wheel", 20, h - 20);
         }
     }
 
