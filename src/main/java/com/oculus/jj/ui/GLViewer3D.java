@@ -98,8 +98,8 @@ public class GLViewer3D {
         "in vec3 vTex, vCam;\n" +
         "out vec4 FragColor;\n" +
         "uniform sampler3D volumeTex;\n" +
-        "uniform sampler3D gradTex;\n" +    // Phase 1
-        "uniform sampler1D tfTex;\n" +      // Phase 3
+        "uniform sampler3D gradTex;\n" +
+        "uniform sampler1D tfTex;\n" +
         "uniform float stepSize;\n" +
         "uniform int renderMode;\n" +
         "uniform float isoThreshold;\n" +
@@ -113,43 +113,50 @@ public class GLViewer3D {
         "  vec3 pos=vTex+uOffset;\n" +
         "  vec4 acc=vec4(0);\n" +
         "  float maxV=0;\n" +
-        "  float jit=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);\n" +
+        // jitterを小さく抑える（0.0~0.5）
+        "  float jit=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)*0.5;\n" +
         "  pos+=ray*stepSize*jit;\n" +
         "  for(int i=0;i<800;i++){\n" +
-        "    if(pos.x<0||pos.x>1||pos.y<0||pos.y>1||pos.z<0||pos.z>1) break;\n" +
-        "    if(pos.x>=clipMin.x&&pos.x<=clipMax.x&&pos.y>=clipMin.y&&pos.y<=clipMax.y&&pos.z>=clipMin.z&&pos.z<=clipMax.z){\n" +
+        "    if(pos.x<0.0||pos.x>1.0||pos.y<0.0||pos.y>1.0||pos.z<0.0||pos.z>1.0) break;\n" +
+        "    if(pos.x>=clipMin.x&&pos.x<=clipMax.x&&\n" +
+        "       pos.y>=clipMin.y&&pos.y<=clipMax.y&&\n" +
+        "       pos.z>=clipMin.z&&pos.z<=clipMax.z){\n" +
         "      float raw=texture(volumeTex,pos).r*65535.0-32768.0;\n" +
-        "      // HOROS準拠: WW/WLでTFルックアップ座標をシフト・スケール\n" +
-        "      float t=clamp((raw-(windowLevel-windowWidth*0.5))/windowWidth,0.0,1.0);\n" +
+        // TF用座標: 絶対HU範囲(-1024 ~ 3072) → 0..1 ★Fix2: WL/WWと分離
+        "      float tfT=clamp((raw+1024.0)/4096.0, 0.0, 1.0);\n" +
+        // MIP/MinIP用座標: WL/WW窓でスケール
+        "      float winT=clamp((raw-(windowLevel-windowWidth*0.5))/windowWidth, 0.0, 1.0);\n" +
         "      if(renderMode==0){\n" +
-        "        maxV=max(maxV,t);\n" +
+        "        maxV=max(maxV,winT);\n" +
         "      } else if(renderMode==1){\n" +
-        "        vec4 tf=texture(tfTex,t);\n" +
+        "        vec4 tf=texture(tfTex,tfT);\n" +  // ★TFは絶対HU座標で参照
         "        if(tf.a>0.005){\n" +
-        "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" + // Phase 1 法線
-        "          vec3 L=lightDir;\n" +
-        "          vec3 V=-ray;\n" +
-        "          vec3 R=reflect(-L,N);\n" +
+        "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" +
+        "          vec3 L=normalize(lightDir);\n" +
+        "          vec3 V=normalize(-ray);\n" +
+        "          vec3 H=normalize(L+V);\n" +  // Blinn-Phong (HOROSはこちら)
         "          float ambient=0.20;\n" +
         "          float diffuse=max(dot(N,L),0.0)*0.70;\n" +
-        "          float spec=pow(max(dot(R,V),0.0),32.0)*0.10;\n" +
+        "          float spec=pow(max(dot(N,H),0.0),32.0)*0.10;\n" +
         "          vec3 col=tf.rgb*(ambient+diffuse)+vec3(spec);\n" +
-        "          acc.rgb+=(1-acc.a)*col*tf.a;\n" +
-        "          acc.a+=(1-acc.a)*tf.a;\n" +
-        "          if(acc.a>=0.98) break;\n" +
+        "          acc.rgb+=(1.0-acc.a)*col*tf.a;\n" +
+        "          acc.a+=(1.0-acc.a)*tf.a;\n" +
+        "          if(acc.a>=0.99) break;\n" +
         "        }\n" +
-        "      } else {\n" + // ISO
+        "      } else {\n" +
         "        if(raw>isoThreshold){\n" +
         "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" +
-        "          float d=max(dot(N,lightDir),0.2);\n" +
-        "          acc=vec4(vec3(0.9,0.85,0.75)*d,1);\n" +
+        "          vec3 L=normalize(lightDir);\n" +
+        "          float d=max(dot(N,L),0.15);\n" +
+        "          float s=pow(max(dot(normalize(-ray+L),N),0.0),16.0)*0.15;\n" +
+        "          acc=vec4(vec3(0.92,0.88,0.78)*(d+0.2)+vec3(s),1.0);\n" +
         "          break;\n" +
         "        }\n" +
         "      }\n" +
         "    }\n" +
         "    pos+=ray*stepSize;\n" +
         "  }\n" +
-        "  if(renderMode==0) FragColor=vec4(vec3(maxV),1);\n" +
+        "  if(renderMode==0) FragColor=(maxV>0.001)?vec4(vec3(maxV),1.0):vec4(0.0);\n" +
         "  else FragColor=acc;\n" +
         "}\n";
 

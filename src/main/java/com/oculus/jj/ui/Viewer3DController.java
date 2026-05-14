@@ -110,6 +110,10 @@ public class Viewer3DController extends JFrame {
                 dimZ = pixList.size();
                 spacingZ = (first.getSliceThickness() <= 0.1) ? 1.0 : first.getSliceThickness();
 
+                // ---- Fix 1: DICOMスライスを空間順にソート (HOROS-20240407準拠) ----
+                // ソートしないとボリュームが折り返し・縞模様になる
+                pixList.sort((a, b) -> Double.compare(a.getSliceLocation(), b.getSliceLocation()));
+
                 volume = new short[dimZ][dimY][dimX];
                 for (int z = 0; z < dimZ; z++) {
                     DicomPix pix = pixList.get(z);
