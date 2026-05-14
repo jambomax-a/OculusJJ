@@ -28,21 +28,31 @@ public class Viewer3DController extends JFrame {
 
     private RenderingPanel renderingPanel;
     private GLViewer3D glViewer;
-    private String mode = "MIP"; // "MIP", "VR", "MinIP", "Average", "ISO"
+    private CPURaycastRenderer cpuRenderer;   // Phase 4: CPU fallback
+    private boolean useGPU = true;            // Phase 4: GPU/CPU switch
+    private String mode = "MIP";
     private boolean shadingEnabled = true;
 
     // Window Level/Width
     private float windowLevel = 40;
     private float windowWidth = 400;
 
-    // ISO Threshold for Surface Rendering
+    // ISO Threshold
     private int isoThreshold = 300;
     private double resolution = 0.5;
 
+    // Transfer Function (Phase 3)
+    private TransferFunction currentTF = TransferFunction.createSoftTissue();
+
     // 視点回転パラメータ
-    private double rotateX = -Math.PI / 2; // デフォルトを正面(Coronal)向きに調整
+    private double rotateX = -Math.PI / 2;
     private double rotateY = 0;
     private double zoom = 1.0;
+
+    // Clipping
+    private float clipMinX = 0, clipMaxX = 1;
+    private float clipMinY = 0, clipMaxY = 1;
+    private float clipMinZ = 0, clipMaxZ = 1;
 
     private boolean isDragging = false;
 
@@ -185,6 +195,15 @@ public class Viewer3DController extends JFrame {
                 }
 
                 glViewer.setVolumeData(volume, dimX, dimY, dimZ, pixList);
+                glViewer.setTransferFunction(currentTF);
+                glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+
+                // CPU renderer 初期化 (Phase 4: フォールバック)
+                cpuRenderer = new CPURaycastRenderer();
+                cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
+                cpuRenderer.setTransferFunction(currentTF);
+                cpuRenderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+                new Thread(() -> cpuRenderer.computeGradients()).start();
 
                 java.awt.event.MouseAdapter syncMouse = new java.awt.event.MouseAdapter() {
                     private Point lastPos;
@@ -220,7 +239,7 @@ public class Viewer3DController extends JFrame {
                             }
                             glViewer.setRotation((float) rotateX, (float) rotateY);
                             glViewer.setZoom((float) zoom);
-                            glViewer.setWindowLevel(windowLevel, windowWidth);
+                            // WL/WW is now handled by TransferFunction
                             lastPos = e.getPoint();
                         }
                     }
@@ -239,7 +258,7 @@ public class Viewer3DController extends JFrame {
 
                 glViewer.setRotation((float) rotateX, (float) rotateY);
                 glViewer.setZoom((float) zoom);
-                glViewer.setWindowLevel(windowLevel, windowWidth);
+                // WL/WW is now handled by TransferFunction
 
                 this.add(canvas, BorderLayout.CENTER);
                 this.revalidate();
@@ -424,26 +443,50 @@ public class Viewer3DController extends JFrame {
         vrToolbar.add(tglVRAdjust);
 
         vrToolbar.addSeparator();
-        vrToolbar.add(new JLabel("Presets: "));
-        String[] presets = { "Bone", "Soft Tissue", "Lung" };
-        JComboBox<String> comboPresets = new JComboBox<>(presets);
-        comboPresets.addActionListener(e -> {
-            String p = (String) comboPresets.getSelectedItem();
-            if ("Bone".equals(p)) {
-                windowLevel = 300;
-                windowWidth = 1500;
-            } else if ("Soft Tissue".equals(p)) {
-                windowLevel = 40;
-                windowWidth = 400;
-            } else if ("Lung".equals(p)) {
-                windowLevel = -600;
-                windowWidth = 1500;
-            }
+        vrToolbar.add(new JLabel("TF Preset: "));
+        TransferFunction[] tfPresets = {
+            TransferFunction.createSoftTissue(),
+            TransferFunction.createBone(),
+            TransferFunction.createLung(),
+            TransferFunction.createVascular()
+        };
+        JComboBox<TransferFunction> comboTF = new JComboBox<>(tfPresets);
+        comboTF.setSelectedIndex(0);
+        comboTF.addActionListener(e -> {
+            currentTF = (TransferFunction) comboTF.getSelectedItem();
+            if (glViewer != null) glViewer.setTransferFunction(currentTF);
+            if (cpuRenderer != null) cpuRenderer.setTransferFunction(currentTF);
             repaint();
         });
-        vrToolbar.add(comboPresets);
+        vrToolbar.add(comboTF);
+
+        vrToolbar.addSeparator();
+        JToggleButton tglGPU = new JToggleButton("GPU", true);
+        tglGPU.setToolTipText("GPU/CPU レンダリング切り替え");
+        tglGPU.addActionListener(e -> {
+            useGPU = tglGPU.isSelected();
+            tglGPU.setText(useGPU ? "GPU" : "CPU");
+            repaint();
+        });
+        vrToolbar.add(tglGPU);
 
         add(vrToolbar, BorderLayout.NORTH);
+
+        // --- Clipping Side Panel (HOROS: VRController clipping sliders) ---
+        JPanel sidePanel = new JPanel();
+        sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
+        sidePanel.setBorder(BorderFactory.createTitledBorder("Clipping"));
+        sidePanel.setPreferredSize(new Dimension(240, 0));
+        sidePanel.setBackground(new Color(230, 232, 235));
+        sidePanel.add(makeClipSlider("X Min", 0,   v -> { clipMinX = v/100f; applyClipping(); }));
+        sidePanel.add(makeClipSlider("X Max", 100, v -> { clipMaxX = v/100f; applyClipping(); }));
+        sidePanel.add(Box.createVerticalStrut(6));
+        sidePanel.add(makeClipSlider("Y Min", 0,   v -> { clipMinY = v/100f; applyClipping(); }));
+        sidePanel.add(makeClipSlider("Y Max", 100, v -> { clipMaxY = v/100f; applyClipping(); }));
+        sidePanel.add(Box.createVerticalStrut(6));
+        sidePanel.add(makeClipSlider("Z Min", 0,   v -> { clipMinZ = v/100f; applyClipping(); }));
+        sidePanel.add(makeClipSlider("Z Max", 100, v -> { clipMaxZ = v/100f; applyClipping(); }));
+        add(sidePanel, BorderLayout.EAST);
 
         renderingPanel = new RenderingPanel();
         add(renderingPanel, BorderLayout.CENTER);
@@ -478,6 +521,25 @@ public class Viewer3DController extends JFrame {
                 repaint();
             }
         });
+    }
+
+    private JPanel makeClipSlider(String label, int init, java.util.function.Consumer<Integer> cb) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setOpaque(false);
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(lbl.getFont().deriveFont(11f));
+        p.add(lbl, BorderLayout.NORTH);
+        JSlider s = new JSlider(0, 100, init);
+        s.setOpaque(false);
+        s.addChangeListener(e -> { cb.accept(s.getValue()); repaint(); });
+        p.add(s, BorderLayout.CENTER);
+        p.setMaximumSize(new Dimension(230, 48));
+        return p;
+    }
+
+    private void applyClipping() {
+        if (glViewer  != null) glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+        if (cpuRenderer != null) cpuRenderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
     }
 
     private class RenderingPanel extends JPanel {

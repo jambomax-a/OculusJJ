@@ -1,18 +1,24 @@
 package com.oculus.jj.ui;
 
 import org.lwjgl.opengl.GL33;
-import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
-import java.nio.ShortBuffer;
+import java.nio.*;
 import org.lwjgl.system.MemoryUtil;
 import java.util.List;
 import com.oculus.jj.model.DicomPix;
 
+/**
+ * GLViewer3D - HOROS-20240407準拠 GPU Volume Renderer
+ * Phase 1: Pre-computed Gradient Volume (事前勾配計算)
+ * Phase 2: Phong照明 (Ambient + Diffuse + Specular)
+ * Phase 3: Transfer Function 1Dテクスチャ
+ */
 public class GLViewer3D {
 
     private int shaderProgram;
     private int vao, vbo, ebo;
     private int volumeTexture;
+    private int gradientTexture;  // Phase 1: 事前計算勾配テクスチャ
+    private int tfTexture;        // Phase 3: Transfer Function 1Dテクスチャ
 
     private short[][][] volume;
     private int dimX, dimY, dimZ;
@@ -21,337 +27,311 @@ public class GLViewer3D {
 
     private float rotateX = -1.57f;
     private float rotateY = 0.0f;
-    private float zoom = 1.0f;
-    private float windowLevel = 40.0f;
-    private float windowWidth = 400.0f;
-    private float offsetX = 0.0f, offsetY = 0.0f, offsetZ = 0.0f;
+    private float zoom    = 1.0f;
+    private float offsetX = 0, offsetY = 0, offsetZ = 0;
     private int renderMode = 1; // 0=MIP, 1=VR, 2=ISO
 
+    // Phase 2: Phong ライト方向
+    private float lightX = -0.577f, lightY = -0.577f, lightZ = 0.577f;
+
+    // Clipping
+    private float clipMinX = 0, clipMaxX = 1;
+    private float clipMinY = 0, clipMaxY = 1;
+    private float clipMinZ = 0, clipMaxZ = 1;
+
+    // Phase 3: Transfer Function
+    private TransferFunction transferFunction;
+    private boolean tfDirty = true;
+
+    // ISO
+    private float isoThreshold = 300.0f;
+
     public GLViewer3D() {
+        this.transferFunction = TransferFunction.createSoftTissue();
     }
 
     public void setVolumeData(short[][][] vol, int w, int h, int d, List<DicomPix> pix) {
-        this.volume = vol;
-        this.dimX = w;
-        this.dimY = h;
-        this.dimZ = d;
-        this.pixList = pix;
-        this.dataReady = true;
+        this.volume = vol; this.dimX = w; this.dimY = h; this.dimZ = d;
+        this.pixList = pix; this.dataReady = true;
     }
-
-    public void setRenderMode(int mode) {
-        this.renderMode = mode;
-    }
-
-    public void setRotation(float x, float y) {
-        this.rotateX = x;
-        this.rotateY = y;
-    }
-
-    public void setZoom(float zoom) {
-        this.zoom = zoom;
-    }
-
-    public void setWindowLevel(float wl, float ww) {
-        this.windowLevel = wl;
-        this.windowWidth = ww;
-    }
-
-    public void setOffset(float x, float y, float z) {
-        this.offsetX = x;
-        this.offsetY = y;
-        this.offsetZ = z;
-    }
-
+    public void setRenderMode(int mode)          { this.renderMode = mode; }
+    public void setRotation(float x, float y)    { this.rotateX = x; this.rotateY = y; }
+    public void setZoom(float z)                 { this.zoom = z; }
+    public void setOffset(float x, float y, float z) { offsetX=x; offsetY=y; offsetZ=z; }
     public void addOffset(float dx, float dy, float dz) {
-        this.offsetX = Math.max(-1.0f, Math.min(1.0f, this.offsetX + dx));
-        this.offsetY = Math.max(-1.0f, Math.min(1.0f, this.offsetY + dy));
-        this.offsetZ = Math.max(-1.0f, Math.min(1.0f, this.offsetZ + dz));
+        offsetX=Math.max(-1,Math.min(1,offsetX+dx));
+        offsetY=Math.max(-1,Math.min(1,offsetY+dy));
+        offsetZ=Math.max(-1,Math.min(1,offsetZ+dz));
     }
+    public void setClipping(float x0,float x1,float y0,float y1,float z0,float z1) {
+        clipMinX=x0; clipMaxX=x1; clipMinY=y0; clipMaxY=y1; clipMinZ=z0; clipMaxZ=z1;
+    }
+    public void setLightDirection(float x, float y, float z) {
+        float l=(float)Math.sqrt(x*x+y*y+z*z);
+        if(l>0){lightX=x/l;lightY=y/l;lightZ=z/l;}
+    }
+    public void setTransferFunction(TransferFunction tf) {
+        this.transferFunction = tf; this.tfDirty = true;
+    }
+    public void setIsoThreshold(float t) { this.isoThreshold = t; }
+
+    // --- シェーダー ---
+    private static final String VERT = "#version 330 core\n" +
+        "layout(location=0) in vec3 aPos;\n" +
+        "out vec3 vTex;\n" +
+        "out vec3 vCam;\n" +
+        "uniform mat4 model,view,projection;\n" +
+        "void main(){\n" +
+        "  mat4 mv=view*model;\n" +
+        "  gl_Position=projection*mv*vec4(aPos,1);\n" +
+        "  vTex=aPos+vec3(0.5);\n" +
+        "  vCam=(inverse(mv)*vec4(0,0,0,1)).xyz+vec3(0.5);\n" +
+        "}\n";
+
+    private static final String FRAG = "#version 330 core\n" +
+        "in vec3 vTex, vCam;\n" +
+        "out vec4 FragColor;\n" +
+        "uniform sampler3D volumeTex;\n" +
+        "uniform sampler3D gradTex;\n" +    // Phase 1
+        "uniform sampler1D tfTex;\n" +      // Phase 3
+        "uniform float stepSize;\n" +
+        "uniform int renderMode;\n" +
+        "uniform float isoThreshold;\n" +
+        "uniform vec3 uOffset;\n" +
+        "uniform vec3 lightDir;\n" +         // Phase 2
+        "uniform vec3 clipMin, clipMax;\n" +
+        "void main(){\n" +
+        "  vec3 ray=normalize(vTex-vCam);\n" +
+        "  vec3 pos=vTex+uOffset;\n" +
+        "  vec4 acc=vec4(0);\n" +
+        "  float maxV=0;\n" +
+        "  float jit=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);\n" +
+        "  pos+=ray*stepSize*jit;\n" +
+        "  for(int i=0;i<500;i++){\n" +
+        "    if(pos.x<0||pos.x>1||pos.y<0||pos.y>1||pos.z<0||pos.z>1) break;\n" +
+        "    if(pos.x>=clipMin.x&&pos.x<=clipMax.x&&pos.y>=clipMin.y&&pos.y<=clipMax.y&&pos.z>=clipMin.z&&pos.z<=clipMax.z){\n" +
+        "      float raw=texture(volumeTex,pos).r*65535.0-32768.0;\n" +
+        "      float t=clamp((raw+1024.0)/4096.0,0,1);\n" +
+        "      if(renderMode==0){\n" +
+        "        maxV=max(maxV,t);\n" +
+        "      } else if(renderMode==1){\n" +
+        "        vec4 tf=texture(tfTex,t);\n" +
+        "        if(tf.a>0.005){\n" +
+        "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" + // Phase 1 法線
+        "          vec3 L=lightDir;\n" +
+        "          vec3 V=-ray;\n" +
+        "          vec3 R=reflect(-L,N);\n" +
+        "          float ambient=0.20;\n" +
+        "          float diffuse=max(dot(N,L),0.0)*0.70;\n" +
+        "          float spec=pow(max(dot(R,V),0.0),32.0)*0.10;\n" +
+        "          vec3 col=tf.rgb*(ambient+diffuse)+vec3(spec);\n" +
+        "          acc.rgb+=(1-acc.a)*col*tf.a;\n" +
+        "          acc.a+=(1-acc.a)*tf.a;\n" +
+        "          if(acc.a>=0.98) break;\n" +
+        "        }\n" +
+        "      } else {\n" + // ISO
+        "        if(raw>isoThreshold){\n" +
+        "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" +
+        "          float d=max(dot(N,lightDir),0.2);\n" +
+        "          acc=vec4(vec3(0.9,0.85,0.75)*d,1);\n" +
+        "          break;\n" +
+        "        }\n" +
+        "      }\n" +
+        "    }\n" +
+        "    pos+=ray*stepSize;\n" +
+        "  }\n" +
+        "  if(renderMode==0) FragColor=vec4(vec3(maxV),1);\n" +
+        "  else FragColor=acc;\n" +
+        "}\n";
 
     public void initGL() {
-        System.out.println("LWJGL OpenGL Vendor: " + GL33.glGetString(GL33.GL_VENDOR));
-        System.out.println("LWJGL OpenGL Renderer: " + GL33.glGetString(GL33.GL_RENDERER));
-        System.out.println("LWJGL OpenGL Version: " + GL33.glGetString(GL33.GL_VERSION));
-
-        GL33.glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+        System.out.println("GL Vendor: "+GL33.glGetString(GL33.GL_VENDOR));
+        System.out.println("GL Renderer: "+GL33.glGetString(GL33.GL_RENDERER));
+        GL33.glClearColor(0.05f,0.05f,0.1f,1);
         GL33.glEnable(GL33.GL_BLEND);
         GL33.glBlendFunc(GL33.GL_SRC_ALPHA, GL33.GL_ONE_MINUS_SRC_ALPHA);
         GL33.glEnable(GL33.GL_CULL_FACE);
         GL33.glCullFace(GL33.GL_BACK);
         GL33.glDisable(GL33.GL_DEPTH_TEST);
 
-        try {
-            String vShaderCode = "#version 330 core\n" +
-                    "layout (location = 0) in vec3 aPos;\n" +
-                    "out vec3 vTexCoord;\n" +
-                    "out vec3 vCameraPosLocal;\n" +
-                    "uniform mat4 model;\n" +
-                    "uniform mat4 view;\n" +
-                    "uniform mat4 projection;\n" +
-                    "void main() {\n" +
-                    "    mat4 modelView = view * model;\n" +
-                    "    gl_Position = projection * modelView * vec4(aPos, 1.0);\n" +
-                    "    vTexCoord = aPos + vec3(0.5);\n" +
-                    "    mat4 invModelView = inverse(modelView);\n" +
-                    "    vCameraPosLocal = (invModelView * vec4(0.0, 0.0, 0.0, 1.0)).xyz + vec3(0.5);\n" +
-                    "}\n";
+        try { shaderProgram = createProgram(VERT, FRAG); }
+        catch(Exception e){ e.printStackTrace(); }
 
-            String fShaderCode = "#version 330 core\n" +
-                    "in vec3 vTexCoord;\n" +
-                    "in vec3 vCameraPosLocal;\n" +
-                    "out vec4 FragColor;\n" +
-                    "uniform sampler3D volumeTex;\n" +
-                    "uniform float stepSize;\n" +
-                    "uniform float windowLevel;\n" +
-                    "uniform float windowWidth;\n" +
-                    "uniform vec3 uOffset;\n" +
-                    "uniform int renderMode;\n" +
-                    "void main() {\n" +
-                    "    vec3 rayDir = normalize(vTexCoord - vCameraPosLocal);\n" +
+        // Unit cube
+        float[] verts = {-0.5f,-0.5f,-0.5f, 0.5f,-0.5f,-0.5f, 0.5f,0.5f,-0.5f,-0.5f,0.5f,-0.5f,
+                         -0.5f,-0.5f, 0.5f, 0.5f,-0.5f, 0.5f, 0.5f,0.5f, 0.5f,-0.5f,0.5f, 0.5f};
+        int[]   idx  = {0,2,1,0,3,2, 4,5,6,4,6,7, 0,1,5,0,5,4, 1,2,6,1,6,5, 2,3,7,2,7,6, 3,0,4,3,4,7};
 
-                    "    vec3 currPos = vTexCoord + uOffset;\n" +
-                    "    vec4 accColor = vec4(0.0);\n" +
-                    "    float low = windowLevel - windowWidth/2.0;\n" +
-                    "    float maxVal = 0.0;\n" +
-                    "    // Stochastic Raycasting (ジッター) で同心円状の境界リングを完全に溶かし、連続的で滑らかな質感にする\n" +
-                    "    float jitter = fract(sin(dot(vTexCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\n" +
-                    "    currPos += rayDir * stepSize * jitter;\n" +
-                    "    for(int i = 0; i < 400; i++) {\n" +
-                    "        float rawVal = texture(volumeTex, currPos).r * 65535.0 - 32768.0;\n" +
-                    "        float normVal = clamp((rawVal - low) / windowWidth, 0.0, 1.0);\n" +
-                    "        if (renderMode == 0) {\n" + // MIP
-                    "            maxVal = max(maxVal, normVal);\n" +
-                    "        } else if (renderMode == 1) {\n" + // VR
-                    "            // S字カーブ (smoothstep) を使って低濃度のモヤを優雅に消し、お肉の密度を滑らかに立ち上げる\n" +
-                    "            float smoothNorm = smoothstep(0.02, 0.8, normVal);\n" +
-                    "            if(smoothNorm > 0.01) {\n" +
-                    "                float alpha = pow(smoothNorm, 1.2) * 0.35;\n" +
-                    "                vec3 color;\n" +
-                    "                if (rawVal > windowLevel + 100.0) color = vec3(1.0, 0.95, 0.85); \n" + // Bone
-                    "                else if (rawVal > windowLevel - 50.0) color = vec3(0.92, 0.58, 0.40); \n" + // Muscle
-                                                                                                                 // (温かみのある色)
-                    "                else if (rawVal > windowLevel - 150.0) color = vec3(0.88, 0.50, 0.40); \n" + // Soft
-                                                                                                                  // Tissue
-                                                                                                                  // (極上の柔らかい肉色)
-                    "                else if (rawVal > windowLevel - 300.0) color = vec3(0.55, 0.35, 0.25); \n" + // Fat
-                    "                else color = vec3(0.1, 0.1, 0.15); \n" + // Air
-                    "                vec3 offset = vec3(1.0/512.0, 1.0/512.0, 1.0/512.0);\n" +
-                    "                float dx = texture(volumeTex, currPos + vec3(offset.x, 0, 0)).r - texture(volumeTex, currPos - vec3(offset.x, 0, 0)).r;\n"
-                    +
-                    "                float dy = texture(volumeTex, currPos + vec3(0, offset.y, 0)).r - texture(volumeTex, currPos - vec3(0, offset.y, 0)).r;\n"
-                    +
-                    "                float dz = texture(volumeTex, currPos + vec3(0, 0, offset.z)).r - texture(volumeTex, currPos - vec3(0, 0, offset.z)).r;\n"
-                    +
-                    "                vec3 normal = normalize(vec3(dx, dy, dz) + 0.0001);\n" +
-                    "                vec3 lightDir = normalize(vec3(-1.0, -1.0, 1.0));\n" +
-                    "                // ラップライティング (Subsurface Scatteringの模倣) で影の境界に人肌の温かい透過光をまとわせる\n" +
-                    "                float sss = (dot(normal, lightDir) + 1.0) * 0.5;\n" +
-                    "                float diff = mix(0.5, 1.0, sss);\n" +
-                    "                color = color * diff;\n" +
-                    "                accColor.rgb += (1.0 - accColor.a) * color * alpha;\n" +
-                    "                accColor.a += (1.0 - accColor.a) * alpha;\n" +
-                    "            }\n" +
-                    "            if(accColor.a >= 0.98) break;\n" +
-                    "        } else if (renderMode == 2) {\n" + // ISO
-                    "            if(rawVal > 300.0) {\n" + // Fixed threshold for bone/surface
-                    "                vec3 offset = vec3(1.0/512.0, 1.0/512.0, 1.0/512.0);\n" +
-                    "                float dx = texture(volumeTex, currPos + vec3(offset.x, 0, 0)).r - texture(volumeTex, currPos - vec3(offset.x, 0, 0)).r;\n"
-                    +
-                    "                float dy = texture(volumeTex, currPos + vec3(0, offset.y, 0)).r - texture(volumeTex, currPos - vec3(0, offset.y, 0)).r;\n"
-                    +
-                    "                float dz = texture(volumeTex, currPos + vec3(0, 0, offset.z)).r - texture(volumeTex, currPos - vec3(0, 0, offset.z)).r;\n"
-                    +
-                    "                vec3 normal = normalize(vec3(dx, dy, dz) + 0.0001);\n" +
-                    "                vec3 lightDir = normalize(vec3(-1.0, -1.0, 1.0));\n" +
-                    "                float diff = max(dot(normal, lightDir), 0.2);\n" +
-                    "                accColor = vec4(vec3(0.9, 0.85, 0.75) * diff, 1.0);\n" +
-                    "                break;\n" +
-                    "            }\n" +
-                    "        }\n" +
-                    "        currPos += rayDir * stepSize;\n" +
-                    "        if(currPos.x < 0.0 || currPos.x > 1.0 || currPos.y < 0.0 || currPos.y > 1.0 || currPos.z < 0.0 || currPos.z > 1.0) break;\n"
-                    +
-                    "    }\n" +
-                    "    if (renderMode == 0) {\n" +
-                    "        if (maxVal > 0.01) FragColor = vec4(maxVal, maxVal, maxVal, 1.0);\n" +
-                    "        else FragColor = vec4(0.0);\n" +
-                    "    } else {\n" +
-                    "        if(accColor.a < 0.01) FragColor = vec4(0.0);\n" +
-                    "        else FragColor = accColor;\n" +
-                    "    }\n" +
-                    "}\n";
-
-            shaderProgram = createProgram(vShaderCode, fShaderCode);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        float[] vertices = {
-                -0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f,
-                -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f
-        };
-        int[] indices = {
-                0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4,
-                1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7
-        };
-
-        vao = GL33.glGenVertexArrays();
-        GL33.glBindVertexArray(vao);
-
-        vbo = GL33.glGenBuffers();
-        GL33.glBindBuffer(GL33.GL_ARRAY_BUFFER, vbo);
-        FloatBuffer vBuffer = MemoryUtil.memAllocFloat(vertices.length);
-        vBuffer.put(vertices).flip();
-        GL33.glBufferData(GL33.GL_ARRAY_BUFFER, vBuffer, GL33.GL_STATIC_DRAW);
-        MemoryUtil.memFree(vBuffer);
-
-        GL33.glVertexAttribPointer(0, 3, GL33.GL_FLOAT, false, 3 * 4, 0);
-        GL33.glEnableVertexAttribArray(0);
-
-        ebo = GL33.glGenBuffers();
-        GL33.glBindBuffer(GL33.GL_ELEMENT_ARRAY_BUFFER, ebo);
-        IntBuffer iBuffer = MemoryUtil.memAllocInt(indices.length);
-        iBuffer.put(indices).flip();
-        GL33.glBufferData(GL33.GL_ELEMENT_ARRAY_BUFFER, iBuffer, GL33.GL_STATIC_DRAW);
-        MemoryUtil.memFree(iBuffer);
-
+        vao = GL33.glGenVertexArrays(); GL33.glBindVertexArray(vao);
+        vbo = GL33.glGenBuffers(); GL33.glBindBuffer(GL33.GL_ARRAY_BUFFER, vbo);
+        FloatBuffer vb = MemoryUtil.memAllocFloat(verts.length); vb.put(verts).flip();
+        GL33.glBufferData(GL33.GL_ARRAY_BUFFER, vb, GL33.GL_STATIC_DRAW); MemoryUtil.memFree(vb);
+        GL33.glVertexAttribPointer(0,3,GL33.GL_FLOAT,false,12,0); GL33.glEnableVertexAttribArray(0);
+        ebo = GL33.glGenBuffers(); GL33.glBindBuffer(GL33.GL_ELEMENT_ARRAY_BUFFER, ebo);
+        IntBuffer ib = MemoryUtil.memAllocInt(idx.length); ib.put(idx).flip();
+        GL33.glBufferData(GL33.GL_ELEMENT_ARRAY_BUFFER, ib, GL33.GL_STATIC_DRAW); MemoryUtil.memFree(ib);
         GL33.glBindVertexArray(0);
 
-        if (volume != null) {
-            uploadVolume();
-        }
+        if(volume!=null) uploadVolume();
     }
 
+    // ---- Phase 1: Pre-computed Gradient Volume ----
     private void uploadVolume() {
+        int zStep = (dimZ>512) ? 2 : 1;
+        int tz    = dimZ / zStep;
+        long sz   = (long)dimX*dimY*tz;
+
+        // Volume texture (R16)
         volumeTexture = GL33.glGenTextures();
-
         GL33.glBindTexture(GL33.GL_TEXTURE_3D, volumeTexture);
-        GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_WRAP_S, GL33.GL_CLAMP_TO_EDGE);
-        GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_WRAP_T, GL33.GL_CLAMP_TO_EDGE);
-        GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_WRAP_R, GL33.GL_CLAMP_TO_EDGE);
-        GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
-        GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_MAG_FILTER, GL33.GL_LINEAR);
+        set3DParams();
+        ShortBuffer sb = MemoryUtil.memAllocShort((int)sz);
+        for(int z=0;z<dimZ;z+=zStep){ if(z/zStep>=tz) break;
+            for(int y=0;y<dimY;y++) for(int x=0;x<dimX;x++) sb.put((short)(volume[z][y][x]^0x8000)); }
+        sb.flip();
+        GL33.glPixelStorei(GL33.GL_UNPACK_ALIGNMENT,1);
+        GL33.glTexImage3D(GL33.GL_TEXTURE_3D,0,GL33.GL_R16,dimX,dimY,tz,0,GL33.GL_RED,GL33.GL_UNSIGNED_SHORT,sb);
+        MemoryUtil.memFree(sb);
 
-        int zStep = (dimZ > 512) ? 2 : 1;
-        int targetDimZ = dimZ / zStep;
-        long totalSize = (long) dimX * dimY * targetDimZ;
+        // Gradient texture (RGB8 = 事前計算法線)
+        gradientTexture = GL33.glGenTextures();
+        GL33.glBindTexture(GL33.GL_TEXTURE_3D, gradientTexture);
+        set3DParams();
+        byte[] grad = computeGradients(zStep, tz);
+        ByteBuffer bb = MemoryUtil.memAlloc(grad.length); bb.put(grad).flip();
+        GL33.glTexImage3D(GL33.GL_TEXTURE_3D,0,GL33.GL_RGB8,dimX,dimY,tz,0,GL33.GL_RGB,GL33.GL_UNSIGNED_BYTE,bb);
+        MemoryUtil.memFree(bb);
+    }
 
-        ShortBuffer buffer = MemoryUtil.memAllocShort((int) totalSize);
-        for (int z = 0; z < dimZ; z += zStep) {
-            if (z / zStep >= targetDimZ)
-                break;
-            for (int y = 0; y < dimY; y++) {
-                for (int x = 0; x < dimX; x++) {
-                    short val = volume[z][y][x];
-                    buffer.put((short) (val ^ 0x8000));
+    private byte[] computeGradients(int zStep, int tz) {
+        byte[] g = new byte[dimX*dimY*tz*3];
+        int idx=0;
+        for(int z=0;z<dimZ;z+=zStep){ if(z/zStep>=tz) break;
+            for(int y=0;y<dimY;y++){
+                for(int x=0;x<dimX;x++){
+                    float dx=(sv(x+1,y,z)-sv(x-1,y,z))*0.5f;
+                    float dy=(sv(x,y+1,z)-sv(x,y-1,z))*0.5f;
+                    float dz=(sv(x,y,z+1)-sv(x,y,z-1))*0.5f;
+                    float len=(float)Math.sqrt(dx*dx+dy*dy+dz*dz);
+                    if(len<1e-6f){len=1;}
+                    // -1..1 → 0..255
+                    g[idx++]=(byte)((dx/len*0.5f+0.5f)*255);
+                    g[idx++]=(byte)((dy/len*0.5f+0.5f)*255);
+                    g[idx++]=(byte)((dz/len*0.5f+0.5f)*255);
                 }
             }
         }
-        buffer.flip();
+        return g;
+    }
 
-        GL33.glPixelStorei(GL33.GL_UNPACK_ALIGNMENT, 1);
-        GL33.glTexImage3D(GL33.GL_TEXTURE_3D, 0, GL33.GL_R16, dimX, dimY, targetDimZ, 0, GL33.GL_RED,
-                GL33.GL_UNSIGNED_SHORT, buffer);
-        MemoryUtil.memFree(buffer);
+    private float sv(int x,int y,int z){
+        x=Math.max(0,Math.min(dimX-1,x)); y=Math.max(0,Math.min(dimY-1,y)); z=Math.max(0,Math.min(dimZ-1,z));
+        return volume[z][y][x];
+    }
+
+    private void set3DParams(){
+        GL33.glTexParameteri(GL33.GL_TEXTURE_3D,GL33.GL_TEXTURE_WRAP_S,GL33.GL_CLAMP_TO_EDGE);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_3D,GL33.GL_TEXTURE_WRAP_T,GL33.GL_CLAMP_TO_EDGE);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_3D,GL33.GL_TEXTURE_WRAP_R,GL33.GL_CLAMP_TO_EDGE);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_3D,GL33.GL_TEXTURE_MIN_FILTER,GL33.GL_LINEAR);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_3D,GL33.GL_TEXTURE_MAG_FILTER,GL33.GL_LINEAR);
+    }
+
+    // ---- Phase 3: TF 1Dテクスチャのアップロード ----
+    private void uploadTransferFunction() {
+        if(transferFunction==null) return;
+        if(tfTexture!=0) GL33.glDeleteTextures(tfTexture);
+        tfTexture = transferFunction.buildAndUploadGL();
+        tfDirty = false;
     }
 
     public void paintGL(int width, int height) {
-        GL33.glClear(GL33.GL_COLOR_BUFFER_BIT | GL33.GL_DEPTH_BUFFER_BIT);
+        GL33.glClear(GL33.GL_COLOR_BUFFER_BIT|GL33.GL_DEPTH_BUFFER_BIT);
+        if(!dataReady||shaderProgram==0) return;
 
-        if (!dataReady || shaderProgram == 0)
-            return;
-
-        float w = width <= 0 ? 1.0f : (float) width;
-        float h = height <= 0 ? 1.0f : (float) height;
-        GL33.glViewport(0, 0, (int) w, (int) h);
-
+        float w=width<=0?1f:(float)width, h=height<=0?1f:(float)height;
+        GL33.glViewport(0,0,(int)w,(int)h);
         GL33.glUseProgram(shaderProgram);
 
-        float aspect = w / h;
-        float[] projection = perspective(45.0f, aspect, 0.1f, 100.0f);
-        float[] view = translate(0, 0, -1.2f / zoom);
-        float[] model = rotate(rotateX, 1, 0, 0);
-        model = multiply(model, rotate(rotateY, 0, 1, 0));
+        if(tfDirty) uploadTransferFunction();
 
-        setUniformMatrix4("projection", projection);
-        setUniformMatrix4("view", view);
-        setUniformMatrix4("model", model);
+        float[] proj = perspective(45f,w/h,0.1f,100f);
+        float[] view = translate(0,0,-1.2f/zoom);
+        float[] mdl  = multiply(rotate(rotateX,1,0,0), rotate(rotateY,0,1,0));
 
-        GL33.glUniform1f(GL33.glGetUniformLocation(shaderProgram, "windowLevel"), windowLevel);
-        GL33.glUniform1f(GL33.glGetUniformLocation(shaderProgram, "windowWidth"), windowWidth);
-        GL33.glUniform3f(GL33.glGetUniformLocation(shaderProgram, "uOffset"), offsetX, offsetY, offsetZ);
-        GL33.glUniform1f(GL33.glGetUniformLocation(shaderProgram, "stepSize"), 0.005f);
-        GL33.glUniform1i(GL33.glGetUniformLocation(shaderProgram, "renderMode"), renderMode);
+        setMat4("projection",proj); setMat4("view",view); setMat4("model",mdl);
+        u1f("stepSize",0.003f);
+        u1i("renderMode",renderMode);
+        u1f("isoThreshold",isoThreshold);
+        u3f("uOffset",offsetX,offsetY,offsetZ);
+        u3f("lightDir",lightX,lightY,lightZ);
+        u3f("clipMin",clipMinX,clipMinY,clipMinZ);
+        u3f("clipMax",clipMaxX,clipMaxY,clipMaxZ);
 
+        // Texture unit 0 = volume
         GL33.glActiveTexture(GL33.GL_TEXTURE0);
-        GL33.glBindTexture(GL33.GL_TEXTURE_3D, volumeTexture);
-        GL33.glUniform1i(GL33.glGetUniformLocation(shaderProgram, "volumeTex"), 0);
+        GL33.glBindTexture(GL33.GL_TEXTURE_3D,volumeTexture);
+        u1i("volumeTex",0);
+
+        // Texture unit 1 = gradient
+        GL33.glActiveTexture(GL33.GL_TEXTURE1);
+        GL33.glBindTexture(GL33.GL_TEXTURE_3D,gradientTexture);
+        u1i("gradTex",1);
+
+        // Texture unit 2 = TF
+        if(tfTexture!=0){
+            GL33.glActiveTexture(GL33.GL_TEXTURE2);
+            GL33.glBindTexture(GL33.GL_TEXTURE_1D,tfTexture);
+            u1i("tfTex",2);
+        }
 
         GL33.glBindVertexArray(vao);
-        GL33.glDrawElements(GL33.GL_TRIANGLES, 36, GL33.GL_UNSIGNED_INT, 0);
+        GL33.glDrawElements(GL33.GL_TRIANGLES,36,GL33.GL_UNSIGNED_INT,0);
         GL33.glBindVertexArray(0);
     }
 
-    private void setUniformMatrix4(String name, float[] mat) {
-        int loc = GL33.glGetUniformLocation(shaderProgram, name);
-        if (loc != -1) {
-            FloatBuffer buf = MemoryUtil.memAllocFloat(16);
-            buf.put(mat).flip();
-            GL33.glUniformMatrix4fv(loc, false, buf);
-            MemoryUtil.memFree(buf);
-        }
+    // ---- Uniform helpers ----
+    private void u1f(String n,float v){GL33.glUniform1f(GL33.glGetUniformLocation(shaderProgram,n),v);}
+    private void u1i(String n,int v)  {GL33.glUniform1i(GL33.glGetUniformLocation(shaderProgram,n),v);}
+    private void u3f(String n,float x,float y,float z){GL33.glUniform3f(GL33.glGetUniformLocation(shaderProgram,n),x,y,z);}
+    private void setMat4(String n,float[] m){
+        int loc=GL33.glGetUniformLocation(shaderProgram,n);
+        if(loc<0) return;
+        FloatBuffer b=MemoryUtil.memAllocFloat(16); b.put(m).flip();
+        GL33.glUniformMatrix4fv(loc,false,b); MemoryUtil.memFree(b);
     }
 
-    private int createProgram(String vSrc, String fSrc) throws Exception {
-        int vs = GL33.glCreateShader(GL33.GL_VERTEX_SHADER);
-        GL33.glShaderSource(vs, vSrc);
-        GL33.glCompileShader(vs);
-
-        int fs = GL33.glCreateShader(GL33.GL_FRAGMENT_SHADER);
-        GL33.glShaderSource(fs, fSrc);
-        GL33.glCompileShader(fs);
-
-        int prog = GL33.glCreateProgram();
-        GL33.glAttachShader(prog, vs);
-        GL33.glAttachShader(prog, fs);
-        GL33.glLinkProgram(prog);
-        return prog;
+    // ---- Shader compile ----
+    private int createProgram(String vs,String fs) throws Exception {
+        int v=GL33.glCreateShader(GL33.GL_VERTEX_SHADER);
+        GL33.glShaderSource(v,vs); GL33.glCompileShader(v);
+        int f=GL33.glCreateShader(GL33.GL_FRAGMENT_SHADER);
+        GL33.glShaderSource(f,fs); GL33.glCompileShader(f);
+        String vLog=GL33.glGetShaderInfoLog(v); if(!vLog.isBlank()) System.err.println("VS: "+vLog);
+        String fLog=GL33.glGetShaderInfoLog(f); if(!fLog.isBlank()) System.err.println("FS: "+fLog);
+        int p=GL33.glCreateProgram();
+        GL33.glAttachShader(p,v); GL33.glAttachShader(p,f); GL33.glLinkProgram(p);
+        return p;
     }
 
-    private float[] perspective(float fov, float aspect, float near, float far) {
-        float f = (float) (1.0 / Math.tan(Math.toRadians(fov) / 2.0));
-        return new float[] {
-                f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0,
-                (2 * far * near) / (near - far), 0
-        };
+    // ---- Math ----
+    private float[] perspective(float fov,float asp,float n,float f){
+        float t=(float)(1.0/Math.tan(Math.toRadians(fov)/2));
+        return new float[]{t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,(2*f*n)/(n-f),0};
     }
-
-    private float[] translate(float x, float y, float z) {
-        return new float[] {
-                1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1
-        };
+    private float[] translate(float x,float y,float z){
+        return new float[]{1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1};
     }
-
-    private float[] rotate(float angle, float x, float y, float z) {
-        float c = (float) Math.cos(angle);
-        float s = (float) Math.sin(angle);
-        return new float[] {
-                x * x * (1 - c) + c, y * x * (1 - c) + z * s, x * z * (1 - c) - y * s, 0,
-                x * y * (1 - c) - z * s, y * y * (1 - c) + c, y * z * (1 - c) + x * s, 0,
-                x * z * (1 - c) + y * s, y * z * (1 - c) - x * s, z * z * (1 - c) + c, 0,
-                0, 0, 0, 1
-        };
+    private float[] rotate(float a,float x,float y,float z){
+        float c=(float)Math.cos(a),s=(float)Math.sin(a);
+        return new float[]{x*x*(1-c)+c,y*x*(1-c)+z*s,x*z*(1-c)-y*s,0,
+                           x*y*(1-c)-z*s,y*y*(1-c)+c,y*z*(1-c)+x*s,0,
+                           x*z*(1-c)+y*s,y*z*(1-c)-x*s,z*z*(1-c)+c,0, 0,0,0,1};
     }
-
-    private float[] multiply(float[] a, float[] b) {
-        float[] res = new float[16];
-        for (int c = 0; c < 4; c++) {
-            for (int r = 0; r < 4; r++) {
-                res[c * 4 + r] = a[0 * 4 + r] * b[c * 4 + 0] + a[1 * 4 + r] * b[c * 4 + 1] + a[2 * 4 + r] * b[c * 4 + 2]
-                        + a[3 * 4 + r] * b[c * 4 + 3];
-            }
-        }
-        return res;
+    private float[] multiply(float[] a,float[] b){
+        float[] r=new float[16];
+        for(int c=0;c<4;c++) for(int row=0;row<4;row++)
+            r[c*4+row]=a[row]*b[c*4]+a[4+row]*b[c*4+1]+a[8+row]*b[c*4+2]+a[12+row]*b[c*4+3];
+        return r;
     }
 }
