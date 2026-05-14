@@ -7587,7 +7587,8 @@ public class BrowserController extends JFrame {
         helpMenu.addSeparator();
 
         javax.swing.JMenuItem aboutItem = new javax.swing.JMenuItem("About OculusJJ");
-        aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(this, "OculusJJ - Advanced DICOM Viewer\nVersion 1.0\nBased on Horos-20240407 Architecture"));
+        aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(this,
+                "OculusJJ - Advanced DICOM Viewer\nVersion 1.0\nBased on Horos-20240407 Architecture"));
         helpMenu.add(aboutItem);
 
         menuBar.add(helpMenu);
@@ -7606,7 +7607,8 @@ public class BrowserController extends JFrame {
                 "<b>[3D Viewer]</b><br>" +
                 "- Left Drag: Rotate<br>" +
                 "- Right Drag / Shift+Drag: Zoom<br>" +
-                "- Middle Drag (Wheel Click): <b>Adjust Meat (WL/WW)</b><br>" +
+                "- Middle Drag (Wheel Click): <b>Pan (Parallel Move)</b><br>" +
+                "- Shift + Middle Drag: <b>Adjust WL/WW (Brightness/Contrast)</b><br>" +
                 "- Scroll Wheel: Zoom<br><br>" +
                 "<h3>Keyboard Shortcuts</h3>" +
                 "- [R]: Reset to Initial View<br>" +
