@@ -24,16 +24,18 @@ public class Viewer3DController extends JFrame {
     private List<DicomPix> pixList;
     private short[][][] volume; // [z][y][x]
     private int dimX, dimY, dimZ;
-    private double spacingZ = 1.0;
+    private double spacingX = 1.0; // mm/pixel (X)
+    private double spacingY = 1.0; // mm/pixel (Y)
+    private double spacingZ = 1.0; // mm/slice (Z)
 
     private RenderingPanel renderingPanel;
     private GLViewer3D glViewer;
-    private CPURaycastRenderer cpuRenderer;   // Phase 4: CPU fallback
-    private boolean useGPU = true;            // Phase 4: GPU/CPU switch
+    private CPURaycastRenderer cpuRenderer; // Phase 4: CPU fallback
+    private boolean useGPU = true; // Phase 4: GPU/CPU switch
     private String mode = "MIP";
     private boolean shadingEnabled = true;
 
-    // Window Level/Width
+    // Window Level/Width (HOROS-20240407準拠: 初期値は軟部組織向け、または2D設定を継承)
     private float windowLevel = 40;
     private float windowWidth = 400;
 
@@ -42,11 +44,11 @@ public class Viewer3DController extends JFrame {
     private double resolution = 0.5;
 
     // Transfer Function (Phase 3)
-    private TransferFunction currentTF = TransferFunction.createSoftTissue();
+    private TransferFunction currentTF = TransferFunction.createVRMusclesBones();
 
-    // 視点回転パラメータ
+    // 視点回転パラメータ (HOROS-20240407準拠: 初期状態は左側面 Lateral Left)
     private double rotateX = -Math.PI / 2;
-    private double rotateY = 0;
+    private double rotateY = Math.PI / 2;
     private double zoom = 1.0;
 
     // Clipping
@@ -69,7 +71,8 @@ public class Viewer3DController extends JFrame {
         this.windowWidth += dWidth;
         if (this.windowWidth < 1)
             this.windowWidth = 1;
-        if (glViewer != null) glViewer.setWindowLevel(windowLevel, windowWidth);
+        if (glViewer != null)
+            glViewer.setWindowLevel(windowLevel, windowWidth);
         repaint();
     }
 
@@ -111,8 +114,24 @@ public class Viewer3DController extends JFrame {
                 spacingZ = (first.getSliceThickness() <= 0.1) ? 1.0 : first.getSliceThickness();
 
                 // ---- Fix 1: DICOMスライスを空間順にソート (HOROS-20240407準拠) ----
-                // ソートしないとボリュームが折り返し・縞模様になる
-                pixList.sort((a, b) -> Double.compare(a.getSliceLocation(), b.getSliceLocation()));
+                // 降順ソート: SliceLocation大(=頭側)が先頭→画面上に表示される
+                pixList.sort((a, b) -> Double.compare(b.getSliceLocation(), a.getSliceLocation()));
+
+                // ---- Fix 2: ボクセルの物理サイズを取得 (アスペクト比正規化) ----
+                // PixelSpacing: DICOM Row/Column spacing [mm]
+                // SliceThickness/SpacingBetweenSlices: Z方向[mm]
+                spacingX = (first.getPixelSpacingX() > 0) ? first.getPixelSpacingX() : 1.0;
+                spacingY = (first.getPixelSpacingY() > 0) ? first.getPixelSpacingY() : 1.0;
+                // Z spacing = SliceThickness (またはImagePositionPatientのZ差分で補完)
+                if (pixList.size() > 1) {
+                    double z0 = pixList.get(0).getSliceLocation();
+                    double z1 = pixList.get(1).getSliceLocation();
+                    double dzAbs = Math.abs(z1 - z0);
+                    spacingZ = (dzAbs > 0.01) ? dzAbs
+                            : ((first.getSliceThickness() > 0.1) ? first.getSliceThickness() : 1.0);
+                } else {
+                    spacingZ = (first.getSliceThickness() > 0.1) ? first.getSliceThickness() : 1.0;
+                }
 
                 volume = new short[dimZ][dimY][dimX];
                 for (int z = 0; z < dimZ; z++) {
@@ -127,6 +146,21 @@ public class Viewer3DController extends JFrame {
                             }
                         }
                     }
+                }
+
+                // ---- Fix 3: 初期ウィンドウ値を2Dビューアーの設定、またはDICOMから取得 (HOROS-20240407準拠) ----
+                if (viewer2D != null && viewer2D.getImageView() != null && viewer2D.getImageView().getCurDCM() != null) {
+                    windowLevel = viewer2D.getImageView().getCurDCM().getWindowLevel();
+                    windowWidth = viewer2D.getImageView().getCurDCM().getWindowWidth();
+                } else if (first != null) {
+                    windowLevel = first.getWindowLevel();
+                    windowWidth = first.getWindowWidth();
+                }
+                
+                // 万が一 WW が不正な場合はデフォルト(Soft Tissue)を使用
+                if (windowWidth <= 1.0f) {
+                    windowLevel = 40;
+                    windowWidth = 400;
                 }
 
                 SwingUtilities.invokeLater(() -> {
@@ -146,6 +180,34 @@ public class Viewer3DController extends JFrame {
 
     private AWTGLCanvas canvas;
     private boolean isRendering = false;
+    private Timer renderTimer;
+
+    private void startRenderLoop() {
+        stopRenderLoop();
+        isRendering = true;
+        renderTimer = new Timer(16, e -> {
+            if (!isRendering || canvas == null || !canvas.isDisplayable() || !canvas.isShowing()) {
+                stopRenderLoop();
+                return;
+            }
+            try {
+                canvas.render();
+            } catch (RuntimeException ex) {
+                stopRenderLoop();
+                ex.printStackTrace();
+            }
+        });
+        renderTimer.setRepeats(true);
+        renderTimer.start();
+    }
+
+    private void stopRenderLoop() {
+        isRendering = false;
+        if (renderTimer != null) {
+            renderTimer.stop();
+            renderTimer = null;
+        }
+    }
 
     private void setMode(String newMode) {
         this.mode = newMode;
@@ -201,7 +263,10 @@ public class Viewer3DController extends JFrame {
 
                 glViewer.setVolumeData(volume, dimX, dimY, dimZ, pixList);
                 glViewer.setTransferFunction(currentTF);
+                glViewer.setWindowLevel(windowLevel, windowWidth);
                 glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+                // Fix 2: 物理ボクセルサイズを渡してアスペクト比を正規化
+                glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
 
                 // CPU renderer 初期化 (Phase 4: フォールバック)
                 cpuRenderer = new CPURaycastRenderer();
@@ -227,16 +292,26 @@ public class Viewer3DController extends JFrame {
                                 zoom *= (1.0 - dy / 200.0);
                                 if (zoom < 0.1)
                                     zoom = 0.1;
-                                                        } else if (SwingUtilities.isMiddleMouseButton(e)) {
+                            } else if (currentTool == Tool3D.VR_ADJUST || currentTool == Tool3D.WLWW) {
+                                windowLevel += dy * 2.0f;
+                                windowWidth += dx * 2.0f;
+                                if (windowWidth < 1)
+                                    windowWidth = 1;
+                                if (glViewer != null)
+                                    glViewer.setWindowLevel(windowLevel, windowWidth);
+                            } else if (SwingUtilities.isMiddleMouseButton(e) || currentTool == Tool3D.PAN) {
                                 boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
                                 if (isShift) {
                                     windowLevel += dy * 2.0f;
                                     windowWidth += dx * 2.0f;
-                                    if (windowWidth < 1) windowWidth = 1;
-                                    if (glViewer != null) glViewer.setWindowLevel(windowLevel, windowWidth);
+                                    if (windowWidth < 1)
+                                        windowWidth = 1;
+                                    if (glViewer != null)
+                                        glViewer.setWindowLevel(windowLevel, windowWidth);
                                 } else {
-                                    float sensitivity = 0.001f;
-                                    glViewer.addOffset((float)(lastPos.x - e.getX()) * sensitivity, (float)(lastPos.y - e.getY()) * sensitivity, 0);
+                                    float sensitivity = 0.0005f;
+                                    glViewer.addOffset((float) (lastPos.x - e.getX()) * sensitivity,
+                                            (float) (lastPos.y - e.getY()) * sensitivity, 0);
                                 }
                                 repaint();
                             } else {
@@ -270,18 +345,7 @@ public class Viewer3DController extends JFrame {
                 this.revalidate();
                 this.repaint();
 
-                isRendering = true;
-                Thread renderThread = new Thread(() -> {
-                    while (isRendering) {
-                        canvas.render();
-                        try {
-                            Thread.sleep(16);
-                        } catch (Exception e) {
-                        }
-                    }
-                });
-                renderThread.setDaemon(true);
-                renderThread.start();
+                startRenderLoop();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -295,6 +359,12 @@ public class Viewer3DController extends JFrame {
         // HOROS-20240407準拠: 3D Viewerも大画面または全画面で表示
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent e) {
+                stopRenderLoop();
+            }
+        });
 
         // HOROS-20240407準拠: 3D Viewerも独立したメニューバーを持つ（Windows環境）
         BrowserController browser = BrowserController.currentBrowser();
@@ -393,11 +463,27 @@ public class Viewer3DController extends JFrame {
         JButton btnReset = new JButton("Reset");
         btnReset.addActionListener(e -> {
             rotateX = -Math.PI / 2;
-            rotateY = 0;
+            rotateY = Math.PI / 2;
             zoom = 1.0;
-            windowLevel = 40;
-            windowWidth = 400;
-            if (glViewer != null) glViewer.setWindowLevel(windowLevel, windowWidth);
+            
+            // HOROS-20240407準拠: リセット時はDICOMのデフォルトまたは2Dの初期値に戻る
+            if (viewer2D != null && viewer2D.getImageView() != null && viewer2D.getImageView().getCurDCM() != null) {
+                windowLevel = viewer2D.getImageView().getCurDCM().getWindowLevel();
+                windowWidth = viewer2D.getImageView().getCurDCM().getWindowWidth();
+            } else if (pixList != null && !pixList.isEmpty()) {
+                windowLevel = pixList.get(0).getWindowLevel();
+                windowWidth = pixList.get(0).getWindowWidth();
+            } else {
+                windowLevel = 40;
+                windowWidth = 400;
+            }
+            
+            if (glViewer != null) {
+                glViewer.setWindowLevel(windowLevel, windowWidth);
+                // HOROS-20240407準拠: プリセットもデフォルトに戻す
+                currentTF = TransferFunction.createVRMusclesBones();
+                glViewer.setTransferFunction(currentTF);
+            }
             repaint();
         });
         vrToolbar.add(btnReset);
@@ -452,17 +538,20 @@ public class Viewer3DController extends JFrame {
         vrToolbar.addSeparator();
         vrToolbar.add(new JLabel("TF Preset: "));
         TransferFunction[] tfPresets = {
-            TransferFunction.createSoftTissue(),
-            TransferFunction.createBone(),
-            TransferFunction.createLung(),
-            TransferFunction.createVascular()
+                TransferFunction.createVRMusclesBones(),
+                TransferFunction.createSoftTissue(),
+                TransferFunction.createBone(),
+                TransferFunction.createLung(),
+                TransferFunction.createVascular()
         };
         JComboBox<TransferFunction> comboTF = new JComboBox<>(tfPresets);
         comboTF.setSelectedIndex(0);
         comboTF.addActionListener(e -> {
             currentTF = (TransferFunction) comboTF.getSelectedItem();
-            if (glViewer != null) glViewer.setTransferFunction(currentTF);
-            if (cpuRenderer != null) cpuRenderer.setTransferFunction(currentTF);
+            if (glViewer != null)
+                glViewer.setTransferFunction(currentTF);
+            if (cpuRenderer != null)
+                cpuRenderer.setTransferFunction(currentTF);
             repaint();
         });
         vrToolbar.add(comboTF);
@@ -472,10 +561,18 @@ public class Viewer3DController extends JFrame {
         JRadioButton rbGPU = new JRadioButton("GPU", true);
         JRadioButton rbCPU = new JRadioButton("CPU", false);
         ButtonGroup bgEngine = new ButtonGroup();
-        bgEngine.add(rbGPU); bgEngine.add(rbCPU);
-        rbGPU.setOpaque(false); rbCPU.setOpaque(false);
-        rbGPU.addActionListener(e -> { useGPU = true;  repaint(); });
-        rbCPU.addActionListener(e -> { useGPU = false; repaint(); });
+        bgEngine.add(rbGPU);
+        bgEngine.add(rbCPU);
+        rbGPU.setOpaque(false);
+        rbCPU.setOpaque(false);
+        rbGPU.addActionListener(e -> {
+            useGPU = true;
+            repaint();
+        });
+        rbCPU.addActionListener(e -> {
+            useGPU = false;
+            repaint();
+        });
         vrToolbar.add(rbGPU);
         vrToolbar.add(rbCPU);
 
@@ -524,15 +621,20 @@ public class Viewer3DController extends JFrame {
         p.add(lbl, BorderLayout.NORTH);
         JSlider s = new JSlider(0, 100, init);
         s.setOpaque(false);
-        s.addChangeListener(e -> { cb.accept(s.getValue()); repaint(); });
+        s.addChangeListener(e -> {
+            cb.accept(s.getValue());
+            repaint();
+        });
         p.add(s, BorderLayout.CENTER);
         p.setMaximumSize(new Dimension(230, 48));
         return p;
     }
 
     private void applyClipping() {
-        if (glViewer  != null) glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
-        if (cpuRenderer != null) cpuRenderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+        if (glViewer != null)
+            glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+        if (cpuRenderer != null)
+            cpuRenderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
     }
 
     private class RenderingPanel extends JPanel {
@@ -600,10 +702,7 @@ public class Viewer3DController extends JFrame {
                             if (zoom < 0.1)
                                 zoom = 0.1;
                         } else if (SwingUtilities.isMiddleMouseButton(e) || currentTool == Tool3D.PAN) {
-                            // Pan (Currently PAN logic is just changing WLWW, let's fix it to actual PAN)
-                            // Note: In 3D Viewer, PAN usually moves the view center.
-                            // For simplicity, we use middle button for WLWW as per previous implementation.
-                            updateWindow(dy * 2.0f, dx * 2.0f);
+                            // CPU fallback ではPANは将来実装予定。現状はWL/WW変更を避ける。
                         } else if (currentTool == Tool3D.ROTATE || !isRight) {
                             // Rotate
                             rotateY += dx * 0.01;
@@ -651,10 +750,10 @@ public class Viewer3DController extends JFrame {
             // 体軸方向ベクトル: 上方向(screen Y-)がどの解剖学的方向かを計算
             // 簡略化: HOROSと同様に主要8方向から最近傍を選択
             String[] anatomicalLabels = computeOrientationLabels(rx, ry);
-            String labelTop    = anatomicalLabels[0]; // 画面上
+            String labelTop = anatomicalLabels[0]; // 画面上
             String labelBottom = anatomicalLabels[1]; // 画面下
-            String labelLeft   = anatomicalLabels[2]; // 画面左
-            String labelRight  = anatomicalLabels[3]; // 画面右
+            String labelLeft = anatomicalLabels[2]; // 画面左
+            String labelRight = anatomicalLabels[3]; // 画面右
 
             // ---- 描画スタイル ----
             Font oriFont = new Font("SansSerif", Font.BOLD, 16);
@@ -666,30 +765,30 @@ public class Viewer3DController extends JFrame {
             g.setColor(Color.BLACK);
             // Top (S)
             int lw = fm.stringWidth(labelTop);
-            g.drawString(labelTop, w/2 - lw/2 + 1, margin + fm.getAscent() + 1);
+            g.drawString(labelTop, w / 2 - lw / 2 + 1, margin + fm.getAscent() + 1);
             // Bottom (I)
             lw = fm.stringWidth(labelBottom);
-            g.drawString(labelBottom, w/2 - lw/2 + 1, h - margin + 1);
+            g.drawString(labelBottom, w / 2 - lw / 2 + 1, h - margin + 1);
             // Left
-            g.drawString(labelLeft, margin + 1, h/2 + fm.getAscent()/2 + 1);
+            g.drawString(labelLeft, margin + 1, h / 2 + fm.getAscent() / 2 + 1);
             // Right
             lw = fm.stringWidth(labelRight);
-            g.drawString(labelRight, w - margin - lw + 1, h/2 + fm.getAscent()/2 + 1);
+            g.drawString(labelRight, w - margin - lw + 1, h / 2 + fm.getAscent() / 2 + 1);
 
             g.setColor(Color.WHITE);
             lw = fm.stringWidth(labelTop);
-            g.drawString(labelTop, w/2 - lw/2, margin + fm.getAscent());
+            g.drawString(labelTop, w / 2 - lw / 2, margin + fm.getAscent());
             lw = fm.stringWidth(labelBottom);
-            g.drawString(labelBottom, w/2 - lw/2, h - margin);
-            g.drawString(labelLeft, margin, h/2 + fm.getAscent()/2);
+            g.drawString(labelBottom, w / 2 - lw / 2, h - margin);
+            g.drawString(labelLeft, margin, h / 2 + fm.getAscent() / 2);
             lw = fm.stringWidth(labelRight);
-            g.drawString(labelRight, w - margin - lw, h/2 + fm.getAscent()/2);
+            g.drawString(labelRight, w - margin - lw, h / 2 + fm.getAscent() / 2);
 
             // ---- Rボックス（右上） HOROS準拠 ----
             int bx = w - 50, by = 10, bw = 38, bh = 38;
-            g.setColor(new Color(0, 100, 0, 200));           // 濃い緑背景
+            g.setColor(new Color(0, 100, 0, 200)); // 濃い緑背景
             g.fillRoundRect(bx, by, bw, bh, 6, 6);
-            g.setColor(new Color(0, 180, 0));                // 緑枠
+            g.setColor(new Color(0, 180, 0)); // 緑枠
             g.setStroke(new BasicStroke(2));
             g.drawRoundRect(bx, by, bw, bh, 6, 6);
             g.setColor(Color.WHITE);
@@ -697,7 +796,8 @@ public class Viewer3DController extends JFrame {
             g.setFont(rFont);
             FontMetrics rfm = g.getFontMetrics(rFont);
             String rLabel = "R";
-            g.drawString(rLabel, bx + (bw - rfm.stringWidth(rLabel))/2, by + rfm.getAscent() + (bh - rfm.getHeight())/2);
+            g.drawString(rLabel, bx + (bw - rfm.stringWidth(rLabel)) / 2,
+                    by + rfm.getAscent() + (bh - rfm.getHeight()) / 2);
 
             // ---- WL/WW 左上 ----
             Font infoFont = new Font("Monospaced", Font.PLAIN, 12);
@@ -712,9 +812,9 @@ public class Viewer3DController extends JFrame {
             g.setColor(Color.WHITE);
             FontMetrics ifm = g.getFontMetrics(infoFont);
             String[] coordLines = {
-                String.format("S-I  %.1f", -rotateX),
-                String.format("L-R  %.1f", rotateY),
-                String.format("ROI T %.1f", zoom)
+                    String.format("S-I  %.1f", -rotateX),
+                    String.format("L-R  %.1f", rotateY),
+                    String.format("ROI T %.1f", zoom)
             };
             int cy2 = h - margin - ifm.getHeight() * (coordLines.length - 1);
             for (String line : coordLines) {
@@ -742,28 +842,41 @@ public class Viewer3DController extends JFrame {
             double ux2 = ux1 * cosY - uz1 * sinY, uy2 = uy1, uz2 = ux1 * sinY + uz1 * cosY;
             // uz2: Superior方向(+z=Superior), uy2: Anterior方向(+y=Posterior), ux2: Right方向
 
-            String top    = dominantAxis(ux2, uy2, uz2);
+            String top = dominantAxis(ux2, uy2, uz2);
             String bottom = opposite(top);
             // 右方向ベクトル(1,0,0)を同様に変換
             double rx2 = cosY, ry2 = 0, rz2 = sinY;
             double rx3 = rx2, ry3 = ry2 * cosX + rz2 * sinX, rz3 = -ry2 * sinX + rz2 * cosX;
             String right2 = dominantAxis(rx3, ry3, rz3);
-            String left2  = opposite(right2);
-            return new String[]{top, bottom, left2, right2};
+            String left2 = opposite(right2);
+            return new String[] { top, bottom, left2, right2 };
         }
 
         private String dominantAxis(double x, double y, double z) {
             double ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
-            if (az >= ax && az >= ay) return z >= 0 ? "S" : "I";   // Superior/Inferior
-            if (ax >= ay)             return x >= 0 ? "R" : "L";   // Right/Left
-            return y >= 0 ? "P" : "A";                              // Posterior/Anterior
-        }
-        private String opposite(String s) {
-            switch(s) { case "S": return "I"; case "I": return "S";
-                        case "R": return "L"; case "L": return "R";
-                        case "A": return "P"; default:  return "A"; }
+            if (az >= ax && az >= ay)
+                return z >= 0 ? "S" : "I"; // Superior/Inferior
+            if (ax >= ay)
+                return x >= 0 ? "R" : "L"; // Right/Left
+            return y >= 0 ? "P" : "A"; // Posterior/Anterior
         }
 
+        private String opposite(String s) {
+            switch (s) {
+                case "S":
+                    return "I";
+                case "I":
+                    return "S";
+                case "R":
+                    return "L";
+                case "L":
+                    return "R";
+                case "A":
+                    return "P";
+                default:
+                    return "A";
+            }
+        }
 
         private com.oculus.jj.model.ROI.Point3D getVoxelUnderMouse(int sx, int sy) {
             int w = getWidth();
@@ -1040,42 +1153,20 @@ public class Viewer3DController extends JFrame {
                                     break;
                                 }
                             } else if (isVR) {
-                                float alpha = getOpacity(val, low, factor);
+                                float tfT = (float) Math.max(0, Math.min(1.0, (val - (windowLevel - windowWidth * 0.5f)) / windowWidth));
+                                float[] tfColor = currentTF.evaluateT(tfT, windowLevel, windowWidth);
+                                float r = tfColor[0];
+                                float g_val = tfColor[1];
+                                float b = tfColor[2];
+                                float alpha = tfColor[3];
+
                                 if (alpha > 0.01f) {
                                     float weight = alpha * (1.0f - accA);
-
-                                    // 組織別カラーマッピング (Horosプリセットを模倣)
-                                    // WindowLevel/Widthによって組織の強調度合いが変わるように調整
-                                    float r = 0, g_val = 0, b = 0;
-                                    float relVal = val - low; // 0 at low threshold, ww at full opacity
-
-                                    if (val > 400 + (wl - 300)) { // Bone
-                                        r = 1.0f;
-                                        g_val = 0.9f;
-                                        b = 0.8f;
-                                    } else if (val > 150 + (wl - 100)) { // Contrast/Muscle
-                                        r = 0.9f;
-                                        g_val = 0.6f;
-                                        b = 0.4f;
-                                    } else if (val > 20 + (wl - 40)) { // Soft Tissue
-                                        r = 0.7f;
-                                        g_val = 0.4f;
-                                        b = 0.3f;
-                                    } else if (val > -100 + (wl - 0)) { // Fat
-                                        r = 0.4f;
-                                        g_val = 0.3f;
-                                        b = 0.2f;
-                                    } else { // Air/Lung
-                                        r = 0.1f;
-                                        g_val = 0.1f;
-                                        b = 0.2f;
-                                    }
 
                                     // Shading (Lambertian)
                                     float shade = 1.0f;
                                     if (shadingEnabled) {
                                         double[] grad = getGradient(ix, iy, iz);
-                                        // カメラ方向への法線の向きを計算
                                         double dot = grad[0] * sinY * cosX + grad[1] * sinX + grad[2] * cosY * cosX;
                                         shade = (float) Math.max(0.2, Math.abs(dot));
                                     }
