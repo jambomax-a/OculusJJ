@@ -20,6 +20,12 @@ public class GLViewer3D {
     private int gradientTexture; // Phase 1: 事前計算勾配テクスチャ
     private int tfTexture; // Phase 3: Transfer Function 1Dテクスチャ
 
+    // ---- Orientation Cube (方位ボックス) リソース ----
+    private int cubeShaderProgram;
+    private int cubeVao, cubeVbo, cubeEbo;
+    private int[] orientationTextures = new int[6]; // A, P, S, I, R, L
+    private final String[] labelStrings = { "A", "P", "S", "I", "R", "L" };
+
     private short[][][] volume;
     private int dimX, dimY, dimZ;
     private List<DicomPix> pixList;
@@ -228,6 +234,26 @@ public class GLViewer3D {
             "  else FragColor=acc;\n" +
             "}\n";
 
+    private static final String CUBE_VS = "#version 330 core\n" +
+            "layout (location = 0) in vec3 aPos;\n" +
+            "layout (location = 1) in vec2 aTexCoord;\n" +
+            "out vec2 TexCoord;\n" +
+            "uniform mat4 model, view, projection;\n" +
+            "void main() {\n" +
+            "    gl_Position = projection * view * model * vec4(aPos, 1.0);\n" +
+            "    TexCoord = aTexCoord;\n" +
+            "}\n";
+
+    private static final String CUBE_FS = "#version 330 core\n" +
+            "out vec4 FragColor;\n" +
+            "in vec2 TexCoord;\n" +
+            "uniform sampler2D ourTexture;\n" +
+            "void main() {\n" +
+            "    vec4 texColor = texture(ourTexture, TexCoord);\n" +
+            "    if (texColor.a < 0.1) discard;\n" +
+            "    FragColor = texColor;\n" +
+            "}\n";
+
     public void initGL() {
         System.out.println("GL Vendor: " + GL33.glGetString(GL33.GL_VENDOR));
         System.out.println("GL Renderer: " + GL33.glGetString(GL33.GL_RENDERER));
@@ -240,6 +266,9 @@ public class GLViewer3D {
 
         try {
             shaderProgram = createProgram(VERT, FRAG);
+            cubeShaderProgram = createProgram(CUBE_VS, CUBE_FS);
+            initCube();
+            createOrientationTextures();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -409,6 +438,9 @@ public class GLViewer3D {
         GL33.glBindVertexArray(vao);
         GL33.glDrawElements(GL33.GL_TRIANGLES, 36, GL33.GL_UNSIGNED_INT, 0);
         GL33.glBindVertexArray(0);
+
+        // ---- 方位ボックスの描画 (右上) ----
+        drawOrientationCube(width, height);
     }
 
     // ---- Uniform helpers ----
@@ -484,5 +516,151 @@ public class GLViewer3D {
                 r[c * 4 + row] = a[row] * b[c * 4] + a[4 + row] * b[c * 4 + 1] + a[8 + row] * b[c * 4 + 2]
                         + a[12 + row] * b[c * 4 + 3];
         return r;
+    }
+
+    // ---- Orientation Cube 初期化 ----
+    private void initCube() {
+        // 各面 4頂点 * 6面 = 24頂点 (pos.x, y, z, tex.u, v)
+        float[] vertices = {
+            // Anterior (+Y) - index 0
+            -0.5f,  0.5f,  0.5f, 1, 0,  0.5f,  0.5f,  0.5f, 0, 0,  0.5f,  0.5f, -0.5f, 0, 1, -0.5f,  0.5f, -0.5f, 1, 1,
+            // Posterior (-Y) - index 1
+             0.5f, -0.5f,  0.5f, 1, 0, -0.5f, -0.5f,  0.5f, 0, 0, -0.5f, -0.5f, -0.5f, 0, 1,  0.5f, -0.5f, -0.5f, 1, 1,
+            // Superior (+Z) - index 2
+            -0.5f, -0.5f,  0.5f, 1, 0,  0.5f, -0.5f,  0.5f, 0, 0,  0.5f,  0.5f,  0.5f, 0, 1, -0.5f,  0.5f,  0.5f, 1, 1,
+            // Inferior (-Z) - index 3
+            -0.5f,  0.5f, -0.5f, 1, 0,  0.5f,  0.5f, -0.5f, 0, 0,  0.5f, -0.5f, -0.5f, 0, 1, -0.5f, -0.5f, -0.5f, 1, 1,
+            // Right (+X) - index 4
+             0.5f,  0.5f,  0.5f, 1, 0,  0.5f, -0.5f,  0.5f, 0, 0,  0.5f, -0.5f, -0.5f, 0, 1,  0.5f,  0.5f, -0.5f, 1, 1,
+            // Left (-X) - index 5
+            -0.5f, -0.5f,  0.5f, 1, 0, -0.5f,  0.5f,  0.5f, 0, 0, -0.5f,  0.5f, -0.5f, 0, 1, -0.5f, -0.5f, -0.5f, 1, 1
+        };
+        int[] indices = new int[36];
+        for (int i = 0; i < 6; i++) {
+            int offset = i * 4;
+            int idx = i * 6;
+            indices[idx] = offset; indices[idx+1] = offset+1; indices[idx+2] = offset+2;
+            indices[idx+3] = offset+2; indices[idx+4] = offset+3; indices[idx+5] = offset;
+        }
+
+        cubeVao = GL33.glGenVertexArrays();
+        cubeVbo = GL33.glGenBuffers();
+        cubeEbo = GL33.glGenBuffers();
+
+        GL33.glBindVertexArray(cubeVao);
+        GL33.glBindBuffer(GL33.GL_ARRAY_BUFFER, cubeVbo);
+        GL33.glBufferData(GL33.GL_ARRAY_BUFFER, vertices, GL33.GL_STATIC_DRAW);
+        GL33.glBindBuffer(GL33.GL_ELEMENT_ARRAY_BUFFER, cubeEbo);
+        GL33.glBufferData(GL33.GL_ELEMENT_ARRAY_BUFFER, indices, GL33.GL_STATIC_DRAW);
+
+        GL33.glVertexAttribPointer(0, 3, GL33.GL_FLOAT, false, 5 * 4, 0);
+        GL33.glEnableVertexAttribArray(0);
+        GL33.glVertexAttribPointer(1, 2, GL33.GL_FLOAT, false, 5 * 4, 3 * 4);
+        GL33.glEnableVertexAttribArray(1);
+        GL33.glBindVertexArray(0);
+    }
+
+    private void createOrientationTextures() {
+        for (int i = 0; i < 6; i++) {
+            int size = 64;
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g = img.createGraphics();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            
+            // 背景（半透明の濃い青/黒）
+            g.setColor(new java.awt.Color(20, 20, 40, 180));
+            g.fillRect(0, 0, size, size);
+            
+            // 枠線
+            g.setColor(java.awt.Color.WHITE);
+            g.setStroke(new java.awt.BasicStroke(2));
+            g.drawRect(1, 1, size - 2, size - 2);
+            
+            // 文字色をHOROS準拠に変更
+            if (labelStrings[i].equals("S") || labelStrings[i].equals("I")) {
+                g.setColor(java.awt.Color.YELLOW);
+            } else if (labelStrings[i].equals("A") || labelStrings[i].equals("P")) {
+                g.setColor(java.awt.Color.GREEN);
+            } else if (labelStrings[i].equals("L") || labelStrings[i].equals("R")) {
+                g.setColor(new java.awt.Color(100, 150, 255)); // 明るい青
+            } else {
+                g.setColor(java.awt.Color.WHITE);
+            }
+
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 40));
+            java.awt.FontMetrics fm = g.getFontMetrics();
+            int tx = (size - fm.stringWidth(labelStrings[i])) / 2;
+            int ty = (size - fm.getHeight()) / 2 + fm.getAscent();
+            g.drawString(labelStrings[i], tx, ty);
+            g.dispose();
+
+            int[] pixels = new int[size * size];
+            img.getRGB(0, 0, size, size, pixels, 0, size);
+            java.nio.ByteBuffer bb = MemoryUtil.memAlloc(size * size * 4);
+            for (int y = 0; y < size; y++) {
+                for (int x = 0; x < size; x++) {
+                    int p = pixels[y * size + x];
+                    bb.put((byte) ((p >> 16) & 0xFF)); // R
+                    bb.put((byte) ((p >> 8) & 0xFF));  // G
+                    bb.put((byte) (p & 0xFF));         // B
+                    bb.put((byte) ((p >> 24) & 0xFF)); // A
+                }
+            }
+            bb.flip();
+
+            orientationTextures[i] = GL33.glGenTextures();
+            GL33.glBindTexture(GL33.GL_TEXTURE_2D, orientationTextures[i]);
+            GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA, size, size, 0, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, bb);
+            GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
+            GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MAG_FILTER, GL33.GL_LINEAR);
+            MemoryUtil.memFree(bb);
+        }
+    }
+
+    private void drawOrientationCube(int width, int height) {
+        if (cubeShaderProgram == 0) return;
+
+        // デプスバッファをクリアして最前面に表示
+        GL33.glClear(GL33.GL_DEPTH_BUFFER_BIT);
+        GL33.glEnable(GL33.GL_DEPTH_TEST);
+
+        // ビューポートを右上に制限 (100x100ピクセル程度)
+        int cubeSize = 100;
+        GL33.glViewport(width - cubeSize - 20, height - cubeSize - 20, cubeSize, cubeSize);
+
+        GL33.glUseProgram(cubeShaderProgram);
+
+        // メインと同じ回転を適用 (スケーリングなし)
+        float[] proj = perspective(45f, 1.0f, 0.1f, 10f);
+        float[] view = translate(0, 0, -2.5f);
+        float[] mdl = multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0));
+
+        setMat4Cube("projection", proj);
+        setMat4Cube("view", view);
+        setMat4Cube("model", mdl);
+
+        GL33.glBindVertexArray(cubeVao);
+        for (int i = 0; i < 6; i++) {
+            GL33.glActiveTexture(GL33.GL_TEXTURE0);
+            GL33.glBindTexture(GL33.GL_TEXTURE_2D, orientationTextures[i]);
+            u1iCube("ourTexture", 0);
+            GL33.glDrawElements(GL33.GL_TRIANGLES, 6, GL33.GL_UNSIGNED_INT, i * 6 * 4);
+        }
+        GL33.glBindVertexArray(0);
+
+        GL33.glDisable(GL33.GL_DEPTH_TEST);
+    }
+
+    private void u1iCube(String n, int v) {
+        GL33.glUniform1i(GL33.glGetUniformLocation(cubeShaderProgram, n), v);
+    }
+
+    private void setMat4Cube(String n, float[] m) {
+        int loc = GL33.glGetUniformLocation(cubeShaderProgram, n);
+        if (loc < 0) return;
+        FloatBuffer b = MemoryUtil.memAllocFloat(16);
+        b.put(m).flip();
+        GL33.glUniformMatrix4fv(loc, false, b);
+        MemoryUtil.memFree(b);
     }
 }
