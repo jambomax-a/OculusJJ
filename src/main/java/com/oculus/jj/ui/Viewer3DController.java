@@ -4,15 +4,11 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Point2D;
-import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.stream.IntStream;
 import com.oculus.jj.model.DicomPix;
-import com.oculus.jj.model.Measurement3D;
 import org.lwjgl.opengl.awt.AWTGLCanvas;
 import org.lwjgl.opengl.awt.GLData;
-import org.lwjgl.opengl.GL;
 
 /**
  * Viewer3DController - 3Dビューワー (MIP/VR)
@@ -22,31 +18,31 @@ public class Viewer3DController extends JFrame {
 
     private ViewerController viewer2D;
     private List<DicomPix> pixList;
-    private short[][][] volume; // [z][y][x]
+    private short[] volume; // [z * dimY * dimX + y * dimX + x] 1D統合配列
     private int dimX, dimY, dimZ;
     private double spacingX = 1.0; // mm/pixel (X)
     private double spacingY = 1.0; // mm/pixel (Y)
     private double spacingZ = 1.0; // mm/slice (Z)
 
-    private RenderingPanel renderingPanel;
+    private JPanel mainContainer;
+    private JToolBar vrToolbar;
     private GLViewer3D glViewer;
     private CPURaycastRenderer cpuRenderer; // Phase 4: CPU fallback
-    private boolean useGPU = true; // Phase 4: GPU/CPU switch
-    private String mode = "MIP";
-    private boolean shadingEnabled = true;
+    private String mode = "MIP"; // デフォルトをMIPにして可視性を優先
 
-    // Window Level/Width (HOROS-20240407準拠: 初期値は軟部組織向け、または2D設定を継承)
-    private float windowLevel = 40;
-    private float windowWidth = 400;
+    // Window Level/Width (HOROS-20240407準拠: 3D用の初期表示は1:1マッピング)
+    private float windowLevel = 1024;
+    private float windowWidth = 4096;
 
     // ISO Threshold
     private int isoThreshold = 300;
-    private double resolution = 0.5;
 
     // Transfer Function (Phase 3)
     private TransferFunction currentTF = TransferFunction.createVRMusclesBones();
 
-    // 視点回転パラメータ (HOROS-20240407準拠: 初期状態は左側面 Lateral Left)
+    // 視点回転パラメータ
+    // rotateX=-π/2: 上方(+Y)からボリュームを俯瞰（CT体軸断面投影）
+    // rotateY=0: 正面向き（-π/2 は画面の5%しか使わない縮退ビューになるため0に変更）
     private double rotateX = -Math.PI / 2;
     private double rotateY = Math.PI / 2;
     private double zoom = 1.0;
@@ -56,15 +52,180 @@ public class Viewer3DController extends JFrame {
     private float clipMinY = 0, clipMaxY = 1;
     private float clipMinZ = 0, clipMaxZ = 1;
 
-    private boolean isDragging = false;
-
     private enum Tool3D {
-        ROTATE, ZOOM, PAN, WLWW, MEASURE, ROI_POINT, VR_ADJUST
+        WLWW, PAN, ZOOM, ROTATE, CLIPPING, SCISSOR, MEASURE, POINT, ROI, SCISSOR_IN, SCISSOR_OUT
     }
 
     private Tool3D currentTool = Tool3D.ROTATE;
     private List<com.oculus.jj.model.ROI> roiList = new ArrayList<>();
     private com.oculus.jj.model.ROI activeRoi = null;
+
+    private JDialog clippingDialog;
+    private boolean showCropBox = false;
+    private JLabel loadingLabel;
+    private String loadingStatus = "Preparing Volume Data (Converting to HU)...";
+    private boolean gpuInitialized = false;
+    private boolean gpuContextUnsupported = false;
+    private int glConfigIndex = 0;
+    private volatile boolean gpuRecoveryInProgress = false;
+    private volatile boolean gpuActivationInProgress = false;
+    private int gpuActivationToken = 0;
+    private Point lastMousePos;
+
+    private final MouseAdapter glMouseHandler = new MouseAdapter() {
+        @Override
+        public void mousePressed(MouseEvent e) {
+            lastMousePos = e.getPoint();
+
+            if (currentTool == Tool3D.MEASURE) {
+                com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
+                if (pt != null) {
+                    if (activeRoi == null || activeRoi.getPoints3D().size() >= 2) {
+                        activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1,
+                                new Point2D.Float(0, 0));
+                        activeRoi.setName("3D Length " + (roiList.size() + 1));
+                        roiList.add(activeRoi);
+                    }
+                    activeRoi.addPoint3D(pt);
+                    repaint();
+                }
+                return;
+            }
+
+            if (currentTool == Tool3D.POINT) {
+                com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
+                if (pt != null) {
+                    com.oculus.jj.model.ROI pRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.t2DPoint, 1, 1,
+                            new Point2D.Float(0, 0));
+                    pRoi.setName("3D Point " + (roiList.size() + 1));
+                    pRoi.addPoint3D(pt);
+                    roiList.add(pRoi);
+                    repaint();
+                }
+            }
+        }
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            repaint();
+        }
+
+        private Tool3D getEffectiveTool(MouseEvent e) {
+            boolean isRight = SwingUtilities.isRightMouseButton(e);
+            boolean isMiddle = SwingUtilities.isMiddleMouseButton(e) || (e.getModifiersEx() & MouseEvent.BUTTON2_DOWN_MASK) != 0;
+            boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
+            boolean isCtrl = (e.getModifiersEx() & MouseEvent.CTRL_DOWN_MASK) != 0;
+
+            // 1. Modifier key combinations (highest priority, matches standard Horos DICOM operations)
+            if (isMiddle) {
+                return Tool3D.PAN;  // Middle drag -> Pan
+            }
+            if (isRight) {
+                return Tool3D.WLWW; // Right drag -> WLWW (Adjust window level/width)
+            }
+            if (isShift || isCtrl) {
+                return Tool3D.ZOOM; // Shift/Ctrl + Left drag -> Zoom
+            }
+
+            // 2. Map based on DCMView.currentTool (active main toolbar button)
+            if (DCMView.currentTool != null) {
+                switch (DCMView.currentTool) {
+                    case tTranslate:
+                        return Tool3D.PAN;
+                    case tZoom:
+                        return Tool3D.ZOOM;
+                    case tWLWW:
+                        return Tool3D.WLWW;
+                    case t3DRotate:
+                    case tRotate:
+                    case t3DRotateTool:
+                    case t3DRotateTool2:
+                    case t3DRotateTool3:
+                    case t3DRotateTool4:
+                        return Tool3D.ROTATE;
+                    case tMesure:
+                        return Tool3D.MEASURE;
+                    case t2DPoint:
+                    case t3Dpoint:
+                    case t3DPointTool:
+                    case t3DPointTool2:
+                    case t3DPointTool3:
+                    case t3DPointTool4:
+                        return Tool3D.POINT;
+                }
+            }
+
+            // 3. Fallback to local shortcut/currentTool
+            return currentTool;
+        }
+
+        @Override
+        public void mouseDragged(MouseEvent e) {
+            if (lastMousePos == null) {
+                return;
+            }
+
+            int dx = e.getX() - lastMousePos.x;
+            int dy = e.getY() - lastMousePos.y;
+
+            Tool3D tool = getEffectiveTool(e);
+
+            if (tool == Tool3D.WLWW) {
+                updateWindow(dy * 2.0f, dx * 2.0f);
+            } else if (tool == Tool3D.ZOOM) {
+                zoom *= (1.0 - dy / 200.0);
+                if (zoom < 0.1)
+                    zoom = 0.1;
+                if (glViewer != null) {
+                    glViewer.setZoom((float) zoom);
+                }
+            } else if (tool == Tool3D.PAN) {
+                // Mathematically correct screen-space to volume-space projection for dragging.
+                float panSensitivity = 0.0015f;
+                double rx = rotateX;
+                double ry = rotateY;
+                
+                // Camera UP vector in volume space: U_vol = (0, cos(rx), -sin(rx))
+                double ux_vol = 0;
+                double uy_vol = Math.cos(rx);
+                double uz_vol = -Math.sin(rx);
+                
+                // Camera RIGHT vector in volume space: R_vol = (cos(ry), sin(ry) * sin(rx), sin(ry) * cos(rx))
+                double rx_vol = Math.cos(ry);
+                double ry_vol = Math.sin(ry) * Math.sin(rx);
+                double rz_vol = Math.sin(ry) * Math.cos(rx);
+                
+                // Screen X drag moves along camera RIGHT vector (inverted to match mouse direction)
+                // Screen Y drag moves along camera UP vector (aligned to mouse movement)
+                float dOffsetX = (float) (-dx * panSensitivity * rx_vol + dy * panSensitivity * ux_vol);
+                float dOffsetY = (float) (-dx * panSensitivity * ry_vol + dy * panSensitivity * uy_vol);
+                float dOffsetZ = (float) (-dx * panSensitivity * rz_vol + dy * panSensitivity * uz_vol);
+                
+                if (glViewer != null) {
+                    glViewer.addOffset(dOffsetX, dOffsetY, dOffsetZ);
+                }
+            } else if (tool == Tool3D.ROTATE) {
+                rotateY += dx * 0.01;
+                rotateX += dy * 0.01;
+                if (glViewer != null) {
+                    glViewer.setRotation((float) rotateX, (float) rotateY);
+                }
+            }
+
+            lastMousePos = e.getPoint();
+            repaint();
+        }
+    };
+
+    private final MouseWheelListener glMouseWheelHandler = e -> {
+        zoom *= (1.0 - e.getWheelRotation() * 0.1);
+        if (zoom < 0.1)
+            zoom = 0.1;
+        if (glViewer != null) {
+            glViewer.setZoom((float) zoom);
+        }
+        repaint();
+    };
 
     public void updateWindow(float dLevel, float dWidth) {
         this.windowLevel += dLevel;
@@ -81,29 +242,161 @@ public class Viewer3DController extends JFrame {
         this.viewer2D = viewer2D;
         setMode(mode);
 
+        // In 3D Viewer, the default active tool is 3D Rotate (so Left Drag rotates).
+        DCMView.currentTool = DCMView.ToolMode.t3DRotate;
+
         // initializeData(); // Don't call here, we will do it asynchronously
         initializeUI();
+
+        // ウィンドウクローズ時にメモリを解放 (HOROS-20240407準拠: リソース管理を徹底)
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                cleanup();
+            }
+        });
 
         // Asynchronously prepare data and launch GPU renderer
         startAsyncGPUInitialization();
     }
 
-    private void initializeData() {
-        // Stub for compatibility, actual work moved to startAsyncGPUInitialization
+    private void cleanup() {
+        System.out.println("Cleaning up 3D Viewer resources...");
+        stopRenderLoop();
+        volume = null;
+        pixList = null;
+        if (glViewer != null) {
+            glViewer.setVolumeData(null, null, 0, 0, 0);
+            glViewer = null;
+        }
+        if (cpuRenderer != null) {
+            cpuRenderer.setVolumeData(null, 0, 0, 0);
+            cpuRenderer = null;
+        }
+        System.gc();
+    }
+
+    private void activateGPUMode() {
+        if (gpuContextUnsupported) {
+            System.err.println("DEBUG: GPU mode unavailable for all GL configs. Staying in CPU mode.");
+            if (glViewer != null) {
+                glViewer.setEngine(GLViewer3D.ENGINE_CPU);
+                glViewer.requestCpuRender();
+            }
+            showView("VIEW");
+            return;
+        }
+
+        final int activationToken = ++gpuActivationToken;
+        gpuActivationInProgress = true;
+        startGpuActivationWatchdog(activationToken);
+
+        if (!gpuInitialized) {
+            gpuInitialized = true;
+            new Thread(() -> {
+                try {
+                    SwingUtilities.invokeLater(() -> {
+                        // glViewer を先に隠してから loadingStatus をセット。
+                        // 逆順だと可視状態の glViewer.repaint() が paintOverlay 経由で
+                        // GDI レイヤーにテキストを書き込み DWM 残留の原因になる。
+                        showView("LOADING");
+                        setLoadingStatus("Computing GPU Gradients (Safety Mode)...");
+                    });
+
+                    int zStep = (dimZ > 512) ? 2 : 1;
+                    int tz = dimZ / zStep;
+                    byte[] grad = computeGradients(zStep, tz);
+                    System.out.println("DEBUG: Gradients computed (" + grad.length + " bytes).");
+
+                    SwingUtilities.invokeLater(() -> loadingLabel
+                            .setText("Uploading Volume to GPU (Step 1/2)... Please wait 2-3 seconds..."));
+                    System.out.println("DEBUG: Starting glViewer.setVolumeData...");
+                    glViewer.setVolumeData(volume, grad, dimX, dimY, dimZ);
+                    System.out.println("DEBUG: glViewer.setVolumeData finished.");
+
+                    Thread.sleep(400); // EDTに "Uploading Volume..." 表示を描画させる時間を確保
+
+                    SwingUtilities
+                            .invokeLater(() -> setLoadingStatus("Completing GPU Initialization (Step 2/2)..."));
+                    glViewer.setTransferFunction(currentTF);
+                    glViewer.setWindowLevel(windowLevel, windowWidth);
+                    glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+                    glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
+                    glViewer.setRotation((float) rotateX, (float) rotateY);
+                    glViewer.setZoom((float) zoom);
+                    System.out.println("DEBUG: GPU parameters set.");
+
+                    Thread.sleep(400); // EDTに "Completing GPU..." 表示を描画させる時間を確保
+
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            glViewer.setEngine(GLViewer3D.ENGINE_GPU);
+                            this.canvas = glViewer; // 描画ループ対象をセット
+                            setMode(this.mode);
+                            System.out.println("DEBUG: activateGPUMode EDT: about to showView(VIEW)");
+                            showView("VIEW");
+                            startRenderLoop();
+                            System.out.println("3D Rendering Ready. Mode: GPU");
+                        } catch (Throwable t) {
+                            System.err.println("DEBUG: EXCEPTION in activateGPUMode EDT block:");
+                            t.printStackTrace();
+                            showView("VIEW");
+                            startRenderLoop();
+                        } finally {
+                            gpuActivationInProgress = false;
+                        }
+                    });
+                } catch (Throwable t) {
+                    System.err.println("DEBUG: Error in activateGPUMode thread:");
+                    t.printStackTrace();
+                    SwingUtilities.invokeLater(() -> {
+                        gpuActivationInProgress = false;
+                        setLoadingStatus("GPU Error: " + t.getMessage());
+                    });
+                }
+            }).start();
+        } else {
+            glViewer.setRotation((float) rotateX, (float) rotateY);
+            glViewer.setZoom((float) zoom);
+            setMode(this.mode);
+            glViewer.setEngine(GLViewer3D.ENGINE_GPU);
+            this.canvas = glViewer;
+            showView("VIEW");
+            startRenderLoop();
+            gpuActivationInProgress = false;
+        }
+    }
+
+    private void startGpuActivationWatchdog(int token) {
+        Timer watchdog = new Timer(12000, e -> {
+            if (token != gpuActivationToken || !gpuActivationInProgress) {
+                ((Timer) e.getSource()).stop();
+                return;
+            }
+            System.err.println("DEBUG: GPU activation timeout at step 2/2. Triggering GL fallback retry.");
+            gpuActivationInProgress = false;
+            ((Timer) e.getSource()).stop();
+            SwingUtilities.invokeLater(this::handleGpuContextFailure);
+        });
+        watchdog.setRepeats(false);
+        watchdog.start();
     }
 
     private void startAsyncGPUInitialization() {
-        final JLabel loadingLabel = new JLabel("Preparing Volume Data (Converting to HU)...", JLabel.CENTER);
-        loadingLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
-        this.add(loadingLabel, BorderLayout.CENTER);
-        this.revalidate();
+        setLoadingStatus("Preparing Volume Data (Converting to HU)...");
+        showView("LOADING");
 
         new Thread(() -> {
             try {
+                System.out.println("DEBUG: startAsyncGPUInitialization thread started.");
                 List<List<DicomPix>> allPix = viewer2D.getPixList();
-                if (allPix == null || allPix.isEmpty())
+                if (allPix == null || allPix.isEmpty()) {
+                    System.err.println("DEBUG: allPix is NULL or empty!");
                     return;
+                }
                 this.pixList = new ArrayList<>(allPix.get(0));
+                System.out.println("DEBUG: pixList size = " + pixList.size());
                 if (pixList == null || pixList.isEmpty())
                     return;
 
@@ -133,46 +426,99 @@ public class Viewer3DController extends JFrame {
                     spacingZ = (first.getSliceThickness() > 0.1) ? first.getSliceThickness() : 1.0;
                 }
 
-                volume = new short[dimZ][dimY][dimX];
+                volume = new short[dimZ * dimY * dimX];
+                System.out.println("DEBUG: loadSlices started. dimZ=" + dimZ + ", dimY=" + dimY + ", dimX=" + dimX);
+                System.out.println("Starting HU conversion (Sequential/Safe Mode) for " + dimZ + " slices...");
+
                 for (int z = 0; z < dimZ; z++) {
-                    DicomPix pix = pixList.get(z);
-                    short[] src = pix.getShortData();
-                    if (src != null) {
-                        float s = pix.getRescaleSlope();
-                        float i = pix.getRescaleIntercept();
-                        for (int y = 0; y < dimY; y++) {
-                            for (int x = 0; x < dimX; x++) {
-                                volume[z][y][x] = (short) (src[y * dimX + x] * s + i);
+                    final int currentZ = z;
+                    // 1枚ごとに進捗表示 (フリーズ確認用)
+                    SwingUtilities.invokeLater(() -> {
+                        setLoadingStatus(String.format("Converting to HU... %d%% (%d / %d)",
+                                (currentZ * 100 / dimZ), currentZ, dimZ));
+                    });
+
+                    try {
+                        DicomPix pix = pixList.get(z);
+                        if (pix != null) {
+                            short[] src = pix.getShortData();
+                            if (src != null) {
+                                float s = pix.getRescaleSlope();
+                                float i = pix.getRescaleIntercept();
+                                int w = pix.getWidth();
+                                int h = pix.getHeight();
+                                if (w == dimX && h == dimY) {
+                                    int zOffset = z * dimY * dimX;
+                                    for (int y = 0; y < dimY; y++) {
+                                        int yOffset = y * dimX;
+                                        for (int x = 0; x < dimX; x++) {
+                                            volume[zOffset + yOffset + x] = (short) (src[yOffset + x] * s + i);
+                                        }
+                                    }
+                                }
                             }
                         }
+                        // コピー済みスライスを即座に解放
+                        pixList.set(z, null);
+
+                        // 50枚ごとにコンソールに進捗を出す
+                        if (z % 50 == 0) {
+                            System.out.println("DEBUG: HU Converting... " + z + "/" + dimZ);
+                        }
+                        // 100枚ごとにGCを強制
+                        if (z % 100 == 0) {
+                            System.gc();
+                        }
+                    } catch (Throwable t) {
+                        System.err.println("Error at slice " + z + ": " + t.getMessage());
                     }
                 }
 
-                // ---- Fix 3: 初期ウィンドウ値を2Dビューアーの設定、またはDICOMから取得 (HOROS-20240407準拠) ----
-                if (viewer2D != null && viewer2D.getImageView() != null && viewer2D.getImageView().getCurDCM() != null) {
-                    windowLevel = viewer2D.getImageView().getCurDCM().getWindowLevel();
-                    windowWidth = viewer2D.getImageView().getCurDCM().getWindowWidth();
+                System.out.println("HU conversion finished. Finalizing...");
+                // データの詳細統計チェック
+                long nonZeroCount = 0;
+                int maxV = -3000, minV = 3000;
+                long sumV = 0;
+                for (int i = 0; i < Math.min(volume.length, 1000000); i++) {
+                    short val = volume[i];
+                    if (val != 0)
+                        nonZeroCount++;
+                    if (val > maxV)
+                        maxV = val;
+                    if (val < minV)
+                        minV = val;
+                    sumV += val;
+                }
+                System.out.println("DEBUG: Volume Stats (first 1M samples):");
+                System.out.println("  Non-zero: " + nonZeroCount);
+                System.out.println("  Max: " + maxV + ", Min: " + minV + ", Avg: " + (sumV / 1000000));
+                pixList = null;
+
+                // 3Dレンダリング用ウィンドウは広範囲を維持する。
+                // DICOMの2D表示用窓(例: 軟部組織 WL=50/WW=300)は骨(HU>200)を完全除外するため
+                // VRモードで真っ黒になる。wl=300/ww=2000を使用して骨・軟組織を両方表示する。
+                if (viewer2D != null && viewer2D.getImageView() != null
+                        && viewer2D.getImageView().getCurDCM() != null) {
+                    float dicom2DWL = viewer2D.getImageView().getCurDCM().getWindowLevel();
+                    float dicom2DWW = viewer2D.getImageView().getCurDCM().getWindowWidth();
+                    System.out
+                            .println("DEBUG: DICOM 2D window (not used for 3D): WL=" + dicom2DWL + " WW=" + dicom2DWW);
                 } else if (first != null) {
-                    windowLevel = first.getWindowLevel();
-                    windowWidth = first.getWindowWidth();
+                    System.out.println("DEBUG: DICOM first-slice window (not used for 3D): WL="
+                            + first.getWindowLevel() + " WW=" + first.getWindowWidth());
                 }
-                
-                // 万が一 WW が不正な場合はデフォルト(Soft Tissue)を使用
-                if (windowWidth <= 1.0f) {
-                    windowLevel = 40;
-                    windowWidth = 400;
-                }
+                // 3D用デフォルト窓: WL=1024 WW=4096 (1:1マッピング)
+                windowLevel = 1024;
+                windowWidth = 4096;
 
                 SwingUtilities.invokeLater(() -> {
-                    this.remove(loadingLabel);
+                    setLoadingStatus("Initializing Renderers...");
                     setupGPURenderer();
-                    this.revalidate();
-                    this.repaint();
                 });
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (Throwable t) {
+                t.printStackTrace();
                 SwingUtilities.invokeLater(() -> {
-                    loadingLabel.setText("Error preparing data: " + e.getMessage());
+                    setLoadingStatus("Error: " + t.getMessage());
                 });
             }
         }).start();
@@ -185,20 +531,51 @@ public class Viewer3DController extends JFrame {
     private void startRenderLoop() {
         stopRenderLoop();
         isRendering = true;
+        final int[] consecutiveErrors = { 0 };
         renderTimer = new Timer(16, e -> {
-            if (!isRendering || canvas == null || !canvas.isDisplayable() || !canvas.isShowing()) {
+            if (!isRendering || canvas == null) {
                 stopRenderLoop();
                 return;
             }
             try {
-                canvas.render();
-            } catch (RuntimeException ex) {
-                stopRenderLoop();
+                if (canvas.isDisplayable() && canvas.getWidth() > 0 && canvas.getHeight() > 0)
+                    canvas.repaint();
+                consecutiveErrors[0] = 0; // 成功したらリセット
+            } catch (Throwable ex) {
+                if (isPixelFormatError(ex)) {
+                    System.err.println("DEBUG: OpenGL pixel format error detected. Trying next GL config.");
+                    ex.printStackTrace();
+                    gpuActivationInProgress = false;
+                    SwingUtilities.invokeLater(this::handleGpuContextFailure);
+                    return;
+                }
+                consecutiveErrors[0]++;
+                System.err.println("DEBUG: Render error #" + consecutiveErrors[0] + ": " + ex);
                 ex.printStackTrace();
+                if (consecutiveErrors[0] >= 10) {
+                    // 連続10回失敗した場合のみ停止 (一時的なエラーで永久停止しないよう)
+                    stopRenderLoop();
+                    System.err.println("DEBUG: Render loop stopped after 10 consecutive errors.");
+                }
             }
         });
         renderTimer.setRepeats(true);
+        // 最初のタイマー実行を 200ms 遅延させて、EDTがカード表示切替と
+        // OSウィンドウ側のHWNDピア可視化を完全に終える時間を十分に確保する（EDT飢餓状態の防止）
+        renderTimer.setInitialDelay(200);
         renderTimer.start();
+    }
+
+    private boolean isPixelFormatError(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            String msg = cur.getMessage();
+            if (msg != null && msg.contains("Failed to set pixel format")) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
     }
 
     private void stopRenderLoop() {
@@ -224,135 +601,129 @@ public class Viewer3DController extends JFrame {
     }
 
     private void setupGPURenderer() {
-        try {
-            if (glViewer == null) {
-                glViewer = new GLViewer3D();
-                setMode(this.mode); // Apply initial mode
+        System.out.println("DEBUG: setupGPURenderer called. engine=" + (isGpuEngine() ? "GPU" : "CPU"));
+        new Thread(() -> {
+            try {
+                System.out.println("DEBUG: setupGPURenderer thread started.");
+                // 先にCPURendererを完全に作ってからEDTに渡すことで排他やNPEを回避
+                CPURaycastRenderer tempCpu = new CPURaycastRenderer();
+                tempCpu.setVolumeData(volume, dimX, dimY, dimZ);
+                tempCpu.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
+                tempCpu.setTransferFunction(currentTF);
+                tempCpu.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+                tempCpu.setRotation((float) rotateX, (float) rotateY);
+                tempCpu.setZoom((float) zoom);
 
-                GLData data = new GLData();
-                data.api = GLData.API.GL;
-                data.majorVersion = 3;
-                data.minorVersion = 3;
-                data.profile = GLData.Profile.CORE;
-                data.samples = 0;
+                // バックグラウンドスレッドにてCPU用勾配(Gradient)を事前計算
+                tempCpu.computeGradients();
 
-                canvas = new AWTGLCanvas(data) {
-                    private static final long serialVersionUID = 1L;
-
-                    @Override
-                    public void initGL() {
-                        GL.createCapabilities();
-                        glViewer.initGL();
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        // GLViewer3D は initializeUI() 時点(HU変換前)に volume=null で生成されているため、
+                        // setCpuRenderer() の内部で renderer.setVolumeData(null,0,0,0) が呼ばれて
+                        // tempCpu のデータが消えてしまう。先に volume を設定して防ぐ。
+                        glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
+                        glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
+                        cpuRenderer = tempCpu;
+                        glViewer.setCpuRenderer(cpuRenderer);
+                        glViewer.setWindowLevel(windowLevel, windowWidth);
+                        setMode(this.mode);
+                        glViewer.setEngine(GLViewer3D.ENGINE_CPU);
+                        this.canvas = glViewer; // 描画ループの対象セット
+                        System.out.println("DEBUG: setupGPURenderer EDT: about to showView(VIEW)");
+                        showView("VIEW");
+                        startRenderLoop(); // 定期再描画を回す
+                        System.out.println("3D Rendering Ready. Mode: CPU");
+                    } catch (Throwable t) {
+                        System.err.println("DEBUG: EXCEPTION in setupGPURenderer EDT block:");
+                        t.printStackTrace();
+                        showView("VIEW"); // 例外でも VIEW に切り替えてブラックスクリーンを表示
+                        startRenderLoop();
                     }
+                });
 
-                    @Override
-                    public void paintGL() {
-                        glViewer.paintGL(getWidth(), getHeight());
-                        swapBuffers();
-                    }
-                };
-
-                if (renderingPanel != null) {
-                    remove(renderingPanel);
-                }
-                for (Component c : getContentPane().getComponents()) {
-                    if (c instanceof JLabel) {
-                        remove(c);
-                    }
-                }
-
-                glViewer.setVolumeData(volume, dimX, dimY, dimZ, pixList);
-                glViewer.setTransferFunction(currentTF);
-                glViewer.setWindowLevel(windowLevel, windowWidth);
-                glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
-                // Fix 2: 物理ボクセルサイズを渡してアスペクト比を正規化
-                glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
-
-                // CPU renderer 初期化 (Phase 4: フォールバック)
-                cpuRenderer = new CPURaycastRenderer();
-                cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
-                cpuRenderer.setTransferFunction(currentTF);
-                cpuRenderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
-                new Thread(() -> cpuRenderer.computeGradients()).start();
-
-                java.awt.event.MouseAdapter syncMouse = new java.awt.event.MouseAdapter() {
-                    private Point lastPos;
-
-                    @Override
-                    public void mousePressed(MouseEvent e) {
-                        lastPos = e.getPoint();
-                    }
-
-                    @Override
-                    public void mouseDragged(MouseEvent e) {
-                        if (lastPos != null) {
-                            int dx = e.getX() - lastPos.x;
-                            int dy = e.getY() - lastPos.y;
-                            if (SwingUtilities.isRightMouseButton(e) || currentTool == Tool3D.ZOOM) {
-                                zoom *= (1.0 - dy / 200.0);
-                                if (zoom < 0.1)
-                                    zoom = 0.1;
-                            } else if (currentTool == Tool3D.VR_ADJUST || currentTool == Tool3D.WLWW) {
-                                windowLevel += dy * 2.0f;
-                                windowWidth += dx * 2.0f;
-                                if (windowWidth < 1)
-                                    windowWidth = 1;
-                                if (glViewer != null)
-                                    glViewer.setWindowLevel(windowLevel, windowWidth);
-                            } else if (SwingUtilities.isMiddleMouseButton(e) || currentTool == Tool3D.PAN) {
-                                boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
-                                if (isShift) {
-                                    windowLevel += dy * 2.0f;
-                                    windowWidth += dx * 2.0f;
-                                    if (windowWidth < 1)
-                                        windowWidth = 1;
-                                    if (glViewer != null)
-                                        glViewer.setWindowLevel(windowLevel, windowWidth);
-                                } else {
-                                    float sensitivity = 0.0005f;
-                                    glViewer.addOffset((float) (lastPos.x - e.getX()) * sensitivity,
-                                            (float) (lastPos.y - e.getY()) * sensitivity, 0);
-                                }
-                                repaint();
-                            } else {
-                                rotateY += dx * 0.01;
-                                rotateX += dy * 0.01;
-                            }
-                            glViewer.setRotation((float) rotateX, (float) rotateY);
-                            glViewer.setZoom((float) zoom);
-                            // WL/WW is now handled by TransferFunction
-                            lastPos = e.getPoint();
-                        }
-                    }
-
-                    @Override
-                    public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
-                        zoom *= (1.0 - e.getWheelRotation() * 0.1);
-                        if (zoom < 0.1)
-                            zoom = 0.1;
-                        glViewer.setZoom((float) zoom);
-                    }
-                };
-                canvas.addMouseListener(syncMouse);
-                canvas.addMouseMotionListener(syncMouse);
-                canvas.addMouseWheelListener(syncMouse);
-
-                glViewer.setRotation((float) rotateX, (float) rotateY);
-                glViewer.setZoom((float) zoom);
-                // WL/WW is now handled by TransferFunction
-
-                this.add(canvas, BorderLayout.CENTER);
-                this.revalidate();
-                this.repaint();
-
-                startRenderLoop();
+                System.out.println("DEBUG: CPU renderer initialized.");
+            } catch (Throwable t) {
+                System.err.println("DEBUG: Error in setupGPURenderer thread:");
+                t.printStackTrace();
+                SwingUtilities.invokeLater(() -> setLoadingStatus("Initialization Error: " + t.getMessage()));
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-            this.add(new JLabel("GPU Acceleration failed: " + e.getMessage()), BorderLayout.CENTER);
-            this.revalidate();
-            this.repaint();
+        }).start();
+    }
+
+    private void showView(String viewName) {
+        System.out.println("DEBUG: showView(" + viewName + ") called. layout="
+                + (mainContainer != null ? mainContainer.getLayout().getClass().getSimpleName() : "null")
+                + " glViewer.isShowing=" + (glViewer != null ? glViewer.isShowing() : "null")
+                + " glViewer.isVisible=" + (glViewer != null ? glViewer.isVisible() : "null"));
+        if (mainContainer != null && mainContainer.getLayout() instanceof CardLayout) {
+            ((CardLayout) mainContainer.getLayout()).show(mainContainer, viewName);
         }
+        if ("VIEW".equals(viewName)) {
+            setLoadingStatus(null);
+        }
+        if (glViewer != null) {
+            glViewer.setVisible(true);
+            try {
+                mainContainer.setComponentZOrder(glViewer, 0);
+            } catch (Throwable t) {
+                // ignore Z-order mixing exceptions
+            }
+            glViewer.requestFocus();
+        }
+        if (mainContainer != null) {
+            mainContainer.revalidate();
+            mainContainer.repaint();
+        }
+        if (glViewer != null) {
+            glViewer.revalidate();
+            glViewer.repaint();
+        }
+        System.out.println("DEBUG: showView(" + viewName + ") done."
+                + " glViewer.isShowing=" + (glViewer != null ? glViewer.isShowing() : "null")
+                + " glViewer.isVisible=" + (glViewer != null ? glViewer.isVisible() : "null"));
+    }
+
+    private byte[] computeGradients(int zStep, int tz) {
+        byte[] g = new byte[dimX * dimY * tz * 3];
+        java.util.stream.IntStream.range(0, tz).parallel().forEach(zi -> {
+            int z = zi * zStep;
+            int layerOffset = zi * dimY * dimX * 3;
+            for (int y = 0; y < dimY; y++) {
+                int yOffset = y * dimX * 3;
+                for (int x = 0; x < dimX; x++) {
+                    int idx = layerOffset + yOffset + x * 3;
+                    float dx = (sv(x + 1, y, z) - sv(x - 1, y, z)) * 0.5f;
+                    float dy = (sv(x, y + 1, z) - sv(x, y - 1, z)) * 0.5f;
+                    float dz = (sv(x, y, z + 1) - sv(x, y, z - 1)) * 0.5f;
+                    float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (len < 1e-6f)
+                        len = 1;
+                    g[idx] = (byte) ((dx / len * 0.5f + 0.5f) * 255);
+                    g[idx + 1] = (byte) ((dy / len * 0.5f + 0.5f) * 255);
+                    g[idx + 2] = (byte) ((dz / len * 0.5f + 0.5f) * 255);
+                }
+            }
+        });
+        return g;
+    }
+
+    private float sv(int x, int y, int z) {
+        if (x < 0)
+            x = 0;
+        if (x >= dimX)
+            x = dimX - 1;
+        if (y < 0)
+            y = 0;
+        if (y >= dimY)
+            y = dimY - 1;
+        if (z < 0)
+            z = 0;
+        if (z >= dimZ)
+            z = dimZ - 1;
+        // 符号付きshort (HU値) をそのままfloatに変換。& 0xFFFF は厳禁:
+        // 負のHU (例: 空気=-1024) を unsigned 64512 に化かし、勾配方向が逆転する。
+        return (float) (volume[z * dimY * dimX + y * dimX + x]);
     }
 
     private void initializeUI() {
@@ -395,191 +766,125 @@ public class Viewer3DController extends JFrame {
         setLayout(new BorderLayout());
 
         // HOROS-20240407準拠: VR.xib 相当のツールバー
-        JToolBar vrToolbar = new JToolBar();
+        // ---- HOROS-20240407 準拠 ツールバー再構成 ----
+        vrToolbar = new JToolBar();
         vrToolbar.setFloatable(false);
-        vrToolbar.setBackground(new Color(240, 240, 240));
+        vrToolbar.setLayout(new FlowLayout(FlowLayout.LEFT, 5, 2));
 
-        JButton btnMIP = new JButton("MIP");
-        btnMIP.addActionListener(e -> {
-            setMode("MIP");
-            setTitle("3D Viewer - MIP");
-            repaint();
-        });
-        vrToolbar.add(btnMIP);
+        // 1. Mouse button function
+        JPanel groupMouse = createToolbarGroup("Mouse button function");
+        ButtonGroup bgTools = new ButtonGroup();
+        String[] toolLabels = { "WW/WL", "Pan", "Zoom", "Rotate", "Clip", "Scissor", "Meas", "Point", "ROI", "In",
+                "Out" };
+        Tool3D[] toolValues = { Tool3D.WLWW, Tool3D.PAN, Tool3D.ZOOM, Tool3D.ROTATE, Tool3D.CLIPPING, Tool3D.SCISSOR,
+                Tool3D.MEASURE, Tool3D.POINT, Tool3D.ROI, Tool3D.SCISSOR_IN, Tool3D.SCISSOR_OUT };
 
-        JButton btnMinIP = new JButton("MinIP");
-        btnMinIP.addActionListener(e -> {
-            setMode("MinIP");
-            setTitle("3D Viewer - MinIP");
-            repaint();
-        });
-        vrToolbar.add(btnMinIP);
+        for (int i = 0; i < toolLabels.length; i++) {
+            final Tool3D t = toolValues[i];
+            JToggleButton btn = new JToggleButton(toolLabels[i]);
+            btn.setMargin(new Insets(2, 2, 2, 2));
+            btn.addActionListener(e -> {
+                this.currentTool = t;
+                if (t == Tool3D.CLIPPING)
+                    showClippingDialog();
+            });
+            bgTools.add(btn);
+            groupMouse.add(btn);
+            if (t == Tool3D.ROTATE)
+                btn.setSelected(true);
+        }
+        vrToolbar.add(groupMouse);
 
-        JButton btnAvg = new JButton("Average");
-        btnAvg.addActionListener(e -> {
-            setMode("Average");
-            setTitle("3D Viewer - Average");
-            repaint();
-        });
-        vrToolbar.add(btnAvg);
+        // 2. WL/WW & CLUT & Opacity
+        JPanel groupWLWW = createToolbarGroup("WL/WW & CLUT & Opacity");
+        groupWLWW.setLayout(new GridLayout(3, 2, 2, 2));
+        groupWLWW.add(new JLabel("WL/WW:"));
+        groupWLWW.add(new JComboBox<>(new String[] { "Other", "Default", "Full" }));
+        groupWLWW.add(new JLabel("CLUT:"));
+        groupWLWW.add(new JComboBox<>(new String[] { "No CLUT", "Hot Iron", "Rainbow" }));
+        groupWLWW.add(new JLabel("Opacity:"));
+        groupWLWW.add(new JComboBox<>(new String[] { "Linear", "Logarithmic" }));
+        vrToolbar.add(groupWLWW);
 
-        JButton btnVR = new JButton("Volume Rendering");
-        btnVR.addActionListener(e -> {
-            setMode("VR");
-            setTitle("3D Viewer - VR");
-            repaint();
-        });
-        vrToolbar.add(btnVR);
-
-        JButton btnISO = new JButton("3D Surface");
-        btnISO.addActionListener(e -> {
-            setMode("ISO");
-            setTitle("3D Viewer - Surface Rendering");
-            repaint();
-        });
-        vrToolbar.add(btnISO);
-
-        vrToolbar.addSeparator();
-
-        vrToolbar.add(new JLabel(" ISO: "));
-        JSpinner isoSpinner = new JSpinner(new SpinnerNumberModel(300, -1024, 3072, 50));
-        isoSpinner.addChangeListener(e -> {
-            this.isoThreshold = (int) isoSpinner.getValue();
-            repaint();
-        });
-        vrToolbar.add(isoSpinner);
-
-        vrToolbar.addSeparator();
-
-        JToggleButton tglShading = new JToggleButton("Shading", true);
-        tglShading.addActionListener(e -> {
-            this.shadingEnabled = tglShading.isSelected();
-            repaint();
-        });
-        vrToolbar.add(tglShading);
-
-        vrToolbar.addSeparator();
-
-        JButton btnReset = new JButton("Reset");
-        btnReset.addActionListener(e -> {
-            rotateX = -Math.PI / 2;
-            rotateY = Math.PI / 2;
-            zoom = 1.0;
-            
-            // HOROS-20240407準拠: リセット時はDICOMのデフォルトまたは2Dの初期値に戻る
-            if (viewer2D != null && viewer2D.getImageView() != null && viewer2D.getImageView().getCurDCM() != null) {
-                windowLevel = viewer2D.getImageView().getCurDCM().getWindowLevel();
-                windowWidth = viewer2D.getImageView().getCurDCM().getWindowWidth();
-            } else if (pixList != null && !pixList.isEmpty()) {
-                windowLevel = pixList.get(0).getWindowLevel();
-                windowWidth = pixList.get(0).getWindowWidth();
-            } else {
-                windowLevel = 40;
-                windowWidth = 400;
-            }
-            
-            if (glViewer != null) {
-                glViewer.setWindowLevel(windowLevel, windowWidth);
-                // HOROS-20240407準拠: プリセットもデフォルトに戻す
-                currentTF = TransferFunction.createVRMusclesBones();
-                glViewer.setTransferFunction(currentTF);
-            }
-            repaint();
-        });
-        vrToolbar.add(btnReset);
-
-        vrToolbar.addSeparator();
-
-        JToggleButton tglMeasure = new JToggleButton("Measure (Line)");
-        tglMeasure.addActionListener(e -> {
-            if (tglMeasure.isSelected()) {
-                this.currentTool = Tool3D.MEASURE;
-                activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1, new Point2D.Float(0, 0));
-                activeRoi.setName("3D Measurement " + (roiList.size() + 1));
-            } else {
-                this.currentTool = Tool3D.ROTATE;
-                activeRoi = null;
-            }
-            repaint();
-        });
-        vrToolbar.add(tglMeasure);
-
-        JToggleButton tglPoint = new JToggleButton("Point");
-        tglPoint.addActionListener(e -> {
-            if (tglPoint.isSelected()) {
-                this.currentTool = Tool3D.ROI_POINT;
-            } else {
-                this.currentTool = Tool3D.ROTATE;
-            }
-            repaint();
-        });
-        vrToolbar.add(tglPoint);
-
-        JButton btnClearMeasure = new JButton("Clear ROIs");
-        btnClearMeasure.addActionListener(e -> {
-            roiList.clear();
-            activeRoi = null;
-            repaint();
-        });
-        vrToolbar.add(btnClearMeasure);
-
-        vrToolbar.addSeparator();
-
-        JToggleButton tglVRAdjust = new JToggleButton("VR Adjust");
-        tglVRAdjust.addActionListener(e -> {
-            if (tglVRAdjust.isSelected()) {
-                this.currentTool = Tool3D.VR_ADJUST;
-            } else {
-                this.currentTool = Tool3D.ROTATE;
-            }
-        });
-        vrToolbar.add(tglVRAdjust);
-
-        vrToolbar.addSeparator();
-        vrToolbar.add(new JLabel("TF Preset: "));
-        TransferFunction[] tfPresets = {
-                TransferFunction.createVRMusclesBones(),
-                TransferFunction.createSoftTissue(),
-                TransferFunction.createBone(),
-                TransferFunction.createLung(),
-                TransferFunction.createVascular()
-        };
-        JComboBox<TransferFunction> comboTF = new JComboBox<>(tfPresets);
-        comboTF.setSelectedIndex(0);
-        comboTF.addActionListener(e -> {
-            currentTF = (TransferFunction) comboTF.getSelectedItem();
-            if (glViewer != null)
-                glViewer.setTransferFunction(currentTF);
-            if (cpuRenderer != null)
-                cpuRenderer.setTransferFunction(currentTF);
-            repaint();
-        });
-        vrToolbar.add(comboTF);
-
-        vrToolbar.addSeparator();
-        vrToolbar.add(new JLabel("Engine: "));
-        JRadioButton rbGPU = new JRadioButton("GPU", true);
-        JRadioButton rbCPU = new JRadioButton("CPU", false);
+        // 3. Engine
+        JPanel groupEngine = createToolbarGroup("Engine");
+        groupEngine.setLayout(new GridLayout(2, 1));
+        JRadioButton rbCPU = new JRadioButton("CPU", true);
+        JRadioButton rbGPU = new JRadioButton("GPU", false);
         ButtonGroup bgEngine = new ButtonGroup();
-        bgEngine.add(rbGPU);
         bgEngine.add(rbCPU);
-        rbGPU.setOpaque(false);
-        rbCPU.setOpaque(false);
-        rbGPU.addActionListener(e -> {
-            useGPU = true;
-            repaint();
-        });
+        bgEngine.add(rbGPU);
         rbCPU.addActionListener(e -> {
-            useGPU = false;
+            stopRenderLoop();
+            canvas = null;
+            if (glViewer != null) {
+                glViewer.setEngine(GLViewer3D.ENGINE_CPU);
+                glViewer.requestCpuRender();
+            }
+            showView("VIEW");
             repaint();
         });
-        vrToolbar.add(rbGPU);
-        vrToolbar.add(rbCPU);
+        rbGPU.addActionListener(e -> {
+            activateGPUMode();
+        });
+        groupEngine.add(rbCPU);
+        groupEngine.add(rbGPU);
+        vrToolbar.add(groupEngine);
 
+        // 4. Crop
+        JPanel groupCrop = createToolbarGroup("Crop");
+        JToggleButton tglCrop = new JToggleButton("Crop");
+        tglCrop.addActionListener(e -> {
+            this.showCropBox = tglCrop.isSelected();
+            repaint();
+        });
+        groupCrop.add(tglCrop);
+        vrToolbar.add(groupCrop);
+
+        // 5. Orientation
+        JPanel groupOrient = createToolbarGroup("Orientation");
+        JButton btnOrient = new JButton("Orient");
+        btnOrient.addActionListener(e -> {
+            // TODO: Orientation menu
+        });
+        groupOrient.add(btnOrient);
+        vrToolbar.add(groupOrient);
+
+        // 6. Shading
+        JPanel groupShading = createToolbarGroup("Shading");
+        JCheckBox chkShading = new JCheckBox("Shading", true);
+        chkShading.addActionListener(e -> {
+            // 現在のGPUシェーダは常時シェーディング有効。将来の切替フラグ用にUIのみ保持。
+            repaint();
+        });
+        groupShading.add(chkShading);
+        JButton btnEditShading = new JButton("Edit");
+        groupShading.add(btnEditShading);
+        vrToolbar.add(groupShading);
+
+        setLayout(new BorderLayout());
         add(vrToolbar, BorderLayout.NORTH);
 
-        renderingPanel = new RenderingPanel();
-        add(renderingPanel, BorderLayout.CENTER);
+        glViewer = createGLViewer(buildGLData(glConfigIndex));
+
+        this.loadingLabel = new JLabel("Preparing Volume Data (Converting to HU)...", JLabel.CENTER);
+        loadingLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
+        loadingLabel.setForeground(Color.WHITE);
+
+        // CardLayout: Swing and Heavyweight AWTGLCanvas conflict on Windows.
+        // We use BorderLayout to keep glViewer visible at all times, preventing native HWND destruction,
+        // and draw the loading screen as a high-performance Java2D overlay.
+        JPanel loadingPanel = new JPanel(new BorderLayout());
+        loadingPanel.setBackground(Color.BLACK);
+        loadingPanel.add(loadingLabel, BorderLayout.CENTER);
+
+        mainContainer = new JPanel(new BorderLayout());
+        mainContainer.setOpaque(false);
+        mainContainer.add(glViewer, BorderLayout.CENTER);
+
+        add(mainContainer, BorderLayout.CENTER);
+
+        showView("LOADING"); // 初期表示: データロード中
 
         // キーボードショートカット (Horos準拠: ESCで閉じる, 各ツール切替)
         addKeyListener(new KeyAdapter() {
@@ -590,7 +895,7 @@ public class Viewer3DController extends JFrame {
                         dispose();
                         break;
                     case KeyEvent.VK_W:
-                        currentTool = Tool3D.VR_ADJUST;
+                        currentTool = Tool3D.WLWW;
                         break;
                     case KeyEvent.VK_S:
                         currentTool = Tool3D.ROTATE;
@@ -630,6 +935,62 @@ public class Viewer3DController extends JFrame {
         return p;
     }
 
+    private JPanel createToolbarGroup(String title) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setOpaque(false);
+        JPanel content = new JPanel();
+        content.setOpaque(false);
+        p.add(content, BorderLayout.CENTER);
+        JLabel lbl = new JLabel(title, JLabel.CENTER);
+        lbl.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        lbl.setForeground(Color.GRAY);
+        p.add(lbl, BorderLayout.SOUTH);
+        p.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, Color.LIGHT_GRAY));
+        return p;
+    }
+
+    private void showClippingDialog() {
+        if (clippingDialog == null) {
+            clippingDialog = new JDialog(this, "3D Clipping", false);
+            JPanel content = new JPanel();
+            content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+            content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            content.setBackground(new Color(240, 240, 240));
+
+            content.add(makeClipSlider("X-Min (%)", (int) (clipMinX * 100), v -> {
+                clipMinX = v / 100f;
+                applyClipping();
+            }));
+            content.add(makeClipSlider("X-Max (%)", (int) (clipMaxX * 100), v -> {
+                clipMaxX = v / 100f;
+                applyClipping();
+            }));
+            content.add(Box.createVerticalStrut(10));
+            content.add(makeClipSlider("Y-Min (%)", (int) (clipMinY * 100), v -> {
+                clipMinY = v / 100f;
+                applyClipping();
+            }));
+            content.add(makeClipSlider("Y-Max (%)", (int) (clipMaxY * 100), v -> {
+                clipMaxY = v / 100f;
+                applyClipping();
+            }));
+            content.add(Box.createVerticalStrut(10));
+            content.add(makeClipSlider("Z-Min (%)", (int) (clipMinZ * 100), v -> {
+                clipMinZ = v / 100f;
+                applyClipping();
+            }));
+            content.add(makeClipSlider("Z-Max (%)", (int) (clipMaxZ * 100), v -> {
+                clipMaxZ = v / 100f;
+                applyClipping();
+            }));
+
+            clippingDialog.add(content);
+            clippingDialog.pack();
+            clippingDialog.setLocationRelativeTo(this);
+        }
+        clippingDialog.setVisible(!clippingDialog.isVisible());
+    }
+
     private void applyClipping() {
         if (glViewer != null)
             glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
@@ -637,592 +998,458 @@ public class Viewer3DController extends JFrame {
             cpuRenderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
     }
 
-    private class RenderingPanel extends JPanel {
-        private Point lastMousePos;
-        private BufferedImage image;
+    private void setLoadingStatus(String status) {
+        this.loadingStatus = status;
+        if (loadingLabel != null) {
+            loadingLabel.setText(status != null
+                    ? "<html><center>" + status + "</center></html>"
+                    : "");
+        }
+        if (glViewer != null) {
+            glViewer.markOverlayDirty();
+            glViewer.repaint();
+        }
+    }
 
-        public RenderingPanel() {
-            setBackground(Color.BLACK);
+    private void drawOverlay(Graphics2D g2d) {
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            MouseAdapter mouseHandler = new MouseAdapter() {
-                @Override
-                public void mousePressed(MouseEvent e) {
-                    lastMousePos = e.getPoint();
+        if (loadingStatus != null && !loadingStatus.isEmpty()) {
+            int w = glViewer != null ? glViewer.getWidth() : 0;
+            int h = glViewer != null ? glViewer.getHeight() : 0;
+            g2d.setColor(Color.BLACK);
+            g2d.fillRect(0, 0, w, h);
 
-                    if (currentTool == Tool3D.MEASURE) {
-                        com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
-                        if (pt != null) {
-                            if (activeRoi == null || activeRoi.getPoints3D().size() >= 2) {
-                                activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1,
-                                        new Point2D.Float(0, 0));
-                                activeRoi.setName("3D Length " + (roiList.size() + 1));
-                                roiList.add(activeRoi);
-                            }
-                            activeRoi.addPoint3D(pt);
-                            repaint();
-                        }
-                        return;
-                    } else if (currentTool == Tool3D.ROI_POINT) {
-                        com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
-                        if (pt != null) {
-                            com.oculus.jj.model.ROI pRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.t2DPoint, 1, 1,
-                                    new Point2D.Float(0, 0));
-                            pRoi.setName("3D Point " + (roiList.size() + 1));
-                            pRoi.addPoint3D(pt);
-                            roiList.add(pRoi);
-                            repaint();
-                        }
-                        return;
-                    }
-
-                    isDragging = true;
-                }
-
-                @Override
-                public void mouseReleased(MouseEvent e) {
-                    isDragging = false;
-                    repaint(); // 高画質で再描画
-                }
-
-                @Override
-                public void mouseDragged(MouseEvent e) {
-                    if (lastMousePos != null) {
-                        int dx = e.getX() - lastMousePos.x;
-                        int dy = e.getY() - lastMousePos.y;
-
-                        boolean isRight = SwingUtilities.isRightMouseButton(e);
-                        boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
-
-                        if (currentTool == Tool3D.VR_ADJUST) {
-                            // VR Adjustment: Up/Down for Level, Left/Right for Width
-                            updateWindow(dy * 2.0f, dx * 2.0f);
-                        } else if (isRight || isShift || currentTool == Tool3D.ZOOM) {
-                            // Zoom
-                            zoom *= (1.0 - dy / 200.0);
-                            if (zoom < 0.1)
-                                zoom = 0.1;
-                        } else if (SwingUtilities.isMiddleMouseButton(e) || currentTool == Tool3D.PAN) {
-                            // CPU fallback ではPANは将来実装予定。現状はWL/WW変更を避ける。
-                        } else if (currentTool == Tool3D.ROTATE || !isRight) {
-                            // Rotate
-                            rotateY += dx * 0.01;
-                            rotateX += dy * 0.01;
-                        }
-
-                        lastMousePos = e.getPoint();
-                        repaint();
-                    }
-                }
-            };
-            addMouseListener(mouseHandler);
-            addMouseMotionListener(mouseHandler);
-
-            // マウスホイールでのズーム
-            addMouseWheelListener(e -> {
-                zoom *= (1.0 - e.getWheelRotation() * 0.1);
-                if (zoom < 0.1)
-                    zoom = 0.1;
-                repaint();
-            });
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("SansSerif", Font.BOLD, 20));
+            FontMetrics fm = g2d.getFontMetrics();
+            String cleanStatus = loadingStatus.replaceAll("<[^>]*>", ""); // strip HTML tags
+            int lw = fm.stringWidth(cleanStatus);
+            g2d.drawString(cleanStatus, w / 2 - lw / 2, h / 2 + fm.getAscent() / 2);
+            return;
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            if (volume == null)
-                return;
+        if (showCropBox)
+            drawCropBox(g2d);
+        drawMeasurements(g2d);
+        drawOrientationOverlay(g2d);
+    }
 
-            Graphics2D g2d = (Graphics2D) g;
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            render3D(g2d);
-            drawMeasurements(g2d);
-            drawOrientationOverlay(g2d);
+    /** HOROS準拠: 方位ラベル(S/I/A/P/L/R)・Rボックス・WL情報を描画 */
+    private void drawOrientationOverlay(Graphics2D g) {
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+
+        double rx = rotateX, ry = rotateY;
+        String[] anatomicalLabels = computeOrientationLabels(rx, ry);
+        String labelTop = anatomicalLabels[0];
+        String labelBottom = anatomicalLabels[1];
+        String labelLeft = anatomicalLabels[2];
+        String labelRight = anatomicalLabels[3];
+
+        Font infoFont = new Font("Monospaced", Font.PLAIN, 12);
+        g.setFont(infoFont);
+        g.setColor(Color.WHITE);
+        FontMetrics ifm = g.getFontMetrics(infoFont);
+        String[] coordLines = {
+                String.format("S-I  %.1f", -rotateX),
+                String.format("L-R  %.1f", rotateY),
+                String.format("ROI T %.1f", zoom)
+        };
+        int margin = 12;
+        int cy2 = h - margin - ifm.getHeight() * (coordLines.length - 1);
+        for (String line : coordLines) {
+            int cw = ifm.stringWidth(line);
+            g.drawString(line, w - cw - margin, cy2);
+            cy2 += ifm.getHeight();
         }
 
-        /** HOROS準拠: 方位ラベル(S/I/A/P/L/R)・Rボックス・WL情報を描画 */
-        private void drawOrientationOverlay(Graphics2D g) {
-            int w = getWidth(), h = getHeight();
+        Font oriFont = new Font("SansSerif", Font.BOLD, 16);
+        g.setFont(oriFont);
+        FontMetrics fm = g.getFontMetrics(oriFont);
 
-            // ---- 方位ラベル計算 ----
-            // デフォルト視点(rotateX=-π/2): 上=S(Superior), 下=I, 左=A(Anterior後面なのでP), 右=A
-            // 回転に応じてどのラベルが各辺に来るかを計算
-            double rx = rotateX, ry = rotateY;
-            // 体軸方向ベクトル: 上方向(screen Y-)がどの解剖学的方向かを計算
-            // 簡略化: HOROSと同様に主要8方向から最近傍を選択
-            String[] anatomicalLabels = computeOrientationLabels(rx, ry);
-            String labelTop = anatomicalLabels[0]; // 画面上
-            String labelBottom = anatomicalLabels[1]; // 画面下
-            String labelLeft = anatomicalLabels[2]; // 画面左
-            String labelRight = anatomicalLabels[3]; // 画面右
+        g.setColor(Color.BLACK);
+        int lw = fm.stringWidth(labelTop);
+        g.drawString(labelTop, w / 2 - lw / 2 + 1, margin + fm.getAscent() + 1);
+        lw = fm.stringWidth(labelBottom);
+        g.drawString(labelBottom, w / 2 - lw / 2 + 1, h - margin + 1);
+        g.drawString(labelLeft, margin + 1, h / 2 + fm.getAscent() / 2 + 1);
+        lw = fm.stringWidth(labelRight);
+        g.drawString(labelRight, w - margin - lw + 1, h / 2 + fm.getAscent() / 2 + 1);
 
-            // ---- 描画スタイル ----
-            Font oriFont = new Font("SansSerif", Font.BOLD, 16);
-            g.setFont(oriFont);
-            FontMetrics fm = g.getFontMetrics(oriFont);
+        g.setColor(getOrientationColor(labelTop));
+        lw = fm.stringWidth(labelTop);
+        g.drawString(labelTop, w / 2 - lw / 2, margin + fm.getAscent());
 
-            int margin = 12;
-            // 影付きで描画（見やすくするため）
-            g.setColor(Color.BLACK);
-            // Top (S)
-            int lw = fm.stringWidth(labelTop);
-            g.drawString(labelTop, w / 2 - lw / 2 + 1, margin + fm.getAscent() + 1);
-            // Bottom (I)
-            lw = fm.stringWidth(labelBottom);
-            g.drawString(labelBottom, w / 2 - lw / 2 + 1, h - margin + 1);
-            // Left
-            g.drawString(labelLeft, margin + 1, h / 2 + fm.getAscent() / 2 + 1);
-            // Right
-            lw = fm.stringWidth(labelRight);
-            g.drawString(labelRight, w - margin - lw + 1, h / 2 + fm.getAscent() / 2 + 1);
+        g.setColor(getOrientationColor(labelBottom));
+        lw = fm.stringWidth(labelBottom);
+        g.drawString(labelBottom, w / 2 - lw / 2, h - margin);
 
-            g.setColor(Color.WHITE);
-            lw = fm.stringWidth(labelTop);
-            g.drawString(labelTop, w / 2 - lw / 2, margin + fm.getAscent());
-            lw = fm.stringWidth(labelBottom);
-            g.drawString(labelBottom, w / 2 - lw / 2, h - margin);
-            g.drawString(labelLeft, margin, h / 2 + fm.getAscent() / 2);
-            lw = fm.stringWidth(labelRight);
-            g.drawString(labelRight, w - margin - lw, h / 2 + fm.getAscent() / 2);
+        g.setColor(getOrientationColor(labelLeft));
+        g.drawString(labelLeft, margin, h / 2 + fm.getAscent() / 2);
 
-            // ---- Rボックス（右上） HOROS準拠 ----
-            int bx = w - 50, by = 10, bw = 38, bh = 38;
-            g.setColor(new Color(0, 100, 0, 200)); // 濃い緑背景
-            g.fillRoundRect(bx, by, bw, bh, 6, 6);
-            g.setColor(new Color(0, 180, 0)); // 緑枠
-            g.setStroke(new BasicStroke(2));
-            g.drawRoundRect(bx, by, bw, bh, 6, 6);
-            g.setColor(Color.WHITE);
-            Font rFont = new Font("SansSerif", Font.BOLD, 22);
-            g.setFont(rFont);
-            FontMetrics rfm = g.getFontMetrics(rFont);
-            String rLabel = "R";
-            g.drawString(rLabel, bx + (bw - rfm.stringWidth(rLabel)) / 2,
-                    by + rfm.getAscent() + (bh - rfm.getHeight()) / 2);
+        g.setColor(getOrientationColor(labelRight));
+        lw = fm.stringWidth(labelRight);
+        g.drawString(labelRight, w - margin - lw, h / 2 + fm.getAscent() / 2);
 
-            // ---- WL/WW 左上 ----
-            Font infoFont = new Font("Monospaced", Font.PLAIN, 12);
-            g.setFont(infoFont);
-            g.setColor(Color.WHITE);
-            g.drawString(String.format("WL: %.0f  WW: %.0f", windowLevel, windowWidth), 10, 20);
-            g.drawString(String.format("Mode: %s | %s", mode, useGPU ? "GPU" : "CPU"), 10, 36);
-            g.drawString(String.format("Zoom: %.2fx", zoom), 10, 52);
 
-            // ---- 座標表示（右下） HOROS準拠 ----
-            g.setFont(infoFont);
-            g.setColor(Color.WHITE);
-            FontMetrics ifm = g.getFontMetrics(infoFont);
-            String[] coordLines = {
-                    String.format("S-I  %.1f", -rotateX),
-                    String.format("L-R  %.1f", rotateY),
-                    String.format("ROI T %.1f", zoom)
-            };
-            int cy2 = h - margin - ifm.getHeight() * (coordLines.length - 1);
-            for (String line : coordLines) {
-                int cw = ifm.stringWidth(line);
-                g.drawString(line, w - cw - margin, cy2);
-                cy2 += ifm.getHeight();
-            }
+
+        g.drawString(String.format("WL: %.0f  WW: %.0f", windowLevel, windowWidth), 10, 20);
+        g.drawString(String.format("Mode: %s | %s", mode, isGpuEngine() ? "GPU" : "CPU"), 10, 36);
+        g.drawString(String.format("Zoom: %.2fx", zoom), 10, 52);
+    }
+
+    private boolean isGpuEngine() {
+        return glViewer != null && glViewer.getEngine() == GLViewer3D.ENGINE_GPU;
+    }
+
+    private GLData buildGLData(int index) {
+        GLData data = new GLData();
+        data.samples = 0; // ドライバー互換性を最大化
+        data.doubleBuffer = true;
+
+        if (index == 0) {
+            data.majorVersion = 3;
+            data.minorVersion = 3;
+            data.profile = GLData.Profile.CORE;
+        } else if (index == 1) {
+            data.majorVersion = 3;
+            data.minorVersion = 2;
+            data.profile = GLData.Profile.COMPATIBILITY;
+        } else if (index == 2) {
+            data.majorVersion = 3;
+            data.minorVersion = 0;
+        } else {
+            data.majorVersion = 2;
+            data.minorVersion = 1;
         }
+        return data;
+    }
 
-        /** 回転角から画面の各辺に表示する解剖方位ラベルを計算 */
-        private String[] computeOrientationLabels(double rx, double ry) {
-            // 画面上方向ベクトル(0,-1,0)を逆回転してボリューム座標に変換
-            // 簡略: rx が主に頭足方向、ryが左右を制御
-            // 上画面: -Y軸方向 → rx回転で体軸に沿う
-            double cosX = Math.cos(rx), sinX = Math.sin(rx);
-            double cosY = Math.cos(ry), sinY = Math.sin(ry);
-
-            // 上方向ベクトル(スクリーン) = (0,-1,0) をボリューム空間に逆変換
-            // RotX^-1: (x, y*cosX + z*sinX, -y*sinX + z*cosX)
-            // RotY^-1: (x*cosY - z*sinY, y, x*sinY + z*cosY)
-            double ux = 0, uy = -1, uz = 0;
-            // RotX逆
-            double ux1 = ux, uy1 = uy * cosX + uz * sinX, uz1 = -uy * sinX + uz * cosX;
-            // RotY逆
-            double ux2 = ux1 * cosY - uz1 * sinY, uy2 = uy1, uz2 = ux1 * sinY + uz1 * cosY;
-            // uz2: Superior方向(+z=Superior), uy2: Anterior方向(+y=Posterior), ux2: Right方向
-
-            String top = dominantAxis(ux2, uy2, uz2);
-            String bottom = opposite(top);
-            // 右方向ベクトル(1,0,0)を同様に変換
-            double rx2 = cosY, ry2 = 0, rz2 = sinY;
-            double rx3 = rx2, ry3 = ry2 * cosX + rz2 * sinX, rz3 = -ry2 * sinX + rz2 * cosX;
-            String right2 = dominantAxis(rx3, ry3, rz3);
-            String left2 = opposite(right2);
-            return new String[] { top, bottom, left2, right2 };
-        }
-
-        private String dominantAxis(double x, double y, double z) {
-            double ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
-            if (az >= ax && az >= ay)
-                return z >= 0 ? "S" : "I"; // Superior/Inferior
-            if (ax >= ay)
-                return x >= 0 ? "R" : "L"; // Right/Left
-            return y >= 0 ? "P" : "A"; // Posterior/Anterior
-        }
-
-        private String opposite(String s) {
-            switch (s) {
-                case "S":
-                    return "I";
-                case "I":
-                    return "S";
-                case "R":
-                    return "L";
-                case "L":
-                    return "R";
-                case "A":
-                    return "P";
-                default:
-                    return "A";
-            }
-        }
-
-        private com.oculus.jj.model.ROI.Point3D getVoxelUnderMouse(int sx, int sy) {
-            int w = getWidth();
-            int h = getHeight();
-            if (w <= 0 || h <= 0)
-                return null;
-
-            double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
-            double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
-
-            double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
-            double baseScale = Math.min(w / (double) dimX, h / (double) dimY) * 0.8;
-            double currentScale = baseScale * zoom;
-
-            double vx = (sx - w / 2.0) / currentScale;
-            double vy = (sy - h / 2.0) / currentScale;
-
-            double zLimit = Math.max(dimX, Math.max(dimY, dimZ)) * 1.2;
-
-            // レイの方向に沿って、不透明度が一定値を超えるかISO閾値を超える場所を探索
-            double rayStep = 1.0;
-            for (double vz = -zLimit; vz < zLimit; vz += rayStep) {
-                double tx = vx * cosY + vz * sinY;
-                double tz0 = -vx * sinY + vz * cosY;
-                double ty = vy * cosX - tz0 * sinX;
-                double tz = vy * sinX + tz0 * cosX;
-
-                int ix = (int) (tx + cx), iy = (int) (ty + cy), iz = (int) (tz + cz);
-
-                if (ix >= 0 && ix < dimX && iy >= 0 && iy < dimY && iz >= 0 && iz < dimZ) {
-                    int val = volume[iz][iy][ix];
-
-                    // モードに応じてピック条件を変える
-                    if ("ISO".equals(mode)) {
-                        if (val >= isoThreshold)
-                            return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
-                    } else if ("VR".equals(mode)) {
-                        float wl = windowLevel, ww = windowWidth;
-                        float low = wl - ww / 2.0f;
-                        float factor = 255.0f / (ww < 1 ? 1 : ww);
-                        if (getOpacity(val, low, factor) > 0.3)
-                            return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
-                    } else {
-                        // MIP等の場合は最大値の場所を特定するのが難しいが、簡易的に一定以上の値でヒットとする
-                        if (val > (windowLevel - windowWidth / 4.0))
-                            return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
+    private GLViewer3D createGLViewer(GLData glData) {
+        GLViewer3D viewer = new GLViewer3D(glData, volume, dimX, dimY, dimZ);
+        viewer.setBackground(Color.BLACK); // AWTの灰色消去バグを黒色で無効化
+        viewer.addMouseListener(glMouseHandler);
+        viewer.addMouseMotionListener(glMouseHandler);
+        viewer.addMouseWheelListener(glMouseWheelHandler);
+        viewer.setOverlayPainter(this::drawOverlay);
+        viewer.setGpuContextFailureHandler(() -> SwingUtilities.invokeLater(this::handleGpuContextFailure));
+        // CardLayout でカードが表示されたとき (componentShown) に即座に render() を呼ぶ。
+        viewer.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                System.out.println("DEBUG: glViewer shown, size=" + viewer.getWidth() + "x" + viewer.getHeight());
+                if (canvas == viewer) {
+                    try {
+                        viewer.render();
+                    } catch (Throwable t) {
+                        /* suppress first-frame errors */
                     }
                 }
             }
+        });
+        return viewer;
+    }
+
+    private void recreateGLViewerForRetry() {
+        GLViewer3D oldViewer = glViewer;
+        GLViewer3D newViewer = createGLViewer(buildGLData(glConfigIndex));
+
+        if (cpuRenderer != null) {
+            newViewer.setCpuRenderer(cpuRenderer);
+        }
+        if (volume != null && dimX > 0 && dimY > 0 && dimZ > 0) {
+            newViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
+        }
+        newViewer.setTransferFunction(currentTF);
+        newViewer.setWindowLevel(windowLevel, windowWidth);
+        newViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+        newViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
+        newViewer.setRotation((float) rotateX, (float) rotateY);
+        newViewer.setZoom((float) zoom);
+
+        if (mainContainer != null && oldViewer != null) {
+            mainContainer.remove(oldViewer);
+            mainContainer.add(newViewer, "VIEW");
+            mainContainer.revalidate();
+            mainContainer.repaint();
+        }
+
+        glViewer = newViewer;
+        setMode(this.mode);
+        canvas = null;
+    }
+
+    private void handleGpuContextFailure() {
+        if (gpuRecoveryInProgress) {
+            return;
+        }
+        gpuRecoveryInProgress = true;
+        try {
+            gpuActivationInProgress = false;
+            stopRenderLoop();
+            canvas = null;
+
+            if (glConfigIndex < 3) {
+                glConfigIndex++;
+                gpuInitialized = false;
+                gpuContextUnsupported = false;
+                System.err.println("DEBUG: Retrying GPU initialization with GL config index=" + glConfigIndex);
+                if (loadingLabel != null) {
+                    setLoadingStatus("Retrying GPU context with compatible GL profile...");
+                }
+                showView("LOADING");
+                recreateGLViewerForRetry();
+                activateGPUMode();
+            } else {
+                gpuContextUnsupported = true;
+                System.err.println("DEBUG: All GL configs failed. GPU mode unavailable.");
+                if (glViewer != null) {
+                    glViewer.setEngine(GLViewer3D.ENGINE_CPU);
+                    glViewer.requestCpuRender();
+                }
+                showView("VIEW");
+            }
+        } finally {
+            gpuRecoveryInProgress = false;
+        }
+    }
+
+    private void drawCropBox(Graphics2D g) {
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+        double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+        double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+        double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+        double physX = dimX * spacingX;
+        double physY = dimY * spacingY;
+        double physZ = dimZ * spacingZ;
+        double maxPhys = Math.max(physX, Math.max(physY, physZ));
+        double baseScale = Math.min(w, h) / maxPhys * 0.95;
+        double currentScale = baseScale * zoom;
+
+        double[][] corners = {
+                { clipMinX * dimX, clipMinY * dimY, clipMinZ * dimZ },
+                { clipMaxX * dimX, clipMinY * dimY, clipMinZ * dimZ },
+                { clipMaxX * dimX, clipMaxY * dimY, clipMinZ * dimZ },
+                { clipMinX * dimX, clipMaxY * dimY, clipMinZ * dimZ },
+                { clipMinX * dimX, clipMinY * dimY, clipMaxZ * dimZ },
+                { clipMaxX * dimX, clipMinY * dimY, clipMaxZ * dimZ },
+                { clipMaxX * dimX, clipMaxY * dimY, clipMaxZ * dimZ },
+                { clipMinX * dimX, clipMaxY * dimY, clipMaxZ * dimZ }
+        };
+
+        Point[] pts = new Point[8];
+        for (int i = 0; i < 8; i++) {
+            double tx = corners[i][0] - cx;
+            double ty = corners[i][1] - cy;
+            double tz = corners[i][2] - cz;
+            double x1 = tx * cosY + tz * sinY;
+            double z1 = -tx * sinY + tz * cosY;
+            double x2 = x1;
+            double y2 = ty * cosX - z1 * sinX;
+            pts[i] = new Point((int) (w / 2.0 + x2 * currentScale), (int) (h / 2.0 + y2 * currentScale));
+        }
+
+        g.setColor(Color.GREEN);
+        g.setStroke(new BasicStroke(1.5f));
+        g.drawLine(pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+        g.drawLine(pts[1].x, pts[1].y, pts[2].x, pts[2].y);
+        g.drawLine(pts[2].x, pts[2].y, pts[3].x, pts[3].y);
+        g.drawLine(pts[3].x, pts[3].y, pts[0].x, pts[0].y);
+        g.drawLine(pts[4].x, pts[4].y, pts[5].x, pts[5].y);
+        g.drawLine(pts[5].x, pts[5].y, pts[6].x, pts[6].y);
+        g.drawLine(pts[6].x, pts[6].y, pts[7].x, pts[7].y);
+        g.drawLine(pts[7].x, pts[7].y, pts[4].x, pts[4].y);
+        g.drawLine(pts[0].x, pts[0].y, pts[4].x, pts[4].y);
+        g.drawLine(pts[1].x, pts[1].y, pts[5].x, pts[5].y);
+        g.drawLine(pts[2].x, pts[2].y, pts[6].x, pts[6].y);
+        g.drawLine(pts[3].x, pts[3].y, pts[7].x, pts[7].y);
+        for (Point p : pts) {
+            g.fillRect(p.x - 3, p.y - 3, 6, 6);
+        }
+    }
+
+    private String[] computeOrientationLabels(double rx, double ry) {
+        // Mathematically correct transformation of camera screen-space UP and RIGHT vectors back to volume space
+        // for the model rotation matrix: R = rotateY(ry) * rotateX(rx)
+
+        // Camera UP vector in volume space: U_vol = (0, cos(rx), -sin(rx))
+        double ux_vol = 0;
+        double uy_vol = Math.cos(rx);
+        double uz_vol = -Math.sin(rx);
+        String top = dominantAxis(ux_vol, uy_vol, uz_vol);
+        String bottom = opposite(top);
+
+        // Camera RIGHT vector in volume space: R_vol = (cos(ry), -sin(ry) * sin(rx), sin(ry) * cos(rx))
+        double rx_vol = Math.cos(ry);
+        double ry_vol = -Math.sin(ry) * Math.sin(rx);
+        double rz_vol = Math.sin(ry) * Math.cos(rx);
+        String right2 = dominantAxis(rx_vol, ry_vol, rz_vol);
+        String left2 = opposite(right2);
+
+        return new String[] { top, bottom, left2, right2 };
+    }
+
+    private Color getOrientationColor(String label) {
+        if (label == null)
+            return Color.WHITE;
+        if (label.contains("S") || label.contains("I"))
+            return Color.YELLOW;
+        if (label.contains("A") || label.contains("P"))
+            return Color.GREEN;
+        if (label.contains("L") || label.contains("R"))
+            return new Color(100, 150, 255);
+        return Color.WHITE;
+    }
+
+    private String dominantAxis(double x, double y, double z) {
+        double ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+        if (az >= ax && az >= ay)
+            return z >= 0 ? "S" : "I";
+        if (ax >= ay)
+            return x >= 0 ? "R" : "L";
+        return y >= 0 ? "P" : "A";
+    }
+
+    private String opposite(String s) {
+        switch (s) {
+            case "S":
+                return "I";
+            case "I":
+                return "S";
+            case "R":
+                return "L";
+            case "L":
+                return "R";
+            case "A":
+                return "P";
+            default:
+                return "A";
+        }
+    }
+
+    private com.oculus.jj.model.ROI.Point3D getVoxelUnderMouse(int sx, int sy) {
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+        if (w <= 0 || h <= 0)
             return null;
-        }
 
-        private void drawMeasurements(Graphics2D g) {
-            if (roiList.isEmpty())
-                return;
+        double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+        double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+        double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+        double physX = dimX * spacingX;
+        double physY = dimY * spacingY;
+        double physZ = dimZ * spacingZ;
+        double maxPhys = Math.max(physX, Math.max(physY, physZ));
+        double baseScale = Math.min(w, h) / maxPhys * 0.95;
+        double currentScale = baseScale * zoom;
+        double vx = (sx - w / 2.0) / currentScale;
+        double vy = (sy - h / 2.0) / currentScale;
+        double zLimit = Math.max(dimX, Math.max(dimY, dimZ)) * 1.2;
 
-            int w = getWidth();
-            int h = getHeight();
-            double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
-            double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
-            double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
-            double baseScale = Math.min(w / (double) dimX, h / (double) dimY) * 0.8;
-            double currentScale = baseScale * zoom;
-
-            g.setColor(com.oculus.jj.config.AppPreferences.getROIColor());
-            g.setStroke(new BasicStroke(2));
-
-            for (com.oculus.jj.model.ROI roi : roiList) {
-                List<com.oculus.jj.model.ROI.Point3D> points = roi.getPoints3D();
-                if (points.isEmpty())
-                    continue;
-
-                Point prevP = null;
-                com.oculus.jj.model.ROI.Point3D prevV = null;
-
-                for (com.oculus.jj.model.ROI.Point3D vpt : points) {
-                    // ボクセル座標 -> 3D回転座標 -> 2D表示座標
-                    double tx = vpt.x - cx;
-                    double ty = vpt.y - cy;
-                    double tz = vpt.z - cz;
-
-                    double ry_view = ty * cosX + tz * sinX;
-                    double tz0 = tz * cosX - ty * sinX;
-                    double rx_view = tx * cosY - tz0 * sinY;
-
-                    int sx = (int) Math.round(rx_view * currentScale + w / 2.0);
-                    int sy = (int) Math.round(ry_view * currentScale + h / 2.0);
-
-                    if (roi.getType() == DCMView.ToolMode.t2DPoint) {
-                        g.drawOval(sx - 5, sy - 5, 10, 10);
-                        g.fillOval(sx - 2, sy - 2, 4, 4);
-                    } else {
-                        g.fillOval(sx - 3, sy - 3, 6, 6);
-                    }
-
-                    if (prevP != null && roi.getType() == DCMView.ToolMode.tMesure) {
-                        g.drawLine(prevP.x, prevP.y, sx, sy);
-
-                        // 距離計算 (mm)
-                        double dist = com.oculus.jj.model.Measurement3D.calculateDistance(
-                                prevV.x, prevV.y, prevV.z,
-                                vpt.x, vpt.y, vpt.z,
-                                pixList.get(0).getPixelSpacingX(),
-                                pixList.get(0).getPixelSpacingY(),
-                                spacingZ);
-
-                        String unit = com.oculus.jj.config.AppPreferences.getMeasureUnit();
-                        if ("cm".equals(unit))
-                            dist /= 10.0;
-
-                        String label = String.format("%.2f %s", dist, unit);
-                        g.drawString(label, (prevP.x + sx) / 2 + 5, (prevP.y + sy) / 2 - 5);
-                    }
-
-                    prevP = new Point(sx, sy);
-                    prevV = vpt;
+        double rayStep = 1.0;
+        for (double vz = -zLimit; vz < zLimit; vz += rayStep) {
+            double tx = vx * cosY + vz * sinY;
+            double tz0 = -vx * sinY + vz * cosY;
+            double ty = vy * cosX - tz0 * sinX;
+            double tz = vy * sinX + tz0 * cosX;
+            int ix = (int) (tx + cx), iy = (int) (ty + cy), iz = (int) (tz + cz);
+            if (ix >= 0 && ix < dimX && iy >= 0 && iy < dimY && iz >= 0 && iz < dimZ) {
+                int val = volume[iz * dimY * dimX + iy * dimX + ix];
+                if ("ISO".equals(mode)) {
+                    if (val >= isoThreshold)
+                        return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
+                } else if ("VR".equals(mode)) {
+                    float wl = windowLevel, ww = windowWidth;
+                    float low = wl - ww / 2.0f;
+                    float factor = 255.0f / (ww < 1 ? 1 : ww);
+                    if (getOpacity(val, low, factor) > 0.3)
+                        return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
+                } else {
+                    if (val > (windowLevel - windowWidth / 4.0))
+                        return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
                 }
             }
         }
+        return null;
+    }
 
-        private float getOpacity(int val, float low, float factor) {
-            float alpha = (val - low) * factor / 255.0f;
-            if (alpha < 0)
-                alpha = 0;
-            if (alpha > 1.0f)
-                alpha = 1.0f;
-            // 非線形な不透明度 (Horosのトランスファーファンクション風)
-            return (float) Math.pow(alpha, 2.0);
-        }
+    private void drawMeasurements(Graphics2D g) {
+        if (roiList.isEmpty())
+            return;
 
-        private double[] getGradient(int x, int y, int z) {
-            double dx = (getVal(x + 1, y, z) - getVal(x - 1, y, z)) / 2.0;
-            double dy = (getVal(x, y + 1, z) - getVal(x, y - 1, z)) / 2.0;
-            double dz = (getVal(x, y, z + 1) - getVal(x, y, z - 1)) / 2.0;
-            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (len < 1e-4)
-                return new double[] { 0, 0, 0 };
-            return new double[] { dx / len, dy / len, dz / len };
-        }
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+        double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+        double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+        double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+        double physX = dimX * spacingX;
+        double physY = dimY * spacingY;
+        double physZ = dimZ * spacingZ;
+        double maxPhys = Math.max(physX, Math.max(physY, physZ));
+        double baseScale = Math.min(w, h) / maxPhys * 0.95;
+        double currentScale = baseScale * zoom;
 
-        private int getVal(int x, int y, int z) {
-            if (x < 0 || x >= dimX || y < 0 || y >= dimY || z < 0 || z >= dimZ)
-                return -3024;
-            return volume[z][y][x];
-        }
+        g.setColor(com.oculus.jj.config.AppPreferences.getROIColor());
+        g.setStroke(new BasicStroke(2));
 
-        /**
-         * 三線形補間 (Trilinear Interpolation) でボクセル値を取得
-         * 画質を滑らかにするためのコアロジック
-         */
-        private double getValTrilinear(double x, double y, double z) {
-            int x0 = (int) Math.floor(x);
-            int y0 = (int) Math.floor(y);
-            int z0 = (int) Math.floor(z);
-            int x1 = x0 + 1;
-            int y1 = y0 + 1;
-            int z1 = z0 + 1;
+        for (com.oculus.jj.model.ROI roi : roiList) {
+            List<com.oculus.jj.model.ROI.Point3D> points = roi.getPoints3D();
+            if (points.isEmpty())
+                continue;
 
-            if (x0 < 0 || x1 >= dimX || y0 < 0 || y1 >= dimY || z0 < 0 || z1 >= dimZ) {
-                return getVal((int) x, (int) y, (int) z);
-            }
+            Point prevP = null;
+            com.oculus.jj.model.ROI.Point3D prevV = null;
 
-            double dx = x - x0;
-            double dy = y - y0;
-            double dz = z - z0;
+            for (com.oculus.jj.model.ROI.Point3D vpt : points) {
+                double tx = vpt.x - cx;
+                double ty = vpt.y - cy;
+                double tz = vpt.z - cz;
+                double ry_view = ty * cosX + tz * sinX;
+                double tz0 = tz * cosX - ty * sinX;
+                double rx_view = tx * cosY - tz0 * sinY;
 
-            double v000 = volume[z0][y0][x0];
-            double v100 = volume[z0][y0][x1];
-            double v010 = volume[z0][y1][x0];
-            double v110 = volume[z0][y1][x1];
-            double v001 = volume[z1][y0][x0];
-            double v101 = volume[z1][y0][x1];
-            double v011 = volume[z1][y1][x0];
-            double v111 = volume[z1][y1][x1];
+                int sx = (int) Math.round(rx_view * currentScale + w / 2.0);
+                int sy = (int) Math.round(ry_view * currentScale + h / 2.0);
 
-            double v00 = v000 * (1 - dx) + v100 * dx;
-            double v10 = v010 * (1 - dx) + v110 * dx;
-            double v01 = v001 * (1 - dx) + v101 * dx;
-            double v11 = v011 * (1 - dx) + v111 * dx;
-
-            double v0 = v00 * (1 - dy) + v10 * dy;
-            double v1 = v01 * (1 - dy) + v11 * dy;
-
-            return v0 * (1 - dz) + v1 * dz;
-        }
-
-        private void render3D(Graphics2D g) {
-            int w = getWidth();
-            int h = getHeight();
-            if (w <= 0 || h <= 0)
-                return;
-
-            if (image == null || image.getWidth() != w || image.getHeight() != h) {
-                image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-            }
-
-            int[] pixels = ((java.awt.image.DataBufferInt) image.getRaster().getDataBuffer()).getData();
-            java.util.Arrays.fill(pixels, 0);
-
-            // 回転行列の事前計算
-            double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
-            double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
-
-            double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
-            double baseScale = Math.min(w / (double) dimX, h / (double) dimY) * 0.8;
-            double currentScale = baseScale * zoom;
-
-            float wl = windowLevel, ww = windowWidth;
-            float low = wl - ww / 2.0f;
-            float factor = 255.0f / (ww < 1 ? 1 : ww);
-
-            boolean isVR = "VR".equals(mode);
-            boolean isMIP = "MIP".equals(mode);
-            boolean isMinIP = "MinIP".equals(mode);
-            boolean isAvg = "Average".equals(mode);
-            boolean isISO = "ISO".equals(mode); // Surface Rendering
-
-            // 画質を大幅に向上させる（ユーザー様のハイスペックCPU向けに最適化）
-            // isDragging（回転中）のスキップ幅を3から2（または1）に減らし、粗さを解消
-            int rawStep = isDragging ? 1 : 1;
-            final int currentStep = Math.max(1, rawStep);
-            // レイが進む間隔（rayStep）も細かくし、3Dのディテールをくっきりさせる
-            final double rayStep = isDragging ? 1.0 : 0.4;
-
-            IntStream.range(0, (h + currentStep - 1) / currentStep).parallel().forEach(yi -> {
-                int sy = yi * currentStep;
-                for (int sx = 0; sx < w; sx += currentStep) {
-                    double vx = (sx - w / 2.0) / currentScale;
-                    double vy = (sy - h / 2.0) / currentScale;
-
-                    float accR = 0, accG = 0, accB = 0, accA = 0;
-                    int maxVal = -3024;
-                    int minVal = 3024;
-                    long sumVal = 0;
-                    int countVal = 0;
-
-                    double zLimit = Math.max(dimX, Math.max(dimY, dimZ)) * 1.2;
-                    for (double vz = -zLimit; vz < zLimit; vz += rayStep) {
-                        // Ray -> Voxel coordinates
-                        double tx = vx * cosY + vz * sinY;
-                        double tz0 = -vx * sinY + vz * cosY;
-                        double ty = vy * cosX - tz0 * sinX;
-                        double tz = vy * sinX + tz0 * cosX;
-
-                        if (tx + cx >= 0 && tx + cx < dimX && ty + cy >= 0 && ty + cy < dimY && tz + cz >= 0
-                                && tz + cz < dimZ) {
-                            // 補間計算用の実数座標
-                            double curX = tx + cx;
-                            double curY = ty + cy;
-                            double curZ = tz + cz;
-
-                            // 陰影計算（getGradient）用の整数座標
-                            int ix = (int) curX;
-                            int iy = (int) curY;
-                            int iz = (int) curZ;
-
-                            // 画質重視：ドラッグ中も常に補間計算を行う
-                            int val = (int) getValTrilinear(curX, curY, curZ);
-                            if (isISO) {
-                                if (val >= isoThreshold) {
-                                    float r = (isoThreshold >= 200) ? 1.0f : 0.9f;
-                                    float gVal = (isoThreshold >= 200) ? 0.9f : 0.7f;
-                                    float b = (isoThreshold >= 200) ? 0.8f : 0.6f;
-
-                                    float shade = 1.0f;
-                                    double[] grad = getGradient(ix, iy, iz);
-                                    double dot = grad[0] * sinY * cosX + grad[1] * sinX + grad[2] * cosY * cosX;
-                                    shade = (float) Math.max(0.2, Math.abs(dot));
-
-                                    accR = r * shade;
-                                    accG = gVal * shade;
-                                    accB = b * shade;
-                                    accA = 1.0f;
-                                    break;
-                                }
-                            } else if (isVR) {
-                                float tfT = (float) Math.max(0, Math.min(1.0, (val - (windowLevel - windowWidth * 0.5f)) / windowWidth));
-                                float[] tfColor = currentTF.evaluateT(tfT, windowLevel, windowWidth);
-                                float r = tfColor[0];
-                                float g_val = tfColor[1];
-                                float b = tfColor[2];
-                                float alpha = tfColor[3];
-
-                                if (alpha > 0.01f) {
-                                    float weight = alpha * (1.0f - accA);
-
-                                    // Shading (Lambertian)
-                                    float shade = 1.0f;
-                                    if (shadingEnabled) {
-                                        double[] grad = getGradient(ix, iy, iz);
-                                        double dot = grad[0] * sinY * cosX + grad[1] * sinX + grad[2] * cosY * cosX;
-                                        shade = (float) Math.max(0.2, Math.abs(dot));
-                                    }
-
-                                    accR += weight * r * shade;
-                                    accG += weight * g_val * shade;
-                                    accB += weight * b * shade;
-                                    accA += weight;
-                                    if (accA >= 0.95f)
-                                        break;
-                                }
-                            } else if (isMIP) {
-                                if (val > maxVal)
-                                    maxVal = val;
-                            } else if (isMinIP) {
-                                if (val < minVal)
-                                    minVal = val;
-                            } else if (isAvg) {
-                                sumVal += val;
-                                countVal++;
-                            }
-                        }
-                    }
-
-                    int rgb = 0;
-                    if (isVR || isISO) {
-                        rgb = ((int) (Math.min(1f, accR) * 255) << 16) |
-                                ((int) (Math.min(1f, accG) * 255) << 8) |
-                                ((int) (Math.min(1f, accB) * 255));
-                    } else if (isMIP && maxVal > -3024) {
-                        int c = (int) ((maxVal - low) * factor);
-                        c = Math.max(0, Math.min(255, c));
-                        rgb = (c << 16) | (c << 8) | c;
-                    } else if (isMinIP && minVal < 3024) {
-                        int c = (int) ((minVal - low) * factor);
-                        c = Math.max(0, Math.min(255, c));
-                        rgb = (c << 16) | (c << 8) | c;
-                    } else if (isAvg && countVal > 0) {
-                        int avg = (int) (sumVal / countVal);
-                        int c = (int) ((avg - low) * factor);
-                        c = Math.max(0, Math.min(255, c));
-                        rgb = (c << 16) | (c << 8) | c;
-                    }
-
-                    if (rgb != 0) {
-                        for (int dy = 0; dy < currentStep && (sy + dy) < h; dy++) {
-                            int offset = (sy + dy) * w;
-                            for (int dx = 0; dx < currentStep && (sx + dx) < w; dx++) {
-                                pixels[offset + (sx + dx)] = rgb;
-                            }
-                        }
-                    }
+                if (roi.getType() == DCMView.ToolMode.t2DPoint) {
+                    g.drawOval(sx - 5, sy - 5, 10, 10);
+                    g.fillOval(sx - 2, sy - 2, 4, 4);
+                } else {
+                    g.fillOval(sx - 3, sy - 3, 6, 6);
                 }
-            });
-            g.drawImage(image, 0, 0, null);
+
+                if (prevP != null && roi.getType() == DCMView.ToolMode.tMesure) {
+                    g.drawLine(prevP.x, prevP.y, sx, sy);
+                    double dist = com.oculus.jj.model.Measurement3D.calculateDistance(
+                            prevV.x, prevV.y, prevV.z,
+                            vpt.x, vpt.y, vpt.z,
+                            pixList.get(0).getPixelSpacingX(),
+                            pixList.get(0).getPixelSpacingY(),
+                            spacingZ);
+
+                    String unit = com.oculus.jj.config.AppPreferences.getMeasureUnit();
+                    if ("cm".equals(unit))
+                        dist /= 10.0;
+
+                    String label = String.format("%.2f %s", dist, unit);
+                    g.drawString(label, (prevP.x + sx) / 2 + 5, (prevP.y + sy) / 2 - 5);
+                }
+
+                prevP = new Point(sx, sy);
+                prevV = vpt;
+            }
         }
+    }
+
+    private float getOpacity(int val, float low, float factor) {
+        float alpha = (val - low) * factor / 255.0f;
+        if (alpha < 0)
+            alpha = 0;
+        if (alpha > 1.0f)
+            alpha = 1.0f;
+        return (float) Math.pow(alpha, 2.0);
     }
 
     public static void openMIP(ViewerController viewer) {
@@ -1261,7 +1488,6 @@ public class Viewer3DController extends JFrame {
             SwingUtilities.invokeLater(() -> {
                 Viewer3DController v3d = new Viewer3DController(viewer, "ISO");
                 v3d.isoThreshold = (int) thresholdSpinner.getValue();
-                v3d.resolution = (double) resSpinner.getValue();
                 v3d.setVisible(true);
             });
         }

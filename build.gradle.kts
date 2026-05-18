@@ -109,9 +109,10 @@ dependencies {
 application {
     mainClass.set("com.oculus.jj.OculusJJApp")
     applicationDefaultJvmArgs = listOf(
-        "-Xmx12g", // 3D MPRや大容量ボリュームレンダリングのためにメモリを12GB割り当てる
+        "-Xmx24g", // 3D MPRや大容量ボリュームレンダリングのためにメモリを24GB割り当てる
         "-Dsun.java2d.d3d=false",
-        "-Dsun.java2d.opengl=true",
+        // NOTE: -Dsun.java2d.opengl=true を除去。Java2D独自GLコンテキストがLWJGL GLバッファを上書きするため。
+        // GDIパイプライン(d3d=false)でOpenGL描画面への干渉を防ぐ。
         // Java 9+モジュールシステム: NativeImageReaderがFileImageInputStream.rafにアクセスするために必要
         "--add-opens=java.desktop/javax.imageio.stream=ALL-UNNAMED",
         // Java 9+モジュールシステム: NativeImageReaderがRandomAccessFile.pathにアクセスするために必要

@@ -7605,11 +7605,10 @@ public class BrowserController extends JFrame {
                 "- Middle Drag / Shift+Drag: Pan<br>" +
                 "- Scroll Wheel: Change Image/Slice<br><br>" +
                 "<b>[3D Viewer]</b><br>" +
-                "- Left Drag: Rotate<br>" +
-                "- Right Drag / Shift+Drag: Zoom<br>" +
+                "- Left Drag: Rotate (when rotate tool is active)<br>" +
+                "- Right Drag: <b>Adjust WL/WW (Brightness/Contrast)</b><br>" +
                 "- Middle Drag (Wheel Click): <b>Pan (Parallel Move)</b><br>" +
-                "- Shift + Middle Drag: <b>Adjust WL/WW (Brightness/Contrast)</b><br>" +
-                "- Scroll Wheel: Zoom<br><br>" +
+                "- Shift + Left Drag / Scroll Wheel: <b>Zoom (Magnify/Minify)</b><br><br>" +
                 "<h3>Keyboard Shortcuts</h3>" +
                 "- [R]: Reset to Initial View<br>" +
                 "- [Shift+R]: Revert Series<br>" +

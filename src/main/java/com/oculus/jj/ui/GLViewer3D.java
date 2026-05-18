@@ -1,10 +1,18 @@
 package com.oculus.jj.ui;
 
+import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL33;
+import java.awt.Color;
+import java.awt.AlphaComposite;
+import java.awt.Graphics2D;
+import java.awt.Graphics;
+import java.awt.image.BufferedImage;
 import java.nio.*;
 import org.lwjgl.system.MemoryUtil;
-import java.util.List;
-import com.oculus.jj.model.DicomPix;
+import java.util.function.Consumer;
+
+import org.lwjgl.opengl.awt.AWTGLCanvas;
+import org.lwjgl.opengl.awt.GLData;
 
 /**
  * GLViewer3D - HOROS-20240407準拠 GPU Volume Renderer
@@ -12,13 +20,20 @@ import com.oculus.jj.model.DicomPix;
  * Phase 2: Phong照明 (Ambient + Diffuse + Specular)
  * Phase 3: Transfer Function 1Dテクスチャ
  */
-public class GLViewer3D {
+public class GLViewer3D extends AWTGLCanvas {
+
+    public static final int ENGINE_CPU = 0;
+    public static final int ENGINE_GPU = 1;
 
     private int shaderProgram;
     private int vao, vbo, ebo;
     private int volumeTexture;
     private int gradientTexture; // Phase 1: 事前計算勾配テクスチャ
     private int tfTexture; // Phase 3: Transfer Function 1Dテクスチャ
+    private int cpuQuadProgram;
+    private int cpuQuadVao, cpuQuadVbo, cpuQuadEbo;
+    private int cpuFrameTexture;
+    private int cpuFrameWidth = -1, cpuFrameHeight = -1;
 
     // ---- Orientation Cube (方位ボックス) リソース ----
     private int cubeShaderProgram;
@@ -26,13 +41,13 @@ public class GLViewer3D {
     private int[] orientationTextures = new int[6]; // A, P, S, I, R, L
     private final String[] labelStrings = { "A", "P", "S", "I", "R", "L" };
 
-    private short[][][] volume;
+    private short[] volume;
+    private byte[] gradientData;
     private int dimX, dimY, dimZ;
-    private List<DicomPix> pixList;
     private boolean dataReady = false;
 
-    private float rotateX = -1.57f;
-    private float rotateY = 0.0f;
+    private float rotateX = -1.5707963f;
+    private float rotateY = 1.5707963f;
     private float zoom = 1.0f;
     private float offsetX = 0, offsetY = 0, offsetZ = 0;
     private static final float PAN_LIMIT = 0.35f;
@@ -41,9 +56,9 @@ public class GLViewer3D {
     // Phase 2: Phong ライト方向
     private float lightX = -0.577f, lightY = -0.577f, lightZ = 0.577f;
 
-    // WW/WL (HOROS準拠: TFのルックアップ範囲を制御)
-    private float windowLevel = 150.0f;
-    private float windowWidth = 400.0f;
+    // WW/WL (HOROS準拠: 3D用の初期表示は1:1マッピング)
+    private float windowLevel = 1024.0f;
+    private float windowWidth = 4096.0f;
 
     // Clipping
     private float clipMinX = 0, clipMaxX = 1;
@@ -59,77 +74,301 @@ public class GLViewer3D {
 
     // Fix 2: 物理ボクセルサイズ [mm] → アスペクト比正規化
     private float voxScaleX = 1.0f, voxScaleY = 1.0f, voxScaleZ = 1.0f;
+    private int gpuFrameCount = 0; // GPU描画フレーム数 (診断用)
+    private float spacingX = 1.0f, spacingY = 1.0f, spacingZ = 1.0f;
+    private int engineMode = ENGINE_CPU;
+    private CPURaycastRenderer cpuRenderer;
+    private volatile BufferedImage cpuImage;
+    private final Object cpuRenderLock = new Object();
+    private boolean cpuRenderInFlight = false;
+    private boolean cpuRenderRequested = false;
+    private Consumer<Graphics2D> overlayPainter;
+    private volatile boolean gpuContextFailed = false;
+    private Runnable gpuContextFailureHandler;
+    private int overlayTexture = 0;
+    private int overlayWidth = -1;
+    private int overlayHeight = -1;
 
-    public GLViewer3D() {
-        this.transferFunction = TransferFunction.createVRMusclesBones();
+    private BufferedImage reusableOverlayImage;
+    private java.nio.ByteBuffer reusableOverlayBuffer;
+    private boolean overlayDirty = true;
+
+    public void markOverlayDirty() {
+        this.overlayDirty = true;
     }
 
-    public void setVolumeData(short[][][] vol, int w, int h, int d, List<DicomPix> pix) {
+    public GLViewer3D(GLData data, short[] volume, int dx, int dy, int dz) {
+        super(data);
+        this.volume = volume;
+        this.dimX = dx;
+        this.dimY = dy;
+        this.dimZ = dz;
+
+        java.awt.event.MouseAdapter overlayMouseListener = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                markOverlayDirty();
+            }
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                markOverlayDirty();
+            }
+            @Override
+            public void mouseDragged(java.awt.event.MouseEvent e) {
+                markOverlayDirty();
+            }
+            @Override
+            public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
+                markOverlayDirty();
+            }
+        };
+        this.addMouseListener(overlayMouseListener);
+        this.addMouseMotionListener(overlayMouseListener);
+        this.addMouseWheelListener(overlayMouseListener);
+    }
+
+    public void setVolumeData(short[] vol, byte[] grad, int w, int h, int d) {
+        markOverlayDirty();
         this.volume = vol;
+        this.gradientData = grad;
         this.dimX = w;
         this.dimY = h;
         this.dimZ = d;
-        this.pixList = pix;
         this.dataReady = true;
+        // grad != null は GPU 初期化パス専用。CPU レンダラーは既にボリュームを持っているため
+        // synchronized な setVolumeData() を呼ばない（render() ロック競合によるブロックを防ぐ）。
+        if (cpuRenderer != null && grad == null) {
+            cpuRenderer.setVolumeData(vol, w, h, d);
+            requestCpuRender();
+        }
+    }
+
+    public void setCpuRenderer(CPURaycastRenderer renderer) {
+        markOverlayDirty();
+        this.cpuRenderer = renderer;
+        if (renderer != null) {
+            renderer.setVolumeData(volume, dimX, dimY, dimZ);
+            renderer.setRenderMode(renderMode);
+            renderer.setRotation(rotateX, rotateY);
+            renderer.setZoom(zoom);
+            renderer.setOffset(offsetX, offsetY, offsetZ);
+            renderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+            if (transferFunction != null) {
+                renderer.setTransferFunction(transferFunction);
+            }
+            renderer.setWindowLevel(windowLevel, windowWidth);
+        }
+        requestCpuRender();
+    }
+
+    public void setOverlayPainter(Consumer<Graphics2D> overlayPainter) {
+        this.overlayPainter = overlayPainter;
+        repaint();
+    }
+
+    public void setGpuContextFailureHandler(Runnable handler) {
+        this.gpuContextFailureHandler = handler;
+    }
+
+    /**
+     * HOROS互換のエンジン切替API。
+     * 0=CPU, 1=GPU
+     */
+    public void setEngine(int mode) {
+        this.engineMode = mode;
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint();
+        }
+    }
+
+    public int getEngine() {
+        return engineMode;
+    }
+
+    public BufferedImage getCpuImage() {
+        return cpuImage;
+    }
+
+    public void requestCpuRender() {
+        if (engineMode != ENGINE_CPU || cpuRenderer == null) {
+            repaint();
+            return;
+        }
+
+        int width = getWidth();
+        int height = getHeight();
+        if (cpuImage == null && width > 0 && height > 0) {
+            java.awt.EventQueue.invokeLater(this::repaint);
+        }
+
+        synchronized (cpuRenderLock) {
+            cpuRenderRequested = true;
+            if (cpuRenderInFlight) {
+                return;
+            }
+            cpuRenderInFlight = true;
+        }
+
+        Thread worker = new Thread(() -> {
+            while (true) {
+                synchronized (cpuRenderLock) {
+                    cpuRenderRequested = false;
+                }
+
+                int w = getWidth();
+                int h = getHeight();
+                if (w > 0 && h > 0) {
+                    int renderW = Math.min(w, 720);
+                    int renderH = (int) (h * ((float) renderW / w));
+                    cpuImage = cpuRenderer.render(renderW, renderH);
+                }
+                java.awt.EventQueue.invokeLater(this::repaint);
+
+                synchronized (cpuRenderLock) {
+                    if (!cpuRenderRequested) {
+                        cpuRenderInFlight = false;
+                        break;
+                    }
+                }
+            }
+        }, "GLViewer3D-CPU");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     public void setRenderMode(int mode) {
+        markOverlayDirty();
         this.renderMode = mode;
+        if (cpuRenderer != null) {
+            cpuRenderer.setRenderMode(mode);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint(); // GPUモード用に描画を強制更新する
+        }
     }
 
     public void setRotation(float x, float y) {
+        markOverlayDirty();
         this.rotateX = x;
         this.rotateY = y;
+        if (cpuRenderer != null) {
+            cpuRenderer.setRotation(x, y);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void setZoom(float z) {
+        markOverlayDirty();
         this.zoom = z;
+        if (cpuRenderer != null) {
+            cpuRenderer.setZoom(z);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void setOffset(float x, float y, float z) {
+        markOverlayDirty();
         offsetX = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, x));
         offsetY = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, y));
         offsetZ = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, z));
+        if (cpuRenderer != null) {
+            cpuRenderer.setOffset(offsetX, offsetY, offsetZ);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void addOffset(float dx, float dy, float dz) {
+        markOverlayDirty();
         offsetX = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, offsetX + dx));
         offsetY = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, offsetY + dy));
         offsetZ = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, offsetZ + dz));
+        if (cpuRenderer != null) {
+            cpuRenderer.setOffset(offsetX, offsetY, offsetZ);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void setClipping(float x0, float x1, float y0, float y1, float z0, float z1) {
+        markOverlayDirty();
         clipMinX = x0;
         clipMaxX = x1;
         clipMinY = y0;
         clipMaxY = y1;
         clipMinZ = z0;
         clipMaxZ = z1;
+        if (cpuRenderer != null) {
+            cpuRenderer.setClipping(x0, x1, y0, y1, z0, z1);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void setLightDirection(float x, float y, float z) {
+        markOverlayDirty();
         float l = (float) Math.sqrt(x * x + y * y + z * z);
         if (l > 0) {
             lightX = x / l;
             lightY = y / l;
             lightZ = z / l;
         }
+        if (cpuRenderer != null) {
+            cpuRenderer.setLightDirection(x, y, z);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void setTransferFunction(TransferFunction tf) {
+        markOverlayDirty();
         this.transferFunction = tf;
         this.tfDirty = true;
+        if (cpuRenderer != null) {
+            cpuRenderer.setTransferFunction(tf);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     public void setIsoThreshold(float t) {
+        markOverlayDirty();
         this.isoThreshold = t;
+        if (cpuRenderer != null) {
+            cpuRenderer.setIsoThreshold(t);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        }
     }
 
     /** HOROS準拠: WW/WL でTFの参照範囲をシフト・スケールする */
     public void setWindowLevel(float wl, float ww) {
+        markOverlayDirty();
         this.windowLevel = wl;
         this.windowWidth = Math.max(1, ww);
         this.tfDirty = true;
+        if (cpuRenderer != null) {
+            cpuRenderer.setWindowLevel(this.windowLevel, this.windowWidth);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint(); // GPUモード用の描画更新を強制する
+        }
     }
 
     /**
@@ -141,6 +380,7 @@ public class GLViewer3D {
      * @param sz Z方向 mm/slice
      */
     public void setVoxelSpacing(float sx, float sy, float sz) {
+        markOverlayDirty();
         // 各軸の物理總幅 = ボクセル数 x スペーシング
         float physX = dimX * sx;
         float physY = dimY * sy;
@@ -150,6 +390,9 @@ public class GLViewer3D {
         voxScaleX = (maxPhys > 0) ? physX / maxPhys : 1.0f;
         voxScaleY = (maxPhys > 0) ? physY / maxPhys : 1.0f;
         voxScaleZ = (maxPhys > 0) ? physZ / maxPhys : 1.0f;
+        if (cpuRenderer != null) {
+            cpuRenderer.setVoxelSpacing(sx, sy, sz);
+        }
     }
 
     // --- シェーダー ---
@@ -158,11 +401,12 @@ public class GLViewer3D {
             "out vec3 vTex;\n" +
             "out vec3 vCam;\n" +
             "uniform mat4 model,view,projection;\n" +
+            "uniform vec3 uCamPos;\n" +
             "void main(){\n" +
             "  mat4 mv=view*model;\n" +
             "  gl_Position=projection*mv*vec4(aPos,1);\n" +
             "  vTex=aPos+vec3(0.5);\n" +
-            "  vCam=(inverse(mv)*vec4(0,0,0,1)).xyz+vec3(0.5);\n" +
+            "  vCam=uCamPos;\n" +
             "}\n";
 
     private static final String FRAG = "#version 330 core\n" +
@@ -180,6 +424,8 @@ public class GLViewer3D {
             "uniform vec3 lightDir;\n" +
             "uniform vec3 clipMin, clipMax;\n" +
             "void main(){\n" +
+            // isoThreshold < -9999.0 はデバッグテスト: ジオメトリが描画されているか確認 (黄色出力)
+            "  if(isoThreshold < -9999.0){ FragColor=vec4(1.0,1.0,0.0,1.0); return; }\n" +
             "  vec3 ray=normalize(vTex-vCam);\n" +
             "  vec3 pos=vTex+uOffset;\n" +
             "  vec4 acc=vec4(0);\n" +
@@ -187,7 +433,7 @@ public class GLViewer3D {
             // jitterを小さく抑える（0.0~0.5）
             "  float jit=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)*0.5;\n" +
             "  pos+=ray*stepSize*jit;\n" +
-            "  for(int i=0;i<800;i++){\n" +
+            "  for(int i=0;i<512;i++){\n" +
             "    if(pos.x<0.0||pos.x>1.0||pos.y<0.0||pos.y>1.0||pos.z<0.0||pos.z>1.0) break;\n" +
             "    if(pos.x>=clipMin.x&&pos.x<=clipMax.x&&\n" +
             "       pos.y>=clipMin.y&&pos.y<=clipMax.y&&\n" +
@@ -205,7 +451,8 @@ public class GLViewer3D {
             "        if(raw<winLow||raw>winHigh){ pos+=ray*stepSize; continue; }\n" +
             "        vec4 tf=texture(tfTex,tfT);\n" +
             "        if(tf.a>0.005){\n" +
-            "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" +
+            // HU勾配は密度増加方向(内向き)を向くため否定して外向き法線にする
+            "          vec3 N=normalize(-(texture(gradTex,pos).xyz*2.0-1.0));\n" +
             "          vec3 L=normalize(lightDir);\n" +
             "          vec3 V=normalize(-ray);\n" +
             "          vec3 H=normalize(L+V);\n" + // Blinn-Phong (HOROSはこちら)
@@ -219,7 +466,8 @@ public class GLViewer3D {
             "        }\n" +
             "      } else {\n" +
             "        if(raw>isoThreshold){\n" +
-            "          vec3 N=normalize(texture(gradTex,pos).xyz*2.0-1.0);\n" +
+            // 外向き法線 (HU勾配を否定)
+            "          vec3 N=normalize(-(texture(gradTex,pos).xyz*2.0-1.0));\n" +
             "          vec3 L=normalize(lightDir);\n" +
             "          float d=max(dot(N,L),0.15);\n" +
             "          float s=pow(max(dot(normalize(-ray+L),N),0.0),16.0)*0.15;\n" +
@@ -230,7 +478,8 @@ public class GLViewer3D {
             "    }\n" +
             "    pos+=ray*stepSize;\n" +
             "  }\n" +
-            "  if(renderMode==0) FragColor=(maxV>0.001)?vec4(vec3(maxV),1.0):vec4(0.0);\n" +
+            // MIP: 常にopaque (0.0=黒でもalphaを1にして背景と区別可能にする)
+            "  if(renderMode==0) FragColor=vec4(vec3(max(maxV,0.0)),1.0);\n" +
             "  else FragColor=acc;\n" +
             "}\n";
 
@@ -254,22 +503,62 @@ public class GLViewer3D {
             "    FragColor = texColor;\n" +
             "}\n";
 
+    private static final String CPU_QUAD_VS = "#version 330 core\n" +
+            "layout (location = 0) in vec2 aPos;\n" +
+            "layout (location = 1) in vec2 aUv;\n" +
+            "out vec2 vUv;\n" +
+            "void main(){\n" +
+            "  vUv = aUv;\n" +
+            "  gl_Position = vec4(aPos, 0.0, 1.0);\n" +
+            "}\n";
+
+    private static final String CPU_QUAD_FS = "#version 330 core\n" +
+            "in vec2 vUv;\n" +
+            "out vec4 FragColor;\n" +
+            "uniform sampler2D uTex;\n" +
+            "void main(){\n" +
+            "  FragColor = texture(uTex, vUv);\n" +
+            "}\n";
+
+    @Override
     public void initGL() {
-        System.out.println("GL Vendor: " + GL33.glGetString(GL33.GL_VENDOR));
+        GL.createCapabilities(); // LWJGLのOpenGLコンテキストを有効化 (重要)
+
+        System.out.println("OpenGL Version: " + GL33.glGetString(GL33.GL_VERSION));
         System.out.println("GL Renderer: " + GL33.glGetString(GL33.GL_RENDERER));
-        GL33.glClearColor(0.05f, 0.05f, 0.1f, 1);
+        GL33.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         GL33.glEnable(GL33.GL_BLEND);
         GL33.glBlendFunc(GL33.GL_SRC_ALPHA, GL33.GL_ONE_MINUS_SRC_ALPHA);
-        GL33.glEnable(GL33.GL_CULL_FACE);
-        GL33.glCullFace(GL33.GL_BACK);
+        GL33.glDisable(GL33.GL_CULL_FACE);
         GL33.glDisable(GL33.GL_DEPTH_TEST);
 
+        // GPU ボリュームシェーダー (複雑、失敗しても CPU モードを維持)
         try {
             shaderProgram = createProgram(VERT, FRAG);
+            System.out.println("DEBUG: GPU shader compiled OK. program=" + shaderProgram);
+        } catch (Throwable e) {
+            System.err.println("DEBUG: GPU shader compile FAILED (CPU fallback remains): " + e);
+            e.printStackTrace();
+        }
+
+        // CPU フレーム表示クワッドシェーダー (必須: CPU モードに使用)
+        try {
+            cpuQuadProgram = createProgram(CPU_QUAD_VS, CPU_QUAD_FS);
+            initCpuQuad();
+            System.out.println("DEBUG: CPU quad shader+VAO ready. program=" + cpuQuadProgram + " vao=" + cpuQuadVao);
+        } catch (Throwable e) {
+            System.err.println("DEBUG: CPU quad shader FAILED: " + e);
+            e.printStackTrace();
+        }
+
+        // 方位キューブシェーダー (任意)
+        try {
             cubeShaderProgram = createProgram(CUBE_VS, CUBE_FS);
             initCube();
             createOrientationTextures();
-        } catch (Exception e) {
+            System.out.println("DEBUG: Orientation cube shader ready. program=" + cubeShaderProgram);
+        } catch (Throwable e) {
+            System.err.println("DEBUG: Orientation cube shader FAILED (non-critical): " + e);
             e.printStackTrace();
         }
 
@@ -296,77 +585,65 @@ public class GLViewer3D {
         GL33.glBufferData(GL33.GL_ELEMENT_ARRAY_BUFFER, ib, GL33.GL_STATIC_DRAW);
         MemoryUtil.memFree(ib);
         GL33.glBindVertexArray(0);
-
-        if (volume != null)
-            uploadVolume();
+        // NOTE: uploadVolume() は paintGL() の lazy-upload ブロックで行う。
+        // ここで呼ぶと EDT ブロック + 例外がレンダーループ停止に繋がるため除外。
     }
 
     // ---- Phase 1: Pre-computed Gradient Volume ----
     private void uploadVolume() {
         int zStep = (dimZ > 512) ? 2 : 1;
+        if (gradientData != null && dimX > 0 && dimY > 0) {
+            int calculatedTz = gradientData.length / (dimX * dimY * 3);
+            if (calculatedTz > 0) {
+                zStep = Math.max(1, dimZ / calculatedTz);
+            }
+        }
         int tz = dimZ / zStep;
-        long sz = (long) dimX * dimY * tz;
 
-        // Volume texture (R16)
+        // 3D Texture for Volume (R16 = 16bit Normalized)
         volumeTexture = GL33.glGenTextures();
         GL33.glBindTexture(GL33.GL_TEXTURE_3D, volumeTexture);
         set3DParams();
-        ShortBuffer sb = MemoryUtil.memAllocShort((int) sz);
-        for (int z = 0; z < dimZ; z += zStep) {
-            if (z / zStep >= tz)
-                break;
-            for (int y = 0; y < dimY; y++)
-                for (int x = 0; x < dimX; x++)
-                    sb.put((short) (volume[z][y][x] ^ 0x8000));
-        }
-        sb.flip();
-        GL33.glPixelStorei(GL33.GL_UNPACK_ALIGNMENT, 1);
+
+        // 空のテクスチャ枠を確保
         GL33.glTexImage3D(GL33.GL_TEXTURE_3D, 0, GL33.GL_R16, dimX, dimY, tz, 0, GL33.GL_RED, GL33.GL_UNSIGNED_SHORT,
-                sb);
-        MemoryUtil.memFree(sb);
+                (ShortBuffer) null);
 
-        // Gradient texture (RGB8 = 事前計算法線)
-        gradientTexture = GL33.glGenTextures();
-        GL33.glBindTexture(GL33.GL_TEXTURE_3D, gradientTexture);
-        set3DParams();
-        byte[] grad = computeGradients(zStep, tz);
-        ByteBuffer bb = MemoryUtil.memAlloc(grad.length);
-        bb.put(grad).flip();
-        GL33.glTexImage3D(GL33.GL_TEXTURE_3D, 0, GL33.GL_RGB8, dimX, dimY, tz, 0, GL33.GL_RGB, GL33.GL_UNSIGNED_BYTE,
-                bb);
-        MemoryUtil.memFree(bb);
-    }
-
-    private byte[] computeGradients(int zStep, int tz) {
-        byte[] g = new byte[dimX * dimY * tz * 3];
-        int idx = 0;
-        for (int z = 0; z < dimZ; z += zStep) {
-            if (z / zStep >= tz)
-                break;
-            for (int y = 0; y < dimY; y++) {
-                for (int x = 0; x < dimX; x++) {
-                    float dx = (sv(x + 1, y, z) - sv(x - 1, y, z)) * 0.5f;
-                    float dy = (sv(x, y + 1, z) - sv(x, y - 1, z)) * 0.5f;
-                    float dz = (sv(x, y, z + 1) - sv(x, y, z - 1)) * 0.5f;
-                    float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-                    if (len < 1e-6f) {
-                        len = 1;
+        // 分割転送 (1回あたり 64 スライス) でドライバハングを防止
+        int chunkSize = 64;
+        for (int startZ = 0; startZ < tz; startZ += chunkSize) {
+            int currentChunk = Math.min(chunkSize, tz - startZ);
+            long sz = (long) dimX * dimY * currentChunk;
+            ShortBuffer sb = MemoryUtil.memAllocShort((int) sz);
+            for (int zi = 0; zi < currentChunk; zi++) {
+                int zOffset = (startZ + zi) * zStep * dimY * dimX;
+                for (int y = 0; y < dimY; y++) {
+                    int yOffset = y * dimX;
+                    for (int x = 0; x < dimX; x++) {
+                        sb.put((short) (volume[zOffset + yOffset + x] ^ 0x8000));
                     }
-                    // -1..1 → 0..255
-                    g[idx++] = (byte) ((dx / len * 0.5f + 0.5f) * 255);
-                    g[idx++] = (byte) ((dy / len * 0.5f + 0.5f) * 255);
-                    g[idx++] = (byte) ((dz / len * 0.5f + 0.5f) * 255);
                 }
             }
+            sb.flip();
+            GL33.glPixelStorei(GL33.GL_UNPACK_ALIGNMENT, 1);
+            GL33.glTexSubImage3D(GL33.GL_TEXTURE_3D, 0, 0, 0, startZ, dimX, dimY, currentChunk, GL33.GL_RED,
+                    GL33.GL_UNSIGNED_SHORT, sb);
+            MemoryUtil.memFree(sb);
+            System.out.println("DEBUG: GPU Volume Uploaded: " + (startZ + currentChunk) + "/" + tz);
         }
-        return g;
-    }
 
-    private float sv(int x, int y, int z) {
-        x = Math.max(0, Math.min(dimX - 1, x));
-        y = Math.max(0, Math.min(dimY - 1, y));
-        z = Math.max(0, Math.min(dimZ - 1, z));
-        return volume[z][y][x];
+        // Gradient texture (RGB8 = 事前計算法線)
+        if (gradientData != null) {
+            gradientTexture = GL33.glGenTextures();
+            GL33.glBindTexture(GL33.GL_TEXTURE_3D, gradientTexture);
+            set3DParams();
+            ByteBuffer bb = MemoryUtil.memAlloc(gradientData.length);
+            bb.put(gradientData).flip();
+            GL33.glTexImage3D(GL33.GL_TEXTURE_3D, 0, GL33.GL_RGB8, dimX, dimY, tz, 0, GL33.GL_RGB,
+                    GL33.GL_UNSIGNED_BYTE,
+                    bb);
+            MemoryUtil.memFree(bb);
+        }
     }
 
     private void set3DParams() {
@@ -383,18 +660,72 @@ public class GLViewer3D {
             return;
         if (tfTexture != 0)
             GL33.glDeleteTextures(tfTexture);
-        tfTexture = transferFunction.buildAndUploadGL(windowLevel, windowWidth);
+        tfTexture = transferFunction.buildAndUploadGL();
         tfDirty = false;
     }
 
-    public void paintGL(int width, int height) {
+    private int frameCount = 0;
+
+    @Override
+    public void paintGL() {
+        frameCount++;
+        if (engineMode == ENGINE_GPU)
+            gpuFrameCount++;
+        if (frameCount % 60 == 0) {
+            System.out.println(
+                    "DEBUG: paintGL() executed. engineMode=" + engineMode + ", size=" + getWidth() + "x" + getHeight());
+        }
+        int width = getWidth();
+        int height = getHeight();
+        // 最初の3GPUフレームは明るい緑色の背景でジオメトリ描画を確認
+        if (gpuFrameCount > 0 && gpuFrameCount <= 3) {
+            GL33.glClearColor(0.0f, 0.7f, 0.0f, 1.0f);
+        } else {
+            GL33.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        }
         GL33.glClear(GL33.GL_COLOR_BUFFER_BIT | GL33.GL_DEPTH_BUFFER_BIT);
-        if (!dataReady || shaderProgram == 0)
+
+        if (engineMode == ENGINE_CPU) {
+            drawCpuFrame(width, height);
+            drawOrientationCube(width, height);
+            drawOverlayTexture(width, height);
+            swapBuffers();
             return;
+        }
+
+        if (!dataReady || volume == null)
+            return;
+
+        // データがあるのにテクスチャが未作成ならアップロード
+        if (volumeTexture == 0) {
+            try {
+                uploadVolume();
+            } catch (Throwable t) {
+                System.err.println("DEBUG: Critical error during uploadVolume:");
+                t.printStackTrace();
+                volumeTexture = -1; // 再試行防止
+                return;
+            }
+            if (shaderProgram == 0)
+                return; // initGLがまだなら中断
+        }
+
+        if (shaderProgram == 0)
+            return;
+
+        // 深度テスト有効化 (CPU quad が glDisable するため毎フレーム再設定が必要)
+        GL33.glEnable(GL33.GL_DEPTH_TEST);
+        GL33.glDepthFunc(GL33.GL_LESS);
+        // カリング無効化 (winding orderトラブル防止)
+        GL33.glDisable(GL33.GL_CULL_FACE);
 
         float w = width <= 0 ? 1f : (float) width, h = height <= 0 ? 1f : (float) height;
         GL33.glViewport(0, 0, (int) w, (int) h);
         GL33.glUseProgram(shaderProgram);
+        int err = GL33.glGetError();
+        if (err != GL33.GL_NO_ERROR) {
+            System.err.println("GL Error after glUseProgram: " + err);
+        }
 
         if (tfDirty)
             uploadTransferFunction();
@@ -408,9 +739,35 @@ public class GLViewer3D {
         setMat4("projection", proj);
         setMat4("view", view);
         setMat4("model", mdl);
+
+        // CPU側でモデル/テクスチャ空間 of カメラ位置を逆算してユニフォーム送信 (inverseマトリクス依存排除)
+        float camZVal = 1.2f / zoom;
+        float[] rot = multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0));
+        float rx = rot[2] * camZVal;
+        float ry = rot[6] * camZVal;
+        float rz = rot[10] * camZVal;
+        float cx = rx / voxScaleX;
+        float cy = ry / voxScaleY;
+        float cz = rz / voxScaleZ;
+        float vCamX = cx + 0.5f;
+        float vCamY = cy + 0.5f;
+        float vCamZ = cz + 0.5f;
+        GL33.glUniform3f(GL33.glGetUniformLocation(shaderProgram, "uCamPos"), vCamX, vCamY, vCamZ);
+
         u1f("stepSize", 0.002f);
+        // 最初の3GPUフレームで診断情報をログ出力
+        if (gpuFrameCount <= 3) {
+            System.out.println("DEBUG GPU[" + gpuFrameCount + "]: renderMode=" + renderMode
+                    + " wl=" + windowLevel + " ww=" + windowWidth
+                    + " shader=" + shaderProgram + " vao=" + vao + " volTex=" + volumeTexture
+                    + " gradTex=" + gradientTexture + " tfTex=" + tfTexture
+                    + " voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")"
+                    + " uCamPos=(" + vCamX + "," + vCamY + "," + vCamZ + ")"
+                    + " dataReady=" + dataReady + " size=" + width + "x" + height);
+        }
         u1i("renderMode", renderMode);
-        u1f("isoThreshold", isoThreshold);
+        // 最初の3GPUフレームはisoThreshold=-10000でシェーダーテスト(黄色出力でジオメトリ確認)
+        u1f("isoThreshold", gpuFrameCount <= 3 ? -10000.0f : isoThreshold);
         u1f("windowLevel", windowLevel);
         u1f("windowWidth", windowWidth);
         u3f("uOffset", offsetX, offsetY, offsetZ);
@@ -438,9 +795,21 @@ public class GLViewer3D {
         GL33.glBindVertexArray(vao);
         GL33.glDrawElements(GL33.GL_TRIANGLES, 36, GL33.GL_UNSIGNED_INT, 0);
         GL33.glBindVertexArray(0);
+        int drawErr = GL33.glGetError();
+        if (drawErr != GL33.GL_NO_ERROR) {
+            System.err.println("DEBUG: GL error after volume draw: " + drawErr);
+        }
+
+        // 方位ボックスはカリング不要 — 状態を戻してから描画
+        GL33.glDisable(GL33.GL_CULL_FACE);
 
         // ---- 方位ボックスの描画 (右上) ----
         drawOrientationCube(width, height);
+
+        // ---- Transparent Java2D overlays rendered as an OpenGL texture ----
+        drawOverlayTexture(width, height);
+
+        swapBuffers();
     }
 
     // ---- Uniform helpers ----
@@ -471,20 +840,237 @@ public class GLViewer3D {
         int v = GL33.glCreateShader(GL33.GL_VERTEX_SHADER);
         GL33.glShaderSource(v, vs);
         GL33.glCompileShader(v);
-        int f = GL33.glCreateShader(GL33.GL_FRAGMENT_SHADER);
-        GL33.glShaderSource(f, fs);
-        GL33.glCompileShader(f);
+        if (GL33.glGetShaderi(v, GL33.GL_COMPILE_STATUS) == GL33.GL_FALSE) {
+            String log = GL33.glGetShaderInfoLog(v);
+            GL33.glDeleteShader(v);
+            throw new Exception("Vertex shader compile error: " + log);
+        }
         String vLog = GL33.glGetShaderInfoLog(v);
         if (!vLog.isBlank())
             System.err.println("VS: " + vLog);
+
+        int f = GL33.glCreateShader(GL33.GL_FRAGMENT_SHADER);
+        GL33.glShaderSource(f, fs);
+        GL33.glCompileShader(f);
+        if (GL33.glGetShaderi(f, GL33.GL_COMPILE_STATUS) == GL33.GL_FALSE) {
+            String log = GL33.glGetShaderInfoLog(f);
+            GL33.glDeleteShader(v);
+            GL33.glDeleteShader(f);
+            throw new Exception("Fragment shader compile error: " + log);
+        }
         String fLog = GL33.glGetShaderInfoLog(f);
         if (!fLog.isBlank())
             System.err.println("FS: " + fLog);
+
         int p = GL33.glCreateProgram();
         GL33.glAttachShader(p, v);
         GL33.glAttachShader(p, f);
         GL33.glLinkProgram(p);
+        GL33.glDeleteShader(v);
+        GL33.glDeleteShader(f);
+        if (GL33.glGetProgrami(p, GL33.GL_LINK_STATUS) == GL33.GL_FALSE) {
+            String log = GL33.glGetProgramInfoLog(p);
+            GL33.glDeleteProgram(p);
+            throw new Exception("Shader link error: " + log);
+        }
         return p;
+    }
+
+    private void initCpuQuad() {
+        float[] verts = {
+                -1f, -1f, 0f, 0f,
+                1f, -1f, 1f, 0f,
+                1f, 1f, 1f, 1f,
+                -1f, 1f, 0f, 1f
+        };
+        int[] idx = { 0, 1, 2, 2, 3, 0 };
+
+        cpuQuadVao = GL33.glGenVertexArrays();
+        cpuQuadVbo = GL33.glGenBuffers();
+        cpuQuadEbo = GL33.glGenBuffers();
+
+        GL33.glBindVertexArray(cpuQuadVao);
+        GL33.glBindBuffer(GL33.GL_ARRAY_BUFFER, cpuQuadVbo);
+        FloatBuffer vb = MemoryUtil.memAllocFloat(verts.length);
+        vb.put(verts).flip();
+        GL33.glBufferData(GL33.GL_ARRAY_BUFFER, vb, GL33.GL_STATIC_DRAW);
+        MemoryUtil.memFree(vb);
+
+        GL33.glBindBuffer(GL33.GL_ELEMENT_ARRAY_BUFFER, cpuQuadEbo);
+        IntBuffer ib = MemoryUtil.memAllocInt(idx.length);
+        ib.put(idx).flip();
+        GL33.glBufferData(GL33.GL_ELEMENT_ARRAY_BUFFER, ib, GL33.GL_STATIC_DRAW);
+        MemoryUtil.memFree(ib);
+
+        GL33.glVertexAttribPointer(0, 2, GL33.GL_FLOAT, false, 4 * 4, 0);
+        GL33.glEnableVertexAttribArray(0);
+        GL33.glVertexAttribPointer(1, 2, GL33.GL_FLOAT, false, 4 * 4, 2 * 4);
+        GL33.glEnableVertexAttribArray(1);
+        GL33.glBindVertexArray(0);
+    }
+
+    private boolean cpuFirstFrameLogged = false;
+
+    private void drawCpuFrame(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        if (cpuQuadProgram == 0) {
+            if (!cpuFirstFrameLogged) {
+                System.err.println("DEBUG: drawCpuFrame() — cpuQuadProgram=0, GL 初期化未完了またはシェーダーコンパイル失敗。画像は描画されません。");
+                cpuFirstFrameLogged = true;
+            }
+            return;
+        }
+
+        if (cpuImage == null && !cpuRenderInFlight && cpuRenderer != null) {
+            requestCpuRender();
+        }
+
+        BufferedImage img = cpuImage;
+        if (img == null) {
+            return;
+        }
+
+        if (!cpuFirstFrameLogged) {
+            System.out.println("DEBUG: drawCpuFrame() — cpuImage ready " + img.getWidth() + "x" + img.getHeight()
+                    + ", cpuQuadProgram=" + cpuQuadProgram + ", cpuQuadVao=" + cpuQuadVao);
+            cpuFirstFrameLogged = true;
+        }
+
+        int iw = img.getWidth();
+        int ih = img.getHeight();
+        if (iw <= 0 || ih <= 0) {
+            return;
+        }
+
+        int[] argb = new int[iw * ih];
+        img.getRGB(0, 0, iw, ih, argb, 0, iw);
+        ByteBuffer bb = MemoryUtil.memAlloc(iw * ih * 4);
+        // OpenGL は行の先頭を下端として解釈するため、上下反転してから転送する
+        for (int row = ih - 1; row >= 0; row--) {
+            int srcBase = row * iw;
+            for (int col = 0; col < iw; col++) {
+                int p = argb[srcBase + col];
+                bb.put((byte) ((p >> 16) & 0xFF));
+                bb.put((byte) ((p >> 8) & 0xFF));
+                bb.put((byte) (p & 0xFF));
+                bb.put((byte) ((p >> 24) & 0xFF));
+            }
+        }
+        bb.flip();
+
+        if (cpuFrameTexture == 0) {
+            cpuFrameTexture = GL33.glGenTextures();
+        }
+        GL33.glBindTexture(GL33.GL_TEXTURE_2D, cpuFrameTexture);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MAG_FILTER, GL33.GL_LINEAR);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_WRAP_S, GL33.GL_CLAMP_TO_EDGE);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_WRAP_T, GL33.GL_CLAMP_TO_EDGE);
+
+        if (cpuFrameWidth != iw || cpuFrameHeight != ih) {
+            GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA8, iw, ih, 0, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE,
+                    bb);
+            cpuFrameWidth = iw;
+            cpuFrameHeight = ih;
+        } else {
+            GL33.glTexSubImage2D(GL33.GL_TEXTURE_2D, 0, 0, 0, iw, ih, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, bb);
+        }
+        MemoryUtil.memFree(bb);
+
+        GL33.glDisable(GL33.GL_DEPTH_TEST);
+        GL33.glViewport(0, 0, width, height);
+        GL33.glUseProgram(cpuQuadProgram);
+        GL33.glActiveTexture(GL33.GL_TEXTURE0);
+        GL33.glBindTexture(GL33.GL_TEXTURE_2D, cpuFrameTexture);
+        GL33.glUniform1i(GL33.glGetUniformLocation(cpuQuadProgram, "uTex"), 0);
+        GL33.glBindVertexArray(cpuQuadVao);
+        GL33.glDrawElements(GL33.GL_TRIANGLES, 6, GL33.GL_UNSIGNED_INT, 0);
+        GL33.glBindVertexArray(0);
+    }
+
+    private void drawOverlayTexture(int width, int height) {
+        if (overlayPainter == null || width <= 0 || height <= 0) {
+            return;
+        }
+
+        boolean sizeChanged = (overlayWidth != width || overlayHeight != height);
+
+        if (sizeChanged) {
+            if (reusableOverlayImage != null) {
+                reusableOverlayImage.flush();
+            }
+            reusableOverlayImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+            if (reusableOverlayBuffer != null) {
+                MemoryUtil.memFree(reusableOverlayBuffer);
+            }
+            reusableOverlayBuffer = MemoryUtil.memAlloc(width * height * 4);
+        }
+
+        if (overlayDirty || sizeChanged) {
+            overlayDirty = false;
+
+            Graphics2D g2d = reusableOverlayImage.createGraphics();
+            try {
+                g2d.setComposite(AlphaComposite.Clear);
+                g2d.fillRect(0, 0, width, height);
+                g2d.setComposite(AlphaComposite.SrcOver);
+                overlayPainter.accept(g2d);
+            } finally {
+                g2d.dispose();
+            }
+
+            int[] argb = new int[width * height];
+            reusableOverlayImage.getRGB(0, 0, width, height, argb, 0, width);
+
+            reusableOverlayBuffer.clear();
+            for (int row = height - 1; row >= 0; row--) {
+                int srcBase = row * width;
+                for (int col = 0; col < width; col++) {
+                    int p = argb[srcBase + col];
+                    reusableOverlayBuffer.put((byte) ((p >> 16) & 0xFF)); // R
+                    reusableOverlayBuffer.put((byte) ((p >> 8) & 0xFF));  // G
+                    reusableOverlayBuffer.put((byte) (p & 0xFF));         // B
+                    reusableOverlayBuffer.put((byte) ((p >> 24) & 0xFF)); // A
+                }
+            }
+            reusableOverlayBuffer.flip();
+
+            if (overlayTexture == 0) {
+                overlayTexture = GL33.glGenTextures();
+            }
+            GL33.glBindTexture(GL33.GL_TEXTURE_2D, overlayTexture);
+            GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
+            GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MAG_FILTER, GL33.GL_LINEAR);
+            GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_WRAP_S, GL33.GL_CLAMP_TO_EDGE);
+            GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_WRAP_T, GL33.GL_CLAMP_TO_EDGE);
+
+            if (sizeChanged) {
+                GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA8, width, height, 0, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, reusableOverlayBuffer);
+                overlayWidth = width;
+                overlayHeight = height;
+            } else {
+                GL33.glTexSubImage2D(GL33.GL_TEXTURE_2D, 0, 0, 0, width, height, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, reusableOverlayBuffer);
+            }
+        }
+
+        GL33.glDisable(GL33.GL_DEPTH_TEST);
+        GL33.glEnable(GL33.GL_BLEND);
+        GL33.glBlendFunc(GL33.GL_SRC_ALPHA, GL33.GL_ONE_MINUS_SRC_ALPHA);
+
+        GL33.glViewport(0, 0, width, height);
+        GL33.glUseProgram(cpuQuadProgram);
+        GL33.glActiveTexture(GL33.GL_TEXTURE0);
+        GL33.glBindTexture(GL33.GL_TEXTURE_2D, overlayTexture);
+        GL33.glUniform1i(GL33.glGetUniformLocation(cpuQuadProgram, "uTex"), 0);
+        GL33.glBindVertexArray(cpuQuadVao);
+        GL33.glDrawElements(GL33.GL_TRIANGLES, 6, GL33.GL_UNSIGNED_INT, 0);
+        GL33.glBindVertexArray(0);
+
+        GL33.glDisable(GL33.GL_BLEND);
     }
 
     // ---- Math ----
@@ -522,25 +1108,29 @@ public class GLViewer3D {
     private void initCube() {
         // 各面 4頂点 * 6面 = 24頂点 (pos.x, y, z, tex.u, v)
         float[] vertices = {
-            // Anterior (+Y) - index 0
-            -0.5f,  0.5f,  0.5f, 1, 0,  0.5f,  0.5f,  0.5f, 0, 0,  0.5f,  0.5f, -0.5f, 0, 1, -0.5f,  0.5f, -0.5f, 1, 1,
-            // Posterior (-Y) - index 1
-             0.5f, -0.5f,  0.5f, 1, 0, -0.5f, -0.5f,  0.5f, 0, 0, -0.5f, -0.5f, -0.5f, 0, 1,  0.5f, -0.5f, -0.5f, 1, 1,
-            // Superior (+Z) - index 2
-            -0.5f, -0.5f,  0.5f, 1, 0,  0.5f, -0.5f,  0.5f, 0, 0,  0.5f,  0.5f,  0.5f, 0, 1, -0.5f,  0.5f,  0.5f, 1, 1,
-            // Inferior (-Z) - index 3
-            -0.5f,  0.5f, -0.5f, 1, 0,  0.5f,  0.5f, -0.5f, 0, 0,  0.5f, -0.5f, -0.5f, 0, 1, -0.5f, -0.5f, -0.5f, 1, 1,
-            // Right (+X) - index 4
-             0.5f,  0.5f,  0.5f, 1, 0,  0.5f, -0.5f,  0.5f, 0, 0,  0.5f, -0.5f, -0.5f, 0, 1,  0.5f,  0.5f, -0.5f, 1, 1,
-            // Left (-X) - index 5
-            -0.5f, -0.5f,  0.5f, 1, 0, -0.5f,  0.5f,  0.5f, 0, 0, -0.5f,  0.5f, -0.5f, 0, 1, -0.5f, -0.5f, -0.5f, 1, 1
+                // Anterior (+Y) - index 0
+                -0.5f, 0.5f, 0.5f, 1, 0, 0.5f, 0.5f, 0.5f, 0, 0, 0.5f, 0.5f, -0.5f, 0, 1, -0.5f, 0.5f, -0.5f, 1, 1,
+                // Posterior (-Y) - index 1
+                0.5f, -0.5f, 0.5f, 1, 0, -0.5f, -0.5f, 0.5f, 0, 0, -0.5f, -0.5f, -0.5f, 0, 1, 0.5f, -0.5f, -0.5f, 1, 1,
+                // Superior (+Z) - index 2
+                -0.5f, -0.5f, 0.5f, 1, 0, 0.5f, -0.5f, 0.5f, 0, 0, 0.5f, 0.5f, 0.5f, 0, 1, -0.5f, 0.5f, 0.5f, 1, 1,
+                // Inferior (-Z) - index 3
+                -0.5f, 0.5f, -0.5f, 1, 0, 0.5f, 0.5f, -0.5f, 0, 0, 0.5f, -0.5f, -0.5f, 0, 1, -0.5f, -0.5f, -0.5f, 1, 1,
+                // Right (+X) - index 4
+                0.5f, 0.5f, 0.5f, 1, 0, 0.5f, -0.5f, 0.5f, 0, 0, 0.5f, -0.5f, -0.5f, 0, 1, 0.5f, 0.5f, -0.5f, 1, 1,
+                // Left (-X) - index 5
+                -0.5f, -0.5f, 0.5f, 1, 0, -0.5f, 0.5f, 0.5f, 0, 0, -0.5f, 0.5f, -0.5f, 0, 1, -0.5f, -0.5f, -0.5f, 1, 1
         };
         int[] indices = new int[36];
         for (int i = 0; i < 6; i++) {
             int offset = i * 4;
             int idx = i * 6;
-            indices[idx] = offset; indices[idx+1] = offset+1; indices[idx+2] = offset+2;
-            indices[idx+3] = offset+2; indices[idx+4] = offset+3; indices[idx+5] = offset;
+            indices[idx] = offset;
+            indices[idx + 1] = offset + 1;
+            indices[idx + 2] = offset + 2;
+            indices[idx + 3] = offset + 2;
+            indices[idx + 4] = offset + 3;
+            indices[idx + 5] = offset;
         }
 
         cubeVao = GL33.glGenVertexArrays();
@@ -563,19 +1153,20 @@ public class GLViewer3D {
     private void createOrientationTextures() {
         for (int i = 0; i < 6; i++) {
             int size = 64;
-            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(size, size,
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB);
             java.awt.Graphics2D g = img.createGraphics();
             g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-            
+
             // 背景（半透明の濃い青/黒）
             g.setColor(new java.awt.Color(20, 20, 40, 180));
             g.fillRect(0, 0, size, size);
-            
+
             // 枠線
             g.setColor(java.awt.Color.WHITE);
             g.setStroke(new java.awt.BasicStroke(2));
             g.drawRect(1, 1, size - 2, size - 2);
-            
+
             // 文字色をHOROS準拠に変更
             if (labelStrings[i].equals("S") || labelStrings[i].equals("I")) {
                 g.setColor(java.awt.Color.YELLOW);
@@ -601,8 +1192,8 @@ public class GLViewer3D {
                 for (int x = 0; x < size; x++) {
                     int p = pixels[y * size + x];
                     bb.put((byte) ((p >> 16) & 0xFF)); // R
-                    bb.put((byte) ((p >> 8) & 0xFF));  // G
-                    bb.put((byte) (p & 0xFF));         // B
+                    bb.put((byte) ((p >> 8) & 0xFF)); // G
+                    bb.put((byte) (p & 0xFF)); // B
                     bb.put((byte) ((p >> 24) & 0xFF)); // A
                 }
             }
@@ -610,7 +1201,8 @@ public class GLViewer3D {
 
             orientationTextures[i] = GL33.glGenTextures();
             GL33.glBindTexture(GL33.GL_TEXTURE_2D, orientationTextures[i]);
-            GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA, size, size, 0, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, bb);
+            GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA, size, size, 0, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE,
+                    bb);
             GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
             GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_MAG_FILTER, GL33.GL_LINEAR);
             MemoryUtil.memFree(bb);
@@ -618,7 +1210,8 @@ public class GLViewer3D {
     }
 
     private void drawOrientationCube(int width, int height) {
-        if (cubeShaderProgram == 0) return;
+        if (cubeShaderProgram == 0)
+            return;
 
         // デプスバッファをクリアして最前面に表示
         GL33.glClear(GL33.GL_DEPTH_BUFFER_BIT);
@@ -657,10 +1250,98 @@ public class GLViewer3D {
 
     private void setMat4Cube(String n, float[] m) {
         int loc = GL33.glGetUniformLocation(cubeShaderProgram, n);
-        if (loc < 0) return;
+        if (loc < 0)
+            return;
         FloatBuffer b = MemoryUtil.memAllocFloat(16);
         b.put(m).flip();
         GL33.glUniformMatrix4fv(loc, false, b);
         MemoryUtil.memFree(b);
+    }
+
+    @Override
+    public void paint(java.awt.Graphics g) {
+        // CardLayout で非表示カードにいる場合は描画しない。
+        // hidden heavyweight コンポーネントに paint() が来ると GL 初期化や
+        // GDI overlay が不正に実行され、DWM redirect surface にテキストが残留する。
+        if (!isShowing()) {
+            return;
+        }
+        try {
+            render(); // AWTの再描画要求（サイズ変更や露出時）に応じて即座にOpenGL描画を行う
+        } catch (Throwable t) {
+            if (isPixelFormatError(t) || engineMode == ENGINE_CPU) {
+                if (engineMode == ENGINE_GPU && !gpuContextFailed) {
+                    gpuContextFailed = true;
+                    System.err.println("GLViewer3D: OpenGL context creation failed. Switching to CPU renderer.");
+                    t.printStackTrace();
+                    if (gpuContextFailureHandler != null) {
+                        try {
+                            gpuContextFailureHandler.run();
+                        } catch (Throwable callbackError) {
+                            callbackError.printStackTrace();
+                        }
+                    }
+                }
+                setEngine(ENGINE_CPU);
+                paintCpu(g);
+                return;
+            }
+            throw t;
+        }
+    }
+
+    @Override
+    public void update(java.awt.Graphics g) {
+        // 背景クリアを抑制しつつ、repaint() から常に描画パスへ入れる。
+        paint(g);
+    }
+
+    private void paintCpu(Graphics g) {
+        int width = getWidth();
+        int height = getHeight();
+        g.setColor(Color.BLACK);
+        g.fillRect(0, 0, Math.max(0, width), Math.max(0, height));
+
+        BufferedImage image = cpuImage;
+        if (image != null) {
+            g.drawImage(image, 0, 0, null);
+        } else {
+            g.setColor(Color.WHITE);
+            int cx = Math.max(20, width / 2 - 150);
+            int cy = Math.max(40, height / 2 - 10);
+            String msg = (cpuRenderer == null) ? "CPU renderer is not initialized" : "CPU rendering in progress...";
+            g.drawString(msg, cx, cy);
+            g.drawString("If this persists, retry GPU then switch back to CPU.", cx, cy + 20);
+        }
+
+        paintOverlay(g);
+
+        if (!cpuRenderInFlight && cpuRenderer != null && width > 0 && height > 0) {
+            requestCpuRender();
+        }
+    }
+
+    private void paintOverlay(Graphics g) {
+        if (overlayPainter == null || !(g instanceof Graphics2D)) {
+            return;
+        }
+        Graphics2D g2d = (Graphics2D) g.create();
+        try {
+            overlayPainter.accept(g2d);
+        } finally {
+            g2d.dispose();
+        }
+    }
+
+    private boolean isPixelFormatError(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            String msg = cur.getMessage();
+            if (msg != null && msg.contains("Failed to set pixel format")) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
     }
 }

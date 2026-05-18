@@ -342,6 +342,10 @@ public class OculusJJApp {
      * HOROS-20240407準拠でBrowserControllerを起動
      */
     public static void main(String[] args) {
+        System.setProperty("sun.awt.noerasebackground", "true");
+        System.setProperty("sun.java2d.d3d", "false");
+        System.setProperty("sun.java2d.noddraw", "true");
+        System.setProperty("sun.java2d.opengl", "false");
         // OpenCVネイティブライブラリをロード（JPEG圧縮DICOM画像を読み込むために必要）
         // 注意: opencv_java.dllはC++ソースをコンパイルする必要はなく、pre-builtバイナリを使用可能
         loadOpenCVNativeLibrary();
