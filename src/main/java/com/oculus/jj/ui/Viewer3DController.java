@@ -772,45 +772,234 @@ public class Viewer3DController extends JFrame {
         vrToolbar.setLayout(new FlowLayout(FlowLayout.LEFT, 5, 2));
 
         // 1. Mouse button function
-        JPanel groupMouse = createToolbarGroup("Mouse button function");
+        JPanel contentMouse = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        JPanel groupMouse = createToolbarGroup("Mouse button function", contentMouse);
         ButtonGroup bgTools = new ButtonGroup();
-        String[] toolLabels = { "WW/WL", "Pan", "Zoom", "Rotate", "Clip", "Scissor", "Meas", "Point", "ROI", "In",
-                "Out" };
-        Tool3D[] toolValues = { Tool3D.WLWW, Tool3D.PAN, Tool3D.ZOOM, Tool3D.ROTATE, Tool3D.CLIPPING, Tool3D.SCISSOR,
-                Tool3D.MEASURE, Tool3D.POINT, Tool3D.ROI, Tool3D.SCISSOR_IN, Tool3D.SCISSOR_OUT };
-
+        
+        String[] toolLabels = { "◑ WL/WW", "✛ Pan", "🔍 Zoom", "↻ Rotate", "🧊 Nav", "🟢 Point", "📏 Meas", "🎯 Scissor", "ROI", "In", "Out" };
+        Tool3D[] toolValues = { Tool3D.WLWW, Tool3D.PAN, Tool3D.ZOOM, Tool3D.ROTATE, Tool3D.CLIPPING, Tool3D.POINT, Tool3D.MEASURE, Tool3D.SCISSOR, Tool3D.ROI, Tool3D.SCISSOR_IN, Tool3D.SCISSOR_OUT };
+        
         for (int i = 0; i < toolLabels.length; i++) {
             final Tool3D t = toolValues[i];
             JToggleButton btn = new JToggleButton(toolLabels[i]);
-            btn.setMargin(new Insets(2, 2, 2, 2));
+            btn.setFont(new Font("SansSerif", Font.PLAIN, 11));
+            btn.setMargin(new Insets(2, 4, 2, 4));
+            btn.setFocusable(false);
             btn.addActionListener(e -> {
                 this.currentTool = t;
-                if (t == Tool3D.CLIPPING)
+                if (t == Tool3D.CLIPPING) {
                     showClippingDialog();
+                }
+                repaint();
             });
             bgTools.add(btn);
-            groupMouse.add(btn);
-            if (t == Tool3D.ROTATE)
+            contentMouse.add(btn);
+            if (t == Tool3D.ROTATE) {
                 btn.setSelected(true);
+            }
         }
         vrToolbar.add(groupMouse);
 
         // 2. WL/WW & CLUT & Opacity
-        JPanel groupWLWW = createToolbarGroup("WL/WW & CLUT & Opacity");
-        groupWLWW.setLayout(new GridLayout(3, 2, 2, 2));
-        groupWLWW.add(new JLabel("WL/WW:"));
-        groupWLWW.add(new JComboBox<>(new String[] { "Other", "Default", "Full" }));
-        groupWLWW.add(new JLabel("CLUT:"));
-        groupWLWW.add(new JComboBox<>(new String[] { "No CLUT", "Hot Iron", "Rainbow" }));
-        groupWLWW.add(new JLabel("Opacity:"));
-        groupWLWW.add(new JComboBox<>(new String[] { "Linear", "Logarithmic" }));
+        JPanel contentWLWW = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JPanel groupWLWW = createToolbarGroup("WL/WW & CLUT & Opacity", contentWLWW);
+        
+        JPanel gridLeft = new JPanel(new GridLayout(3, 2, 2, 2));
+        gridLeft.setOpaque(false);
+        
+        JLabel lblWL = new JLabel("WL/WW:", JLabel.RIGHT);
+        lblWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        JComboBox<String> cbWL = new JComboBox<>(new String[] { "Other", "Default", "Bone", "Soft Tissue", "Lung", "Vascular" });
+        cbWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        cbWL.setFocusable(false);
+        cbWL.setSelectedItem("Default");
+        cbWL.addActionListener(e -> {
+            String item = (String) cbWL.getSelectedItem();
+            if ("Default".equals(item)) {
+                windowLevel = 1024;
+                windowWidth = 4096;
+            } else if ("Bone".equals(item)) {
+                windowLevel = 300;
+                windowWidth = 1500;
+            } else if ("Soft Tissue".equals(item)) {
+                windowLevel = 40;
+                windowWidth = 400;
+            } else if ("Lung".equals(item)) {
+                windowLevel = -500;
+                windowWidth = 1500;
+            } else if ("Vascular".equals(item)) {
+                windowLevel = 200;
+                windowWidth = 1000;
+            }
+            if (glViewer != null) {
+                glViewer.setWindowLevel(windowLevel, windowWidth);
+            }
+            repaint();
+        });
+        gridLeft.add(lblWL);
+        gridLeft.add(cbWL);
+        
+        JLabel lblCLUT = new JLabel("CLUT:", JLabel.RIGHT);
+        lblCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        JComboBox<String> cbCLUT = new JComboBox<>(new String[] { "No CLUT", "Hot Iron", "Rainbow", "VR Muscles & Bones" });
+        cbCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        cbCLUT.setFocusable(false);
+        cbCLUT.setSelectedItem("VR Muscles & Bones");
+        cbCLUT.addActionListener(e -> {
+            String clut = (String) cbCLUT.getSelectedItem();
+            if ("VR Muscles & Bones".equals(clut)) {
+                currentTF = TransferFunction.createVRMusclesBones();
+            } else if ("Hot Iron".equals(clut)) {
+                currentTF = TransferFunction.createSoftTissue();
+            } else if ("Rainbow".equals(clut)) {
+                currentTF = TransferFunction.createVascular();
+            } else {
+                currentTF = TransferFunction.createBone();
+            }
+            if (glViewer != null) {
+                glViewer.setTransferFunction(currentTF);
+            }
+            repaint();
+        });
+        gridLeft.add(lblCLUT);
+        gridLeft.add(cbCLUT);
+        
+        JLabel lblOpacity = new JLabel("Opacity:", JLabel.RIGHT);
+        lblOpacity.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        JComboBox<String> cbOpacity = new JComboBox<>(new String[] { "Linear", "Logarithmic" });
+        cbOpacity.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        cbOpacity.setFocusable(false);
+        gridLeft.add(lblOpacity);
+        gridLeft.add(cbOpacity);
+        
+        contentWLWW.add(gridLeft);
+        
+        JPanel pnlMid = new JPanel(new GridLayout(2, 1, 2, 2));
+        pnlMid.setOpaque(false);
+        JButton btn8 = new JButton("8-bit");
+        btn8.setFont(new Font("SansSerif", Font.BOLD, 9));
+        btn8.setMargin(new Insets(1, 4, 1, 4));
+        btn8.setFocusable(false);
+        JButton btn16 = new JButton("16-bit");
+        btn16.setFont(new Font("SansSerif", Font.BOLD, 9));
+        btn16.setMargin(new Insets(1, 4, 1, 4));
+        btn16.setFocusable(false);
+        pnlMid.add(btn8);
+        pnlMid.add(btn16);
+        contentWLWW.add(pnlMid);
+        
+        JButton btnPresets = new JButton("🎛️ Presets");
+        btnPresets.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        btnPresets.setMargin(new Insets(4, 4, 4, 4));
+        btnPresets.setFocusable(false);
+        btnPresets.addActionListener(e -> {
+            JPopupMenu menu = new JPopupMenu();
+            
+            JMenuItem itemMB = new JMenuItem("VR Muscle & Bone (Creamy)");
+            itemMB.addActionListener(ev -> {
+                currentTF = TransferFunction.createVRMusclesBones();
+                cbCLUT.setSelectedItem("VR Muscles & Bones");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
+            });
+            menu.add(itemMB);
+            
+            JMenuItem itemBone = new JMenuItem("Bone Only");
+            itemBone.addActionListener(ev -> {
+                currentTF = TransferFunction.createBone();
+                cbCLUT.setSelectedItem("No CLUT");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
+            });
+            menu.add(itemBone);
+            
+            JMenuItem itemSoft = new JMenuItem("Soft Tissue (Hot Iron)");
+            itemSoft.addActionListener(ev -> {
+                currentTF = TransferFunction.createSoftTissue();
+                cbCLUT.setSelectedItem("Hot Iron");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
+            });
+            menu.add(itemSoft);
+            
+            JMenuItem itemLung = new JMenuItem("Lung (High Contrast)");
+            itemLung.addActionListener(ev -> {
+                currentTF = TransferFunction.createLung();
+                cbCLUT.setSelectedItem("No CLUT");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
+            });
+            menu.add(itemLung);
+            
+            JMenuItem itemVasc = new JMenuItem("Vascular / Angio");
+            itemVasc.addActionListener(ev -> {
+                currentTF = TransferFunction.createVascular();
+                cbCLUT.setSelectedItem("Rainbow");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
+            });
+            menu.add(itemVasc);
+            
+            menu.show(btnPresets, 0, btnPresets.getHeight());
+        });
+        contentWLWW.add(btnPresets);
         vrToolbar.add(groupWLWW);
 
-        // 3. Engine
-        JPanel groupEngine = createToolbarGroup("Engine");
-        groupEngine.setLayout(new GridLayout(2, 1));
+        // 3. Level of Detail & Engine & Crop & Orientation
+        JPanel contentLOD = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JPanel groupLOD = createToolbarGroup("Level of Detail & Orientation", contentLOD);
+        
+        JPanel pnlSlider = new JPanel(new BorderLayout());
+        pnlSlider.setOpaque(false);
+        JLabel lblSliderName = new JLabel("LOD / Resolution", JLabel.CENTER);
+        lblSliderName.setFont(new Font("SansSerif", Font.BOLD, 9));
+        pnlSlider.add(lblSliderName, BorderLayout.NORTH);
+        
+        JSlider sliderLOD = new JSlider(0, 100, 25);
+        sliderLOD.setPreferredSize(new Dimension(100, 20));
+        sliderLOD.setOpaque(false);
+        sliderLOD.setFocusable(false);
+        sliderLOD.addChangeListener(e -> {
+            float factor = sliderLOD.getValue() / 100.0f;
+            if (glViewer != null) {
+                glViewer.setLodFactor(factor);
+            }
+        });
+        pnlSlider.add(sliderLOD, BorderLayout.CENTER);
+        
+        JPanel pnlSliderLabels = new JPanel(new BorderLayout());
+        pnlSliderLabels.setOpaque(false);
+        JLabel lblFine = new JLabel("Fine", JLabel.LEFT);
+        lblFine.setFont(new Font("SansSerif", Font.PLAIN, 8));
+        JLabel lblCoarse = new JLabel("Coarse", JLabel.RIGHT);
+        lblCoarse.setFont(new Font("SansSerif", Font.PLAIN, 8));
+        pnlSliderLabels.add(lblFine, BorderLayout.WEST);
+        pnlSliderLabels.add(lblCoarse, BorderLayout.EAST);
+        pnlSlider.add(pnlSliderLabels, BorderLayout.SOUTH);
+        contentLOD.add(pnlSlider);
+        
+        JButton btnBest = new JButton("✨ Best");
+        btnBest.setFont(new Font("SansSerif", Font.BOLD, 10));
+        btnBest.setMargin(new Insets(4, 4, 4, 4));
+        btnBest.setFocusable(false);
+        btnBest.addActionListener(e -> {
+            sliderLOD.setValue(0);
+            if (glViewer != null) {
+                glViewer.setLodFactor(0.0f);
+            }
+        });
+        contentLOD.add(btnBest);
+        
+        JPanel pnlEngine = new JPanel(new GridLayout(2, 1));
+        pnlEngine.setOpaque(false);
         JRadioButton rbCPU = new JRadioButton("CPU", true);
+        rbCPU.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        rbCPU.setOpaque(false);
+        rbCPU.setFocusable(false);
         JRadioButton rbGPU = new JRadioButton("GPU", false);
+        rbGPU.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        rbGPU.setOpaque(false);
+        rbGPU.setFocusable(false);
         ButtonGroup bgEngine = new ButtonGroup();
         bgEngine.add(rbCPU);
         bgEngine.add(rbGPU);
@@ -826,41 +1015,157 @@ public class Viewer3DController extends JFrame {
         });
         rbGPU.addActionListener(e -> {
             activateGPUMode();
+            if (glViewer != null) {
+                float factor = sliderLOD.getValue() / 100.0f;
+                glViewer.setLodFactor(factor);
+            }
         });
-        groupEngine.add(rbCPU);
-        groupEngine.add(rbGPU);
-        vrToolbar.add(groupEngine);
-
-        // 4. Crop
-        JPanel groupCrop = createToolbarGroup("Crop");
-        JToggleButton tglCrop = new JToggleButton("Crop");
+        pnlEngine.add(rbCPU);
+        pnlEngine.add(rbGPU);
+        contentLOD.add(pnlEngine);
+        
+        JToggleButton tglCrop = new JToggleButton("✂ Crop Box");
+        tglCrop.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        tglCrop.setMargin(new Insets(4, 4, 4, 4));
+        tglCrop.setFocusable(false);
         tglCrop.addActionListener(e -> {
             this.showCropBox = tglCrop.isSelected();
             repaint();
         });
-        groupCrop.add(tglCrop);
-        vrToolbar.add(groupCrop);
-
-        // 5. Orientation
-        JPanel groupOrient = createToolbarGroup("Orientation");
-        JButton btnOrient = new JButton("Orient");
+        contentLOD.add(tglCrop);
+        
+        JButton btnOrient = new JButton("🧊 Orient");
+        btnOrient.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        btnOrient.setMargin(new Insets(4, 4, 4, 4));
+        btnOrient.setFocusable(false);
         btnOrient.addActionListener(e -> {
-            // TODO: Orientation menu
+            JPopupMenu menu = new JPopupMenu();
+            
+            JMenuItem itemLat = new JMenuItem("Lateral (Left-Right)");
+            itemLat.addActionListener(ev -> {
+                if (glViewer != null) {
+                    glViewer.setRotation(-1.5707963f, 1.5707963f);
+                }
+                repaint();
+            });
+            menu.add(itemLat);
+            
+            JMenuItem itemAnt = new JMenuItem("Anterior-Posterior");
+            itemAnt.addActionListener(ev -> {
+                if (glViewer != null) {
+                    glViewer.setRotation(-1.5707963f, 0.0f);
+                }
+                repaint();
+            });
+            menu.add(itemAnt);
+            
+            JMenuItem itemSup = new JMenuItem("Superior-Inferior");
+            itemSup.addActionListener(ev -> {
+                if (glViewer != null) {
+                    glViewer.setRotation(0.0f, 0.0f);
+                }
+                repaint();
+            });
+            menu.add(itemSup);
+            
+            menu.show(btnOrient, 0, btnOrient.getHeight());
         });
-        groupOrient.add(btnOrient);
-        vrToolbar.add(groupOrient);
+        contentLOD.add(btnOrient);
+        vrToolbar.add(groupLOD);
 
-        // 6. Shading
-        JPanel groupShading = createToolbarGroup("Shading");
+        // 4. Shading
+        JPanel contentShading = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JPanel groupShading = createToolbarGroup("Shading", contentShading);
+        
         JCheckBox chkShading = new JCheckBox("Shading", true);
+        chkShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        chkShading.setOpaque(false);
+        chkShading.setFocusable(false);
+        
+        JLabel lblParams = new JLabel("<html>Ambient: 0.20<br>Diffuse: 0.90<br>Specular: 0.30-15.0</html>");
+        lblParams.setFont(new Font("SansSerif", Font.PLAIN, 8));
+        lblParams.setForeground(Color.GRAY);
+        
         chkShading.addActionListener(e -> {
-            // 現在のGPUシェーダは常時シェーディング有効。将来の切替フラグ用にUIのみ保持。
+            boolean isShaded = chkShading.isSelected();
+            if (glViewer != null) {
+                glViewer.setUseShading(isShaded);
+            }
+            lblParams.setEnabled(isShaded);
             repaint();
         });
-        groupShading.add(chkShading);
+        contentShading.add(chkShading);
+        
         JButton btnEditShading = new JButton("Edit");
-        groupShading.add(btnEditShading);
+        btnEditShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        btnEditShading.setMargin(new Insets(2, 4, 2, 4));
+        btnEditShading.setFocusable(false);
+        btnEditShading.addActionListener(e -> {
+            JOptionPane.showMessageDialog(this, "Ambient: 0.20\nDiffuse: 0.90\nSpecular: 0.30\nShininess: 15.0", "Shading Parameters", JOptionPane.INFORMATION_MESSAGE);
+        });
+        contentShading.add(btnEditShading);
+        contentShading.add(lblParams);
         vrToolbar.add(groupShading);
+
+        // 5. Perspective & Filters
+        JPanel contentPersp = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JPanel groupPersp = createToolbarGroup("Perspective & Filters", contentPersp);
+        
+        JPanel pnlPerspRadios = new JPanel(new GridLayout(3, 1));
+        pnlPerspRadios.setOpaque(false);
+        JRadioButton rbParallel = new JRadioButton("Parallel", false);
+        rbParallel.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        rbParallel.setOpaque(false);
+        rbParallel.setFocusable(false);
+        JRadioButton rbPersp = new JRadioButton("Perspective", true);
+        rbPersp.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        rbPersp.setOpaque(false);
+        rbPersp.setFocusable(false);
+        JRadioButton rbEndo = new JRadioButton("Endoscopy", false);
+        rbEndo.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        rbEndo.setOpaque(false);
+        rbEndo.setFocusable(false);
+        
+        ButtonGroup bgPersp = new ButtonGroup();
+        bgPersp.add(rbParallel);
+        bgPersp.add(rbPersp);
+        bgPersp.add(rbEndo);
+        
+        ActionListener alPersp = ev -> {
+            boolean isP = rbPersp.isSelected() || rbEndo.isSelected();
+            if (glViewer != null) {
+                glViewer.setPerspective(isP);
+            }
+            repaint();
+        };
+        rbParallel.addActionListener(alPersp);
+        rbPersp.addActionListener(alPersp);
+        rbEndo.addActionListener(alPersp);
+        
+        pnlPerspRadios.add(rbParallel);
+        pnlPerspRadios.add(rbPersp);
+        pnlPerspRadios.add(rbEndo);
+        contentPersp.add(pnlPerspRadios);
+        
+        JPanel pnlFilter = new JPanel(new BorderLayout());
+        pnlFilter.setOpaque(false);
+        JLabel lblFilter = new JLabel("Convolution Filter:", JLabel.LEFT);
+        lblFilter.setFont(new Font("SansSerif", Font.BOLD, 8));
+        pnlFilter.add(lblFilter, BorderLayout.NORTH);
+        
+        JComboBox<String> cbFilter = new JComboBox<>(new String[] { "Apply a filter...", "Smooth 3x3", "Sharpen 3x3" });
+        cbFilter.setFont(new Font("SansSerif", Font.PLAIN, 9));
+        cbFilter.setFocusable(false);
+        pnlFilter.add(cbFilter, BorderLayout.CENTER);
+        contentPersp.add(pnlFilter);
+        
+        JButton btnDoubleArrow = new JButton(">>");
+        btnDoubleArrow.setFont(new Font("SansSerif", Font.BOLD, 8));
+        btnDoubleArrow.setMargin(new Insets(2, 2, 2, 2));
+        btnDoubleArrow.setFocusable(false);
+        contentPersp.add(btnDoubleArrow);
+        
+        vrToolbar.add(groupPersp);
 
         setLayout(new BorderLayout());
         add(vrToolbar, BorderLayout.NORTH);
@@ -935,10 +1240,9 @@ public class Viewer3DController extends JFrame {
         return p;
     }
 
-    private JPanel createToolbarGroup(String title) {
+    private JPanel createToolbarGroup(String title, JPanel content) {
         JPanel p = new JPanel(new BorderLayout());
         p.setOpaque(false);
-        JPanel content = new JPanel();
         content.setOpaque(false);
         p.add(content, BorderLayout.CENTER);
         JLabel lbl = new JLabel(title, JLabel.CENTER);

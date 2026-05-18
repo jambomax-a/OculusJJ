@@ -39,7 +39,9 @@ public class CPURaycastRenderer {
     private float offsetZ = 0.0f;
     private static final float PAN_LIMIT = 0.35f;
 
-    private static final int STEP_COUNT = 256;
+    private int lodSteps = 256;
+    private boolean useShading = true;
+    private boolean isPerspective = true;
     private int debugPrintCount = 0;
 
     public CPURaycastRenderer() {
@@ -123,6 +125,18 @@ public class CPURaycastRenderer {
         this.offsetZ = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, this.offsetZ + dz));
     }
 
+    public void setStepSizeFactor(float factor) {
+        this.lodSteps = (int) (512 - factor * (512 - 128));
+    }
+
+    public void setUseShading(boolean shading) {
+        this.useShading = shading;
+    }
+
+    public void setPerspective(boolean p) {
+        this.isPerspective = p;
+    }
+
     /** Pre-computed gradient volume をCPU上で計算する（重い処理。非同期で呼ぶこと）。 */
     public void computeGradients() {
         if (volume == null)
@@ -169,19 +183,43 @@ public class CPURaycastRenderer {
             for (int px = 0; px < width; px++) {
                 float ndcX = (2.0f * px / width - 1.0f) * aspect * fovFactor / zoom;
                 float ndcY = (1.0f - 2.0f * py / height) * fovFactor / zoom;
-                float[] vModel = transformDirTranspose(rot, ndcX, ndcY, -1.0f);
-                float[] rayDir = new float[] {
-                    vModel[0] / voxScaleX,
-                    vModel[1] / voxScaleY,
-                    vModel[2] / voxScaleZ
-                };
-                float len = (float) Math.sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
-                if (len > 0) {
-                    rayDir[0] /= len;
-                    rayDir[1] /= len;
-                    rayDir[2] /= len;
+                
+                float rayStartX, rayStartY, rayStartZ;
+                float[] rayDir = new float[3];
+                
+                if (isPerspective) {
+                    float[] vModel = transformDirTranspose(rot, ndcX, ndcY, -1.0f);
+                    rayDir[0] = vModel[0] / voxScaleX;
+                    rayDir[1] = vModel[1] / voxScaleY;
+                    rayDir[2] = vModel[2] / voxScaleZ;
+                    float len = (float) Math.sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
+                    if (len > 0) {
+                        rayDir[0] /= len;
+                        rayDir[1] /= len;
+                        rayDir[2] /= len;
+                    }
+                    rayStartX = camX;
+                    rayStartY = camY;
+                    rayStartZ = camZ;
+                } else {
+                    float[] pModel = transformDirTranspose(rot, ndcX, ndcY, camZVal);
+                    rayStartX = pModel[0] / voxScaleX + 0.5f;
+                    rayStartY = pModel[1] / voxScaleY + 0.5f;
+                    rayStartZ = pModel[2] / voxScaleZ + 0.5f;
+                    
+                    float[] dModel = transformDirTranspose(rot, 0.0f, 0.0f, -1.0f);
+                    rayDir[0] = dModel[0] / voxScaleX;
+                    rayDir[1] = dModel[1] / voxScaleY;
+                    rayDir[2] = dModel[2] / voxScaleZ;
+                    float len = (float) Math.sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
+                    if (len > 0) {
+                        rayDir[0] /= len;
+                        rayDir[1] /= len;
+                        rayDir[2] /= len;
+                    }
                 }
-                pixels[py * width + px] = castRay(camX, camY, camZ, rayDir);
+                
+                pixels[py * width + px] = castRay(rayStartX, rayStartY, rayStartZ, rayDir);
             }
         });
 
@@ -216,13 +254,14 @@ public class CPURaycastRenderer {
             return 0;
         }
 
-        float dt = 0.002f;
+        float dt = (tEnd - t) / lodSteps;
+        if (dt < 0.0005f) dt = 0.0005f; // prevent infinite loop
         float accR = 0, accG = 0, accB = 0, accA = 0, maxVal = 0;
         float winLow = windowLevel - windowWidth * 0.5f;
         float winHigh = windowLevel + windowWidth * 0.5f;
 
         int step = 0;
-        for (float curT = t; curT <= tEnd && step < 512; curT += dt, step++) {
+        for (float curT = t; curT <= tEnd && step < lodSteps; curT += dt, step++) {
             float cx = ox + dir[0] * curT + offsetX;
             float cy = oy + dir[1] * curT + offsetY;
             float cz = oz + dir[2] * curT + offsetZ;
@@ -329,6 +368,9 @@ public class CPURaycastRenderer {
     }
 
     private float[] phongShade(float cx, float cy, float cz, float[] rgba, float[] dir) {
+        if (!useShading) {
+            return new float[] { rgba[0], rgba[1], rgba[2] };
+        }
         float nx = 0, ny = 0, nz = 0;
         if (gradientsReady) {
             float px = cx * (dimX - 1);

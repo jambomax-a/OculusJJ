@@ -78,6 +78,9 @@ public class GLViewer3D extends AWTGLCanvas {
     private float spacingX = 1.0f, spacingY = 1.0f, spacingZ = 1.0f;
     private int engineMode = ENGINE_CPU;
     private CPURaycastRenderer cpuRenderer;
+    private float stepSize = 0.002f;
+    private int useShading = 1;
+    private boolean isPerspective = true;
     private volatile BufferedImage cpuImage;
     private final Object cpuRenderLock = new Object();
     private boolean cpuRenderInFlight = false;
@@ -153,6 +156,8 @@ public class GLViewer3D extends AWTGLCanvas {
             renderer.setZoom(zoom);
             renderer.setOffset(offsetX, offsetY, offsetZ);
             renderer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
+            renderer.setUseShading(this.useShading == 1);
+            renderer.setPerspective(this.isPerspective);
             if (transferFunction != null) {
                 renderer.setTransferFunction(transferFunction);
             }
@@ -191,6 +196,21 @@ public class GLViewer3D extends AWTGLCanvas {
         return cpuImage;
     }
 
+    private float lodFactor = 0.25f;
+
+    public void setLodFactor(float factor) {
+        this.lodFactor = factor;
+        if (cpuRenderer != null) {
+            cpuRenderer.setStepSizeFactor(factor);
+        }
+        this.stepSize = 0.001f + factor * (0.015f - 0.001f);
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint();
+        }
+    }
+
     public void requestCpuRender() {
         if (engineMode != ENGINE_CPU || cpuRenderer == null) {
             repaint();
@@ -220,7 +240,8 @@ public class GLViewer3D extends AWTGLCanvas {
                 int w = getWidth();
                 int h = getHeight();
                 if (w > 0 && h > 0) {
-                    int renderW = Math.min(w, 720);
+                    int maxW = (int) (720 - lodFactor * (720 - 180));
+                    int renderW = Math.min(w, maxW);
                     int renderH = (int) (h * ((float) renderW / w));
                     cpuImage = cpuRenderer.render(renderW, renderH);
                 }
@@ -395,6 +416,52 @@ public class GLViewer3D extends AWTGLCanvas {
         }
     }
 
+    public void setStepSize(float s) {
+        this.stepSize = s;
+        if (engineMode != ENGINE_CPU) {
+            repaint();
+        }
+    }
+
+    public void setUseShading(boolean shading) {
+        this.useShading = shading ? 1 : 0;
+        if (cpuRenderer != null) {
+            cpuRenderer.setUseShading(shading);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint();
+        }
+    }
+
+    public void setPerspective(boolean p) {
+        this.isPerspective = p;
+        if (cpuRenderer != null) {
+            cpuRenderer.setPerspective(p);
+        }
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint();
+        }
+    }
+
+    private float[] orthographic(float left, float right, float bottom, float top, float near, float far) {
+        float x_ortho = 2.0f / (right - left);
+        float y_ortho = 2.0f / (top - bottom);
+        float z_ortho = -2.0f / (far - near);
+        float tx = -(right + left) / (right - left);
+        float ty = -(top + bottom) / (top - bottom);
+        float tz = -(far + near) / (far - near);
+        return new float[] {
+            x_ortho, 0, 0, 0,
+            0, y_ortho, 0, 0,
+            0, 0, z_ortho, 0,
+            tx, ty, tz, 1
+        };
+    }
+
     // --- シェーダー ---
     private static final String VERT = "#version 330 core\n" +
             "layout(location=0) in vec3 aPos;\n" +
@@ -416,6 +483,7 @@ public class GLViewer3D extends AWTGLCanvas {
             "uniform sampler3D gradTex;\n" +
             "uniform sampler1D tfTex;\n" +
             "uniform float stepSize;\n" +
+            "uniform int useShading;\n" +
             "uniform int renderMode;\n" +
             "uniform float isoThreshold;\n" +
             "uniform float windowLevel;\n" +
@@ -451,15 +519,19 @@ public class GLViewer3D extends AWTGLCanvas {
             "        if(raw<winLow||raw>winHigh){ pos+=ray*stepSize; continue; }\n" +
             "        vec4 tf=texture(tfTex,tfT);\n" +
             "        if(tf.a>0.005){\n" +
-            // HU勾配は密度増加方向(内向き)を向くため否定して外向き法線にする
-            "          vec3 N=normalize(-(texture(gradTex,pos).xyz*2.0-1.0));\n" +
-            "          vec3 L=normalize(lightDir);\n" +
-            "          vec3 V=normalize(-ray);\n" +
-            "          vec3 H=normalize(L+V);\n" + // Blinn-Phong (HOROSはこちら)
-            "          float ambient=0.20;\n" +
-            "          float diffuse=max(dot(N,L),0.0)*0.90;\n" +
-            "          float spec=pow(max(dot(N,H),0.0),15.0)*0.30;\n" +
-            "          vec3 col=tf.rgb*(ambient+diffuse)+vec3(spec);\n" +
+            "          vec3 col;\n" +
+            "          if(useShading==1){\n" +
+            "            vec3 N=normalize(-(texture(gradTex,pos).xyz*2.0-1.0));\n" +
+            "            vec3 L=normalize(lightDir);\n" +
+            "            vec3 V=normalize(-ray);\n" +
+            "            vec3 H=normalize(L+V);\n" + // Blinn-Phong
+            "            float ambient=0.20;\n" +
+            "            float diffuse=max(dot(N,L),0.0)*0.90;\n" +
+            "            float spec=pow(max(dot(N,H),0.0),15.0)*0.30;\n" +
+            "            col=tf.rgb*(ambient+diffuse)+vec3(spec);\n" +
+            "          } else {\n" +
+            "            col=tf.rgb;\n" +
+            "          }\n" +
             "          acc.rgb+=(1.0-acc.a)*col*tf.a;\n" +
             "          acc.a+=(1.0-acc.a)*tf.a;\n" +
             "          if(acc.a>=0.95) break;\n" +
@@ -730,7 +802,13 @@ public class GLViewer3D extends AWTGLCanvas {
         if (tfDirty)
             uploadTransferFunction();
 
-        float[] proj = perspective(45f, w / h, 0.1f, 100f);
+        float[] proj;
+        if (isPerspective) {
+            proj = perspective(45f, w / h, 0.1f, 100f);
+        } else {
+            float size = 0.5f / zoom;
+            proj = orthographic(-size * (w / h), size * (w / h), -size, size, 0.1f, 100f);
+        }
         float[] view = translate(0, 0, -1.2f / zoom);
         // yaw(Y) -> pitch(X) の順にすることで、初期姿勢でも横回転が効きやすい
         float[] mdl = multiply(multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0)),
@@ -754,7 +832,8 @@ public class GLViewer3D extends AWTGLCanvas {
         float vCamZ = cz + 0.5f;
         GL33.glUniform3f(GL33.glGetUniformLocation(shaderProgram, "uCamPos"), vCamX, vCamY, vCamZ);
 
-        u1f("stepSize", 0.002f);
+        u1f("stepSize", stepSize);
+        u1i("useShading", useShading);
         // 最初の3GPUフレームで診断情報をログ出力
         if (gpuFrameCount <= 3) {
             System.out.println("DEBUG GPU[" + gpuFrameCount + "]: renderMode=" + renderMode
