@@ -1,61 +1,74 @@
 # メニューおよびツールバー構成定義書 (Java Porting)
 
 ## 1. 概要
-本ドキュメントは、Horosのビューアにおけるメニュー構造とツールバーの構成を定義する。Java Swingでの `JMenuBar` および `JToolBar` 実装の設計根拠とする。
+本ドキュメントは、OculusJJにおける2D/3Dビューアのメニューおよびツールバーの構成を定義する。HOROS-20240407の操作系統を再現し、Java Swingの `JMenuBar` および `JToolBar` を介して提供される機能を網羅する。
 
-## 2. メニュー構造 (Menu Hierarchy)
+---
 
-ビューアウィンドウに付随するメインメニューの構成は以下の通り。各項目は `ViewerController` または `AppController` のアクションに紐づく。
+## 2. 2D ビューア メニュー構造 (Menu Hierarchy)
+
+2Dビューアウィンドウにおけるメインメニューの構成。
 
 ### 2.1 File メニュー
-- **Open...**: ファイル選択ダイアログを開き、DICOMファイルをロードする。
-- **Import...**: フォルダを指定して一括インポートを実行する。
-- **Export...**: 現在のシリーズをDICOM形式で書き出す。
-- **Print...**: `AYDicomPrintWindowController` を介して印刷設定を行う。
-- **Close Window**: 現在のビューアウィンドウを閉じる。
+- **Open...**: 単一または複数DICOMファイルの選択ロード。
+- **Import...**: フォルダ指定によるDICOMスタディの一括スキャン・データベース登録。
+- **Export...**: 表示中の画像シリーズをDICOM形式でローカルへ書き出し。
+- **Close Window**: ビューアを閉じ、割り当てられていた2D画像キャッシュメモリを安全に解放。
 
-### 2.2 Edit メニュー
-- **Undo / Redo**: ROI編集やアノテーションの操作履歴を管理。
-- **Copy / Paste**: ROIやアノテーションの複製。
-- **Select All**: 全てのROIを選択状態にする。
+### 2.2 View メニュー
+- **Zoom / Pan**: 拡大倍率、およびパニングオフセットの個別リセット。
+- **Window Level/Width (WL/WW)**: 
+  - `Reset`: デフォルト値への復帰。
+  - `Presets`: Brain (40/80), Bone (300/1500), Lung (-600/1500), Soft Tissue (40/400) 等の窓適用。
+- **Tiling (タイル・レイアウト表示)**: 
+  - `1x1`, `2x1`, `2x2`, `4x1` 等の分割レイアウト切り替え。
+- **Sync**: ビューア間同期モード (Absolute, Ratio, Relative, Location) の有効化。
 
-### 2.3 View メニュー
-- **Zoom / Pan**: ズームリセット、パンリセット機能。
-- **Window Level/Width**: 
-  - `Reset`: デフォルト値に戻す。
-  - `Presets`: Brain, Bone, Lung などのプリセット適用。
-- **Tiling (タイル表示)**: 
-  - `1x1`, `2x1`, `2x2`, `4x1` などのレイアウト切り替え。
-  - `Tiled Windows` モードの有効/無効。
-- **Full Screen**: 全画面表示への切り替え。
-- **Sync**: 同期モード (Absolute, Ratio, Relative, Location) の選択。
+---
 
-### 2.4 Window メニュー
-- **Preferences...**: `Preference Panes` を開き、システム設定を変更する。
-- **Layouts**: 保存済みのレイアウトを適用する。
+## 3. 3D ビューア専用メニュー構造 (3D Viewer Menus)
 
-## 3. ツールバー (Toolbar Panel) 定義
+3D ビューア (MIP/VR/ISO) ウィンドウで利用可能な専用アクションメニュー。
 
-ツールバーは、頻繁に使用するツールへのクイックアクセスを提供し、同時にウィンドウフォーカスを制御する役割を持つ。
+### 3.1 Mode (描画モード切替) メニュー
+- **MIP (Maximum Intensity Projection)**: 最大強度投影モードの即時適用。
+- **Volume Rendering (VR)**: 3Dボリュームレンダリング（伝達関数マッピング付き）への切り替え。
+- **Surface Rendering (ISO)**: 閾値等値面抽出描画モードの適用。
+- **Reset View**: ズーム、パニング移動量、および回転角度（CT軸位断面俯瞰）を初期状態に完全復元。
 
-### 3.1 配置ツールボタン (Tool Buttons)
-| アイコン | 機能 | 対応ショートカット | 内部アクション |
+### 3.2 3D 制御パネル
+- **ISO Threshold (閾値調整スピナー/スライダー)**: Surface Rendering における抽出閾値の微細コントロール。
+- **WW/WL 窓調整機能**: 3Dボリューム伝達関数（TF）マッピングの境界調節。
+- **自動解放 (Window Closing / Cleanup)**:
+  - ウィンドウがクローズ（`dispose`）された際、AWTGLCanvasのリソース、事前計算勾配バッファ、HU変換済み `short[]` ボリューム、およびTFテクスチャキャッシュを安全に解放（`cleanup()` メソッドの自動実行）。メモリリーク（OOM）を徹底防止。
+
+---
+
+## 4. ツールバー構成 (Toolbar Panel Map)
+
+ツールバーは、頻繁に使用するツールへのクイックアクセスを提供し、同時にウィンドウフォーカスを制御する。
+
+### 4.1 2D ビューア用ツールバー
+| アイコン / ラベル | 実行されるアクション | 対応ショートカット | 内部状態遷移 |
 | :--- | :--- | :--- | :--- |
-| 🔍 | **Zoom** | `Z` | `currentTool = ZoomTool` |
-| ↔️ | **Pan** | `P` | `currentTool = PanTool` |
-| 📏 | **Measure** | `M` | `currentTool = MeasureTool` |
-| 🎚️ | **WL/WW** | `W` | `currentTool = WLWWTool` |
-| ✍️ | **Text** | `T` | `currentTool = TextTool` |
-| 🖱️ | **Selector** | `S` | `currentTool = SelectorTool` |
+| **🔍 Zoom** | ズームツールをアクティブ化。 | `Z` | `currentTool = ToolMode.tZoom` |
+| **↔️ Pan** | 平行移動ツールをアクティブ化。 | `P` | `currentTool = ToolMode.tPan` |
+| **📏 Measure** | 長さ計測線ROIの描画ツール。 | `M` | `currentTool = ToolMode.tMeasure` |
+| **🎚️ WL/WW** | Window Level/Width 調整ツール。 | `W` | `currentTool = ToolMode.tWL` |
+| **🖱️ Selector** | 通常の選択・ROI操作ツール。 | `S` | `currentTool = ToolMode.tSelect` |
+| **3D MIP** | 現在のスタディから3DビューアをMIPモードで起動。 | - | `Viewer3DController.openMIP()` |
+| **3D VR** | 現在のスタディから3DビューアをVRモードで起動。 | - | `Viewer3DController.openVR()` |
 
-### 3.2 フォーカス管理ロジック (Focus Management)
-ツールバーおよびサムネイルパネルは、以下の通知を監視し、対応するビューアウィンドウを前面に出す挙動を持つ。
+### 4.2 3D ビューア用ツールバー
+3D画面のコンテキストに合わせて提供される高速切り替えバー。
+- **3D Rotate (回転ボタン)**: ボリューム回転ツール。
+- **3D Pan (パンボタン)**: スクリーン整合パンニングツール。
+- **3D Zoom (ズームボタン)**: 拡大縮小ツール。
+- **3D Reset (リセットボタン)**: 視野角度・位置の初期リセット。
 
-- **監視通知**: `NSWindowDidBecomeMainNotification`, `NSWindowDidBecomeKeyNotification`
-- **挙動**: ツールバーパネル自体がフォーカスを得た際、現在アクティブな `ViewerController` が管理するウィンドウを `makeKeyAndOrderFront` (Javaでは `toFront()` および `requestFocus()`) する。
+---
 
-## 4. 実装上の注意点 (Java Swing)
+## 5. フォーカス管理とアクション共通化
 
-1. **動的メニュー更新**: 選択されているシリーズや画像の枚数に応じて、メニュー項目の有効/無効 (Enabled/Disabled) を動的に切り替える必要がある。
-2. **アクションの共通化**: メニュー項目とツールバーボタンは、同一の `Action` オブジェクトを共有して実装し、一貫性を確保する。
-3. **コンテキストメニュー**: 右クリック時に表示されるメニューは、`JPopupMenu` を使用し、`03-Interaction-Matrix.md` で定義された座標ベースの判定ロジックを適用する。
+1. **アクションの共通化**: メニュー項目とツールバーボタンは同一の Swing `Action` を共有し、ツールの有効/無効化やツール状態の同期を一貫して管理する。
+2. **フォーカス制御（Key Window）**: サムネイルクリックやメニュー押下時、アクティブなビューアコンポーネントが `requestFocusInWindow()` を呼び出し、`isKeyView` 状態（同期元のアクティブフラグ）を強制確保する。
