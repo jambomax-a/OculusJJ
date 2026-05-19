@@ -37,11 +37,11 @@ public class CPURaycastRenderer {
     private float offsetX = 0.0f;
     private float offsetY = 0.0f;
     private float offsetZ = 0.0f;
-    private static final float PAN_LIMIT = 0.35f;
+    private static final float PAN_LIMIT = 100.0f;
 
     private int lodSteps = 256;
     private boolean useShading = true;
-    private boolean isPerspective = true;
+    private boolean isPerspective = false;
     private int debugPrintCount = 0;
 
     public CPURaycastRenderer() {
@@ -172,12 +172,18 @@ public class CPURaycastRenderer {
 
         float camZVal = 1.2f / zoom;
         float[] rot = multiplyMatrix(rotateMatrix(rotateY, 0, 1, 0), rotateMatrix(rotateX, 1, 0, 0));
-        float rx = rot[2] * camZVal;
-        float ry = rot[6] * camZVal;
-        float rz = rot[10] * camZVal;
-        float camX = rx / voxScaleX + 0.5f;
-        float camY = ry / voxScaleY + 0.5f;
-        float camZ = rz / voxScaleZ + 0.5f;
+
+        float cx_view = -offsetX;
+        float cy_view = -offsetY;
+        float cz_view = camZVal - offsetZ;
+
+        float rx = rot[0] * cx_view + rot[1] * cy_view + rot[2] * cz_view;
+        float ry = rot[4] * cx_view + rot[5] * cy_view + rot[6] * cz_view;
+        float rz = rot[8] * cx_view + rot[9] * cy_view + rot[10] * cz_view;
+
+        float camStartX = rx / voxScaleX + 0.5f;
+        float camStartY = ry / voxScaleY + 0.5f;
+        float camStartZ = rz / voxScaleZ + 0.5f;
 
         java.util.stream.IntStream.range(0, height).parallel().forEach(py -> {
             for (int px = 0; px < width; px++) {
@@ -198,14 +204,21 @@ public class CPURaycastRenderer {
                         rayDir[1] /= len;
                         rayDir[2] /= len;
                     }
-                    rayStartX = camX;
-                    rayStartY = camY;
-                    rayStartZ = camZ;
+                    rayStartX = camStartX;
+                    rayStartY = camStartY;
+                    rayStartZ = camStartZ;
                 } else {
-                    float[] pModel = transformDirTranspose(rot, ndcX, ndcY, camZVal);
-                    rayStartX = pModel[0] / voxScaleX + 0.5f;
-                    rayStartY = pModel[1] / voxScaleY + 0.5f;
-                    rayStartZ = pModel[2] / voxScaleZ + 0.5f;
+                    float vx_view = ndcX - offsetX;
+                    float vy_view = ndcY - offsetY;
+                    float vz_view = camZVal - offsetZ;
+                    
+                    float prx = rot[0] * vx_view + rot[1] * vy_view + rot[2] * vz_view;
+                    float pry = rot[4] * vx_view + rot[5] * vy_view + rot[6] * vz_view;
+                    float prz = rot[8] * vx_view + rot[9] * vy_view + rot[10] * vz_view;
+                    
+                    rayStartX = prx / voxScaleX + 0.5f;
+                    rayStartY = pry / voxScaleY + 0.5f;
+                    rayStartZ = prz / voxScaleZ + 0.5f;
                     
                     float[] dModel = transformDirTranspose(rot, 0.0f, 0.0f, -1.0f);
                     rayDir[0] = dModel[0] / voxScaleX;
@@ -233,7 +246,7 @@ public class CPURaycastRenderer {
             debugPrintCount++;
             System.out.println("DEBUG CPURenderer: renderW=" + width + ", renderH=" + height 
                 + ", nonZero=" + nonZero + " (out of " + pixels.length + ")"
-                + ", cam=(" + camX + "," + camY + "," + camZ + ")"
+                + ", cam=(" + camStartX + "," + camStartY + "," + camStartZ + ")"
                 + ", voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")");
         }
 
@@ -262,9 +275,9 @@ public class CPURaycastRenderer {
 
         int step = 0;
         for (float curT = t; curT <= tEnd && step < lodSteps; curT += dt, step++) {
-            float cx = ox + dir[0] * curT + offsetX;
-            float cy = oy + dir[1] * curT + offsetY;
-            float cz = oz + dir[2] * curT + offsetZ;
+            float cx = ox + dir[0] * curT;
+            float cy = oy + dir[1] * curT;
+            float cz = oz + dir[2] * curT;
             if (cx >= clipMinX && cx <= clipMaxX && cy >= clipMinY && cy <= clipMaxY && cz >= clipMinZ
                     && cz <= clipMaxZ) {
                 float hu = sampleHU(cx, cy, cz);

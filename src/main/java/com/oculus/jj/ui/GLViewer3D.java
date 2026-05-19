@@ -50,7 +50,7 @@ public class GLViewer3D extends AWTGLCanvas {
     private float rotateY = 1.5707963f;
     private float zoom = 1.0f;
     private float offsetX = 0, offsetY = 0, offsetZ = 0;
-    private static final float PAN_LIMIT = 0.35f;
+    private static final float PAN_LIMIT = 100.0f;
     private int renderMode = 1; // 0=MIP, 1=VR, 2=ISO
 
     // Phase 2: Phong ライト方向
@@ -80,7 +80,7 @@ public class GLViewer3D extends AWTGLCanvas {
     private CPURaycastRenderer cpuRenderer;
     private float stepSize = 0.002f;
     private int useShading = 1;
-    private boolean isPerspective = true;
+    private boolean isPerspective = false;
     private volatile BufferedImage cpuImage;
     private final Object cpuRenderLock = new Object();
     private boolean cpuRenderInFlight = false;
@@ -111,18 +111,38 @@ public class GLViewer3D extends AWTGLCanvas {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
                 markOverlayDirty();
+                for (java.awt.event.MouseListener listener : GLViewer3D.this.getMouseListeners()) {
+                    if (listener != this) {
+                        listener.mousePressed(e);
+                    }
+                }
             }
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 markOverlayDirty();
+                for (java.awt.event.MouseListener listener : GLViewer3D.this.getMouseListeners()) {
+                    if (listener != this) {
+                        listener.mouseReleased(e);
+                    }
+                }
             }
             @Override
             public void mouseDragged(java.awt.event.MouseEvent e) {
                 markOverlayDirty();
+                for (java.awt.event.MouseMotionListener listener : GLViewer3D.this.getMouseMotionListeners()) {
+                    if (listener != this) {
+                        listener.mouseDragged(e);
+                    }
+                }
             }
             @Override
             public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
                 markOverlayDirty();
+                for (java.awt.event.MouseWheelListener listener : GLViewer3D.this.getMouseWheelListeners()) {
+                    if (listener != this) {
+                        listener.mouseWheelMoved(e);
+                    }
+                }
             }
         };
         this.addMouseListener(overlayMouseListener);
@@ -144,6 +164,12 @@ public class GLViewer3D extends AWTGLCanvas {
             cpuRenderer.setVolumeData(vol, w, h, d);
             requestCpuRender();
         }
+    }
+
+    private boolean volumeNeedsReupload = false;
+
+    public void triggerVolumeReupload() {
+        this.volumeNeedsReupload = true;
     }
 
     public void setCpuRenderer(CPURaycastRenderer renderer) {
@@ -321,6 +347,10 @@ public class GLViewer3D extends AWTGLCanvas {
         }
     }
 
+    public float getOffsetX() { return offsetX; }
+    public float getOffsetY() { return offsetY; }
+    public float getOffsetZ() { return offsetZ; }
+
     public void setClipping(float x0, float x1, float y0, float y1, float z0, float z1) {
         markOverlayDirty();
         clipMinX = x0;
@@ -445,6 +475,10 @@ public class GLViewer3D extends AWTGLCanvas {
         } else {
             repaint();
         }
+    }
+
+    public boolean isPerspective() {
+        return isPerspective;
     }
 
     private float[] orthographic(float left, float right, float bottom, float top, float near, float far) {
@@ -663,6 +697,10 @@ public class GLViewer3D extends AWTGLCanvas {
 
     // ---- Phase 1: Pre-computed Gradient Volume ----
     private void uploadVolume() {
+        if (volumeTexture > 0) {
+            GL33.glDeleteTextures(volumeTexture);
+            volumeTexture = 0;
+        }
         int zStep = (dimZ > 512) ? 2 : 1;
         if (gradientData != null && dimX > 0 && dimY > 0) {
             int calculatedTz = gradientData.length / (dimX * dimY * 3);
@@ -768,10 +806,11 @@ public class GLViewer3D extends AWTGLCanvas {
         if (!dataReady || volume == null)
             return;
 
-        // データがあるのにテクスチャが未作成ならアップロード
-        if (volumeTexture == 0) {
+        // データがあるのにテクスチャが未作成、または再転送要求があればアップロード
+        if (volumeTexture == 0 || volumeNeedsReupload) {
             try {
                 uploadVolume();
+                volumeNeedsReupload = false;
             } catch (Throwable t) {
                 System.err.println("DEBUG: Critical error during uploadVolume:");
                 t.printStackTrace();
@@ -811,8 +850,8 @@ public class GLViewer3D extends AWTGLCanvas {
         }
         float[] view = translate(0, 0, -1.2f / zoom);
         // yaw(Y) -> pitch(X) の順にすることで、初期姿勢でも横回転が効きやすい
-        float[] mdl = multiply(multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0)),
-                scale(voxScaleX, voxScaleY, voxScaleZ));
+        float[] mdl = multiply(translate(offsetX, offsetY, offsetZ), multiply(multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0)),
+                scale(voxScaleX, voxScaleY, voxScaleZ)));
 
         setMat4("projection", proj);
         setMat4("view", view);
@@ -821,9 +860,12 @@ public class GLViewer3D extends AWTGLCanvas {
         // CPU側でモデル/テクスチャ空間 of カメラ位置を逆算してユニフォーム送信 (inverseマトリクス依存排除)
         float camZVal = 1.2f / zoom;
         float[] rot = multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0));
-        float rx = rot[2] * camZVal;
-        float ry = rot[6] * camZVal;
-        float rz = rot[10] * camZVal;
+        float cx_view = -offsetX;
+        float cy_view = -offsetY;
+        float cz_view = camZVal - offsetZ;
+        float rx = rot[0] * cx_view + rot[1] * cy_view + rot[2] * cz_view;
+        float ry = rot[4] * cx_view + rot[5] * cy_view + rot[6] * cz_view;
+        float rz = rot[8] * cx_view + rot[9] * cy_view + rot[10] * cz_view;
         float cx = rx / voxScaleX;
         float cy = ry / voxScaleY;
         float cz = rz / voxScaleZ;
@@ -849,7 +891,7 @@ public class GLViewer3D extends AWTGLCanvas {
         u1f("isoThreshold", gpuFrameCount <= 3 ? -10000.0f : isoThreshold);
         u1f("windowLevel", windowLevel);
         u1f("windowWidth", windowWidth);
-        u3f("uOffset", offsetX, offsetY, offsetZ);
+        u3f("uOffset", 0.0f, 0.0f, 0.0f);
         u3f("lightDir", lightX, lightY, lightZ);
         u3f("clipMin", clipMinX, clipMinY, clipMinZ);
         u3f("clipMax", clipMaxX, clipMaxY, clipMaxZ);
