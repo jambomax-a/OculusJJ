@@ -777,8 +777,8 @@ public class Viewer3DController extends JFrame {
         ButtonGroup bgTools = new ButtonGroup();
         
         // 左クリック時の動作を切り替えるボタンのみに絞る（右ドラッグ=WL/WW, 中ドラッグ=Pan, スクロール=Zoom が常時動作するため）
-        String[] toolLabels = { "↻ Rotate", "🧊 Clip", "🟢 Point", "📏 Meas", "🎯 Scissor", "ROI", "In", "Out" };
-        Tool3D[] toolValues = { Tool3D.ROTATE, Tool3D.CLIPPING, Tool3D.POINT, Tool3D.MEASURE, Tool3D.SCISSOR, Tool3D.ROI, Tool3D.SCISSOR_IN, Tool3D.SCISSOR_OUT };
+        String[] toolLabels = { "↻ Rotate", "🟢 Point", "📏 Meas", "🎯 Scissor", "ROI", "In", "Out" };
+        Tool3D[] toolValues = { Tool3D.ROTATE, Tool3D.POINT, Tool3D.MEASURE, Tool3D.SCISSOR, Tool3D.ROI, Tool3D.SCISSOR_IN, Tool3D.SCISSOR_OUT };
         
         for (int i = 0; i < toolLabels.length; i++) {
             final Tool3D t = toolValues[i];
