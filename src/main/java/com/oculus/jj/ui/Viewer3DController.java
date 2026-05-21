@@ -62,6 +62,10 @@ public class Viewer3DController extends JFrame {
     private Tool3D currentTool = Tool3D.ROTATE;
     private List<com.oculus.jj.model.ROI> roiList = new ArrayList<>();
     private com.oculus.jj.model.ROI activeRoi = null;
+    private com.oculus.jj.model.ROI draggedRoi = null;
+    private int draggedNodeIndex = -1;
+    private final List<JToggleButton> toolButtons = new ArrayList<>();
+    private final List<Point> scissorPoints = new ArrayList<>();
 
     private JDialog clippingDialog;
     private boolean showCropBox = false;
@@ -74,41 +78,120 @@ public class Viewer3DController extends JFrame {
     private volatile boolean gpuActivationInProgress = false;
     private int gpuActivationToken = 0;
     private Point lastMousePos;
+    private KeyEventDispatcher keyboardShortcutDispatcher;
+
+    private void selectTool(Tool3D tool) {
+        this.currentTool = tool;
+        for (JToggleButton btn : toolButtons) {
+            if (btn.getClientProperty("tool") == tool) {
+                btn.setSelected(true);
+                break;
+            }
+        }
+        if (tool == Tool3D.CLIPPING) {
+            showClippingDialog();
+        }
+        repaint();
+    }
 
     private final MouseAdapter glMouseHandler = new MouseAdapter() {
         @Override
         public void mousePressed(MouseEvent e) {
             lastMousePos = e.getPoint();
+            requestFocusInWindow();
 
-            if (currentTool == Tool3D.MEASURE) {
+            Tool3D tool = getEffectiveTool(e);
+
+            // 1. Check if we hit any existing endpoint first
+            if (tool != Tool3D.SCISSOR && tool != Tool3D.BONE_REMOVAL) {
+                HitResult hit = findHitNode(e.getX(), e.getY());
+                if (hit != null) {
+                    draggedRoi = hit.roi;
+                    draggedNodeIndex = hit.nodeIndex;
+                    activeRoi = hit.roi;
+                    repaint();
+                    return;
+                }
+            }
+
+            // 2. If no hit, check tool action
+            if (tool == Tool3D.SCISSOR) {
+                scissorPoints.clear();
+                scissorPoints.add(e.getPoint());
+                repaint();
+                return;
+            }
+
+            if (tool == Tool3D.MEASURE) {
                 com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
+                if (pt == null) {
+                    pt = getVoxelAtDepth(e.getX(), e.getY(), 0.0);
+                }
                 if (pt != null) {
-                    if (activeRoi == null || activeRoi.getPoints3D().size() >= 2) {
-                        activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1,
-                                new Point2D.Float(0, 0));
-                        activeRoi.setName("3D Length " + (roiList.size() + 1));
-                        roiList.add(activeRoi);
-                    }
+                    activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1, new Point2D.Float(0, 0));
+                    activeRoi.setName("3D Length " + (roiList.size() + 1));
                     activeRoi.addPoint3D(pt);
+                    activeRoi.addPoint3D(pt); // Add
+                                              // second
+                                              // point
+                                              // initially
+                                              // at
+                                              // same
+                                              // position
+                    roiList.add(activeRoi);
+                    draggedRoi = activeRoi;
+                    draggedNodeIndex = 1; // Drag the second point
                     repaint();
                 }
                 return;
             }
 
-            if (currentTool == Tool3D.POINT) {
+            if (tool == Tool3D.POINT) {
                 com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
+                if (pt == null) {
+                    pt = getVoxelAtDepth(e.getX(), e.getY(), 0.0);
+                }
                 if (pt != null) {
                     com.oculus.jj.model.ROI pRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.t2DPoint, 1, 1,
                             new Point2D.Float(0, 0));
                     pRoi.setName("3D Point " + (roiList.size() + 1));
                     pRoi.addPoint3D(pt);
                     roiList.add(pRoi);
+                    activeRoi = pRoi;
+                    draggedRoi = pRoi;
+                    draggedNodeIndex = 0; // Drag
+                                          // the
+                                          // point
                     repaint();
                 }
                 return;
             }
 
-            if (currentTool == Tool3D.BONE_REMOVAL) {
+            if (tool == Tool3D.ROI) {
+                com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
+                if (pt == null) {
+                    pt = getVoxelAtDepth(e.getX(), e.getY(), 0.0);
+                }
+                if (pt != null) {
+                    activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tOval, 1, 1, new Point2D.Float(0, 0));
+                    activeRoi.setName("3D Oval " + (roiList.size() + 1));
+                    activeRoi.addPoint3D(pt);
+                    activeRoi.addPoint3D(pt); // Add
+                                              // second
+                                              // point
+                                              // initially
+                                              // at
+                                              // same
+                                              // position
+                    roiList.add(activeRoi);
+                    draggedRoi = activeRoi;
+                    draggedNodeIndex = 1; // Drag the second point
+                    repaint();
+                }
+                return;
+            }
+
+            if (tool == Tool3D.BONE_REMOVAL) {
                 com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
                 if (pt != null) {
                     removeBoneAtVoxel(pt);
@@ -119,18 +202,56 @@ public class Viewer3DController extends JFrame {
 
         @Override
         public void mouseReleased(MouseEvent e) {
+            if (currentTool == Tool3D.SCISSOR) {
+                if (scissorPoints.size() < 3) {
+                    scissorPoints.clear();
+                    repaint();
+                } else if (glViewer != null) {
+                    // ラッソ描画完了後、キーイベントを確実に受信できるようフォーカスをセット
+                    glViewer.requestFocusInWindow();
+                }
+                return;
+            }
+
+            if (draggedRoi != null) {
+                // If it's a newly created measurement or oval and they just clicked without
+                // dragging, discard it
+                if (draggedRoi == activeRoi && (activeRoi.getType() == DCMView.ToolMode.tMesure
+                        || activeRoi.getType() == DCMView.ToolMode.tOval)) {
+                    List<com.oculus.jj.model.ROI.Point3D> points = activeRoi.getPoints3D();
+                    if (points.size() == 2) {
+                        com.oculus.jj.model.ROI.Point3D p1 = points.get(0);
+                        com.oculus.jj.model.ROI.Point3D p2 = points.get(1);
+                        double sx = (pixList != null && !pixList.isEmpty()) ? pixList.get(0).getPixelSpacingX()
+                                : spacingX;
+                        double sy = (pixList != null && !pixList.isEmpty()) ? pixList.get(0).getPixelSpacingY()
+                                : spacingY;
+                        double dist = com.oculus.jj.model.Measurement3D.calculateDistance(p1.x, p1.y, p1.z, p2.x, p2.y,
+                                p2.z, sx, sy, spacingZ);
+                        // If distance/diagonal is less than 0.5 mm, discard
+                        if (dist < 0.5) {
+                            roiList.remove(activeRoi);
+                            activeRoi = null;
+                        }
+                    }
+                }
+                draggedRoi = null;
+                draggedNodeIndex = -1;
+            }
             repaint();
         }
 
         private Tool3D getEffectiveTool(MouseEvent e) {
             boolean isRight = SwingUtilities.isRightMouseButton(e);
-            boolean isMiddle = SwingUtilities.isMiddleMouseButton(e) || (e.getModifiersEx() & MouseEvent.BUTTON2_DOWN_MASK) != 0;
+            boolean isMiddle = SwingUtilities.isMiddleMouseButton(e)
+                    || (e.getModifiersEx() & MouseEvent.BUTTON2_DOWN_MASK) != 0;
             boolean isShift = (e.getModifiersEx() & MouseEvent.SHIFT_DOWN_MASK) != 0;
             boolean isCtrl = (e.getModifiersEx() & MouseEvent.CTRL_DOWN_MASK) != 0;
 
-            // 1. Modifier key combinations (highest priority, matches standard Horos DICOM operations)
+            // 1. Modifier key combinations (highest priority, matches standard Horos DICOM
+            // operations)
             if (isMiddle) {
-                return Tool3D.PAN;  // Middle drag -> Pan
+                return Tool3D.PAN; // Middle drag -> Pan
             }
             if (isRight) {
                 return Tool3D.WLWW; // Right drag -> WLWW (Adjust window level/width)
@@ -139,35 +260,8 @@ public class Viewer3DController extends JFrame {
                 return Tool3D.ZOOM; // Shift/Ctrl + Left drag -> Zoom
             }
 
-            // 2. Map based on DCMView.currentTool (active main toolbar button)
-            if (DCMView.currentTool != null) {
-                switch (DCMView.currentTool) {
-                    case tTranslate:
-                        return Tool3D.PAN;
-                    case tZoom:
-                        return Tool3D.ZOOM;
-                    case tWLWW:
-                        return Tool3D.WLWW;
-                    case t3DRotate:
-                    case tRotate:
-                    case t3DRotateTool:
-                    case t3DRotateTool2:
-                    case t3DRotateTool3:
-                    case t3DRotateTool4:
-                        return Tool3D.ROTATE;
-                    case tMesure:
-                        return Tool3D.MEASURE;
-                    case t2DPoint:
-                    case t3Dpoint:
-                    case t3DPointTool:
-                    case t3DPointTool2:
-                    case t3DPointTool3:
-                    case t3DPointTool4:
-                        return Tool3D.POINT;
-                }
-            }
-
-            // 3. Fallback to local shortcut/currentTool
+            // 2. Local 3D tool (always prioritized for left click when no modifier is
+            // pressed)
             return currentTool;
         }
 
@@ -180,7 +274,38 @@ public class Viewer3DController extends JFrame {
             int dx = e.getX() - lastMousePos.x;
             int dy = e.getY() - lastMousePos.y;
 
+            if (draggedRoi != null && draggedNodeIndex != -1) {
+                com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(e.getX(), e.getY());
+                if (pt == null) {
+                    double depth = getRoiStartDepth(draggedRoi);
+                    pt = getVoxelAtDepth(e.getX(), e.getY(), depth);
+                }
+                if (pt != null) {
+                    draggedRoi.updatePoint3D(draggedNodeIndex, pt);
+                }
+                lastMousePos = e.getPoint();
+                updateInfoLabel(e.getX(), e.getY());
+                repaint();
+                return;
+            }
+
             Tool3D tool = getEffectiveTool(e);
+
+            if (tool == Tool3D.SCISSOR) {
+                Point p = e.getPoint();
+                if (!scissorPoints.isEmpty()) {
+                    Point last = scissorPoints.get(scissorPoints.size() - 1);
+                    if (p.distance(last) > 3) {
+                        scissorPoints.add(p);
+                    }
+                } else {
+                    scissorPoints.add(p);
+                }
+                lastMousePos = e.getPoint();
+                updateInfoLabel(e.getX(), e.getY());
+                repaint();
+                return;
+            }
 
             if (tool == Tool3D.WLWW) {
                 updateWindow(dy * 2.0f, dx * 2.0f);
@@ -192,12 +317,13 @@ public class Viewer3DController extends JFrame {
                     glViewer.setZoom((float) zoom);
                 }
             } else if (tool == Tool3D.PAN) {
-                // Pure view-space flat translation (world X & Y since translation is left of rotation)
+                // Pure view-space flat translation (world X & Y since translation is left of
+                // rotation)
                 float sens = 0.002f / (float) zoom;
                 float dOffsetX = dx * sens;
                 float dOffsetY = -dy * sens;
                 float dOffsetZ = 0.0f;
-                
+
                 if (glViewer != null) {
                     glViewer.addOffset(dOffsetX, dOffsetY, dOffsetZ);
                 }
@@ -268,6 +394,10 @@ public class Viewer3DController extends JFrame {
     private void cleanup() {
         System.out.println("Cleaning up 3D Viewer resources...");
         stopRenderLoop();
+        if (keyboardShortcutDispatcher != null) {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(keyboardShortcutDispatcher);
+            keyboardShortcutDispatcher = null;
+        }
         volume = null;
         pixList = null;
         if (glViewer != null) {
@@ -779,43 +909,43 @@ public class Viewer3DController extends JFrame {
         JPanel contentMouse = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
         JPanel groupMouse = createToolbarGroup("Mouse button function", contentMouse);
         ButtonGroup bgTools = new ButtonGroup();
-        
+
         // 左クリック時の動作を切り替えるボタンのみに絞る
         String[] toolLabels = { "↻ Rotate", "🟢 Point", "⭕ Oval", "📏 Meas", "✂️ Scissor", "💀 Bone" };
-        Tool3D[] toolValues = { Tool3D.ROTATE, Tool3D.POINT, Tool3D.ROI, Tool3D.MEASURE, Tool3D.SCISSOR, Tool3D.BONE_REMOVAL };
-        
+        Tool3D[] toolValues = { Tool3D.ROTATE, Tool3D.POINT, Tool3D.ROI, Tool3D.MEASURE, Tool3D.SCISSOR,
+                Tool3D.BONE_REMOVAL };
+
         for (int i = 0; i < toolLabels.length; i++) {
             final Tool3D t = toolValues[i];
             JToggleButton btn = new JToggleButton(toolLabels[i]);
+            btn.putClientProperty("tool", t);
             btn.setFont(new Font("SansSerif", Font.PLAIN, 11));
             btn.setMargin(new Insets(2, 4, 2, 4));
             btn.setFocusable(false);
             btn.addActionListener(e -> {
-                this.currentTool = t;
-                if (t == Tool3D.CLIPPING) {
-                    showClippingDialog();
-                }
-                repaint();
+                selectTool(t);
             });
             bgTools.add(btn);
             contentMouse.add(btn);
+            toolButtons.add(btn);
             if (t == Tool3D.ROTATE) {
                 btn.setSelected(true);
             }
         }
-        
+
         vrToolbar.add(groupMouse);
 
         // 2. WL/WW & CLUT & Opacity
         JPanel contentWLWW = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JPanel groupWLWW = createToolbarGroup("WL/WW & CLUT & Opacity", contentWLWW);
-        
+
         JPanel gridLeft = new JPanel(new GridLayout(3, 2, 2, 2));
         gridLeft.setOpaque(false);
-        
+
         JLabel lblWL = new JLabel("WL/WW:", JLabel.RIGHT);
         lblWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        JComboBox<String> cbWL = new JComboBox<>(new String[] { "Other", "Default", "Bone", "Soft Tissue", "Lung", "Vascular" });
+        JComboBox<String> cbWL = new JComboBox<>(
+                new String[] { "Other", "Default", "Bone", "Soft Tissue", "Lung", "Vascular" });
         cbWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
         cbWL.setFocusable(false);
         cbWL.setSelectedItem("Default");
@@ -844,10 +974,11 @@ public class Viewer3DController extends JFrame {
         });
         gridLeft.add(lblWL);
         gridLeft.add(cbWL);
-        
+
         JLabel lblCLUT = new JLabel("CLUT:", JLabel.RIGHT);
         lblCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        JComboBox<String> cbCLUT = new JComboBox<>(new String[] { "No CLUT", "Hot Iron", "Rainbow", "VR Muscles & Bones" });
+        JComboBox<String> cbCLUT = new JComboBox<>(
+                new String[] { "No CLUT", "Hot Iron", "Rainbow", "VR Muscles & Bones" });
         cbCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
         cbCLUT.setFocusable(false);
         cbCLUT.setSelectedItem("VR Muscles & Bones");
@@ -869,7 +1000,7 @@ public class Viewer3DController extends JFrame {
         });
         gridLeft.add(lblCLUT);
         gridLeft.add(cbCLUT);
-        
+
         JLabel lblOpacity = new JLabel("Opacity:", JLabel.RIGHT);
         lblOpacity.setFont(new Font("SansSerif", Font.PLAIN, 10));
         JComboBox<String> cbOpacity = new JComboBox<>(new String[] { "Linear", "Logarithmic" });
@@ -877,9 +1008,9 @@ public class Viewer3DController extends JFrame {
         cbOpacity.setFocusable(false);
         gridLeft.add(lblOpacity);
         gridLeft.add(cbOpacity);
-        
+
         contentWLWW.add(gridLeft);
-        
+
         JPanel pnlMid = new JPanel(new GridLayout(2, 1, 2, 2));
         pnlMid.setOpaque(false);
         JButton btn8 = new JButton("8-bit");
@@ -893,59 +1024,64 @@ public class Viewer3DController extends JFrame {
         pnlMid.add(btn8);
         pnlMid.add(btn16);
         contentWLWW.add(pnlMid);
-        
+
         JButton btnPresets = new JButton("🎛️ Presets");
         btnPresets.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnPresets.setMargin(new Insets(4, 4, 4, 4));
         btnPresets.setFocusable(false);
         btnPresets.addActionListener(e -> {
             JPopupMenu menu = new JPopupMenu();
-            
+
             JMenuItem itemMB = new JMenuItem("VR Muscle & Bone (Creamy)");
             itemMB.addActionListener(ev -> {
                 currentTF = TransferFunction.createVRMusclesBones();
                 cbCLUT.setSelectedItem("VR Muscles & Bones");
-                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                if (glViewer != null)
+                    glViewer.setTransferFunction(currentTF);
                 repaint();
             });
             menu.add(itemMB);
-            
+
             JMenuItem itemBone = new JMenuItem("Bone Only");
             itemBone.addActionListener(ev -> {
                 currentTF = TransferFunction.createBone();
                 cbCLUT.setSelectedItem("No CLUT");
-                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                if (glViewer != null)
+                    glViewer.setTransferFunction(currentTF);
                 repaint();
             });
             menu.add(itemBone);
-            
+
             JMenuItem itemSoft = new JMenuItem("Soft Tissue (Hot Iron)");
             itemSoft.addActionListener(ev -> {
                 currentTF = TransferFunction.createSoftTissue();
                 cbCLUT.setSelectedItem("Hot Iron");
-                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                if (glViewer != null)
+                    glViewer.setTransferFunction(currentTF);
                 repaint();
             });
             menu.add(itemSoft);
-            
+
             JMenuItem itemLung = new JMenuItem("Lung (High Contrast)");
             itemLung.addActionListener(ev -> {
                 currentTF = TransferFunction.createLung();
                 cbCLUT.setSelectedItem("No CLUT");
-                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                if (glViewer != null)
+                    glViewer.setTransferFunction(currentTF);
                 repaint();
             });
             menu.add(itemLung);
-            
+
             JMenuItem itemVasc = new JMenuItem("Vascular / Angio");
             itemVasc.addActionListener(ev -> {
                 currentTF = TransferFunction.createVascular();
                 cbCLUT.setSelectedItem("Rainbow");
-                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                if (glViewer != null)
+                    glViewer.setTransferFunction(currentTF);
                 repaint();
             });
             menu.add(itemVasc);
-            
+
             menu.show(btnPresets, 0, btnPresets.getHeight());
         });
         contentWLWW.add(btnPresets);
@@ -954,13 +1090,13 @@ public class Viewer3DController extends JFrame {
         // 3. Level of Detail & Engine & Crop & Orientation
         JPanel contentLOD = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JPanel groupLOD = createToolbarGroup("Level of Detail & Orientation", contentLOD);
-        
+
         JPanel pnlSlider = new JPanel(new BorderLayout());
         pnlSlider.setOpaque(false);
         JLabel lblSliderName = new JLabel("LOD / Resolution", JLabel.CENTER);
         lblSliderName.setFont(new Font("SansSerif", Font.BOLD, 9));
         pnlSlider.add(lblSliderName, BorderLayout.NORTH);
-        
+
         JSlider sliderLOD = new JSlider(0, 100, 25);
         sliderLOD.setPreferredSize(new Dimension(100, 20));
         sliderLOD.setOpaque(false);
@@ -972,7 +1108,7 @@ public class Viewer3DController extends JFrame {
             }
         });
         pnlSlider.add(sliderLOD, BorderLayout.CENTER);
-        
+
         JPanel pnlSliderLabels = new JPanel(new BorderLayout());
         pnlSliderLabels.setOpaque(false);
         JLabel lblFine = new JLabel("Fine", JLabel.LEFT);
@@ -983,7 +1119,7 @@ public class Viewer3DController extends JFrame {
         pnlSliderLabels.add(lblCoarse, BorderLayout.EAST);
         pnlSlider.add(pnlSliderLabels, BorderLayout.SOUTH);
         contentLOD.add(pnlSlider);
-        
+
         JButton btnBest = new JButton("✨ Best");
         btnBest.setFont(new Font("SansSerif", Font.BOLD, 10));
         btnBest.setMargin(new Insets(4, 4, 4, 4));
@@ -995,7 +1131,7 @@ public class Viewer3DController extends JFrame {
             }
         });
         contentLOD.add(btnBest);
-        
+
         JPanel pnlEngine = new JPanel(new GridLayout(2, 1));
         pnlEngine.setOpaque(false);
         JRadioButton rbCPU = new JRadioButton("CPU", true);
@@ -1029,7 +1165,7 @@ public class Viewer3DController extends JFrame {
         pnlEngine.add(rbCPU);
         pnlEngine.add(rbGPU);
         contentLOD.add(pnlEngine);
-        
+
         JToggleButton tglCrop = new JToggleButton("✂ Crop Box");
         tglCrop.setFont(new Font("SansSerif", Font.PLAIN, 10));
         tglCrop.setMargin(new Insets(4, 4, 4, 4));
@@ -1039,14 +1175,14 @@ public class Viewer3DController extends JFrame {
             repaint();
         });
         contentLOD.add(tglCrop);
-        
+
         JButton btnOrient = new JButton("🧊 Orient");
         btnOrient.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnOrient.setMargin(new Insets(4, 4, 4, 4));
         btnOrient.setFocusable(false);
         btnOrient.addActionListener(e -> {
             JPopupMenu menu = new JPopupMenu();
-            
+
             JMenuItem itemLat = new JMenuItem("Lateral (Left-Right)");
             itemLat.addActionListener(ev -> {
                 if (glViewer != null) {
@@ -1055,7 +1191,7 @@ public class Viewer3DController extends JFrame {
                 repaint();
             });
             menu.add(itemLat);
-            
+
             JMenuItem itemAnt = new JMenuItem("Anterior-Posterior");
             itemAnt.addActionListener(ev -> {
                 if (glViewer != null) {
@@ -1064,7 +1200,7 @@ public class Viewer3DController extends JFrame {
                 repaint();
             });
             menu.add(itemAnt);
-            
+
             JMenuItem itemSup = new JMenuItem("Superior-Inferior");
             itemSup.addActionListener(ev -> {
                 if (glViewer != null) {
@@ -1073,7 +1209,7 @@ public class Viewer3DController extends JFrame {
                 repaint();
             });
             menu.add(itemSup);
-            
+
             menu.show(btnOrient, 0, btnOrient.getHeight());
         });
         contentLOD.add(btnOrient);
@@ -1082,16 +1218,16 @@ public class Viewer3DController extends JFrame {
         // 4. Shading
         JPanel contentShading = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JPanel groupShading = createToolbarGroup("Shading", contentShading);
-        
+
         JCheckBox chkShading = new JCheckBox("Shading", true);
         chkShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
         chkShading.setOpaque(false);
         chkShading.setFocusable(false);
-        
+
         JLabel lblParams = new JLabel("<html>Ambient: 0.20<br>Diffuse: 0.90<br>Specular: 0.30-15.0</html>");
         lblParams.setFont(new Font("SansSerif", Font.PLAIN, 8));
         lblParams.setForeground(Color.GRAY);
-        
+
         chkShading.addActionListener(e -> {
             boolean isShaded = chkShading.isSelected();
             if (glViewer != null) {
@@ -1101,13 +1237,14 @@ public class Viewer3DController extends JFrame {
             repaint();
         });
         contentShading.add(chkShading);
-        
+
         JButton btnEditShading = new JButton("Edit");
         btnEditShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnEditShading.setMargin(new Insets(2, 4, 2, 4));
         btnEditShading.setFocusable(false);
         btnEditShading.addActionListener(e -> {
-            JOptionPane.showMessageDialog(this, "Ambient: 0.20\nDiffuse: 0.90\nSpecular: 0.30\nShininess: 15.0", "Shading Parameters", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Ambient: 0.20\nDiffuse: 0.90\nSpecular: 0.30\nShininess: 15.0",
+                    "Shading Parameters", JOptionPane.INFORMATION_MESSAGE);
         });
         contentShading.add(btnEditShading);
         contentShading.add(lblParams);
@@ -1116,7 +1253,7 @@ public class Viewer3DController extends JFrame {
         // 5. Perspective & Filters
         JPanel contentPersp = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JPanel groupPersp = createToolbarGroup("Perspective & Filters", contentPersp);
-        
+
         JPanel pnlPerspRadios = new JPanel(new GridLayout(3, 1));
         pnlPerspRadios.setOpaque(false);
         JRadioButton rbParallel = new JRadioButton("Parallel", true);
@@ -1131,12 +1268,12 @@ public class Viewer3DController extends JFrame {
         rbEndo.setFont(new Font("SansSerif", Font.PLAIN, 9));
         rbEndo.setOpaque(false);
         rbEndo.setFocusable(false);
-        
+
         ButtonGroup bgPersp = new ButtonGroup();
         bgPersp.add(rbParallel);
         bgPersp.add(rbPersp);
         bgPersp.add(rbEndo);
-        
+
         ActionListener alPersp = ev -> {
             boolean isP = rbPersp.isSelected() || rbEndo.isSelected();
             if (glViewer != null) {
@@ -1147,42 +1284,42 @@ public class Viewer3DController extends JFrame {
         rbParallel.addActionListener(alPersp);
         rbPersp.addActionListener(alPersp);
         rbEndo.addActionListener(alPersp);
-        
+
         pnlPerspRadios.add(rbParallel);
         pnlPerspRadios.add(rbPersp);
         pnlPerspRadios.add(rbEndo);
         contentPersp.add(pnlPerspRadios);
-        
+
         JPanel pnlFilter = new JPanel(new BorderLayout());
         pnlFilter.setOpaque(false);
         JLabel lblFilter = new JLabel("Convolution Filter:", JLabel.LEFT);
         lblFilter.setFont(new Font("SansSerif", Font.BOLD, 8));
         pnlFilter.add(lblFilter, BorderLayout.NORTH);
-        
+
         JComboBox<String> cbFilter = new JComboBox<>(new String[] {
-            "Apply a filter",
-            "Basic Smooth 5x5",
-            "Blur 3x3",
-            "Blur 5x5",
-            "Bone Filter 3x3",
-            "Edge 3x3",
-            "Emboss",
-            "Emboss diagonal",
-            "Emboss heavy",
-            "Emboss north",
-            "Emboss west",
-            "Excessive edges",
-            "Gaussian blur",
-            "Hat",
-            "Highpass 5x5",
-            "Inverted blur",
-            "Laplacian",
-            "Laplacian 4",
-            "Laplacian 8",
-            "Lowpass",
-            "Negative blur",
-            "Sharpen 3x3",
-            "Sharpen 5x5"
+                "Apply a filter",
+                "Basic Smooth 5x5",
+                "Blur 3x3",
+                "Blur 5x5",
+                "Bone Filter 3x3",
+                "Edge 3x3",
+                "Emboss",
+                "Emboss diagonal",
+                "Emboss heavy",
+                "Emboss north",
+                "Emboss west",
+                "Excessive edges",
+                "Gaussian blur",
+                "Hat",
+                "Highpass 5x5",
+                "Inverted blur",
+                "Laplacian",
+                "Laplacian 4",
+                "Laplacian 8",
+                "Lowpass",
+                "Negative blur",
+                "Sharpen 3x3",
+                "Sharpen 5x5"
         });
         cbFilter.setFont(new Font("SansSerif", Font.PLAIN, 9));
         cbFilter.setFocusable(false);
@@ -1192,18 +1329,18 @@ public class Viewer3DController extends JFrame {
         });
         pnlFilter.add(cbFilter, BorderLayout.CENTER);
         contentPersp.add(pnlFilter);
-        
+
         // 6. Export & Tools (Originally hidden behind double-arrow in macOS Horos)
         JPanel contentTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
         JPanel groupTools = createToolbarGroup("Export & Tools", contentTools);
-        
+
         JButton btnClipping = new JButton("Clipping");
         btnClipping.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnClipping.setMargin(new Insets(2, 4, 2, 4));
         btnClipping.setFocusable(false);
         btnClipping.addActionListener(e -> showClippingDialog());
         contentTools.add(btnClipping);
-        
+
         JButton btnReset = new JButton("Reset");
         btnReset.setFont(new Font("SansSerif", Font.BOLD, 10));
         btnReset.setMargin(new Insets(2, 4, 2, 4));
@@ -1229,16 +1366,16 @@ public class Viewer3DController extends JFrame {
             repaint();
         });
         contentTools.add(btnReset);
-        
-        String[] extraTools = {"Movie Export", "Orientations"};
-        for(String label : extraTools) {
+
+        String[] extraTools = { "Movie Export", "Orientations" };
+        for (String label : extraTools) {
             JButton btn = new JButton(label);
             btn.setFont(new Font("SansSerif", Font.PLAIN, 10));
             btn.setMargin(new Insets(2, 4, 2, 4));
             btn.setFocusable(false);
             contentTools.add(btn);
         }
-        
+
         JButton btnRevert = new JButton("Revert");
         btnRevert.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnRevert.setMargin(new Insets(2, 4, 2, 4));
@@ -1257,9 +1394,9 @@ public class Viewer3DController extends JFrame {
             }
         });
         contentTools.add(btnRevert);
-        
-        String[] extraTools2 = {"DICOM File", "Fly Thru"};
-        for(String label : extraTools2) {
+
+        String[] extraTools2 = { "DICOM File", "Fly Thru" };
+        for (String label : extraTools2) {
             JButton btn = new JButton(label);
             btn.setFont(new Font("SansSerif", Font.PLAIN, 10));
             btn.setMargin(new Insets(2, 4, 2, 4));
@@ -1272,7 +1409,7 @@ public class Viewer3DController extends JFrame {
         setLayout(new BorderLayout());
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(vrToolbar, BorderLayout.NORTH);
-        
+
         infoLabel = new JLabel("View Size: 512 x 512", JLabel.LEFT);
         infoLabel.setFont(new Font("Monospaced", Font.PLAIN, 12));
         infoLabel.setOpaque(true);
@@ -1280,7 +1417,7 @@ public class Viewer3DController extends JFrame {
         infoLabel.setForeground(Color.WHITE);
         infoLabel.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
         topPanel.add(infoLabel, BorderLayout.SOUTH);
-        
+
         add(topPanel, BorderLayout.NORTH);
 
         glViewer = createGLViewer(buildGLData(glConfigIndex));
@@ -1290,7 +1427,8 @@ public class Viewer3DController extends JFrame {
         loadingLabel.setForeground(Color.WHITE);
 
         // CardLayout: Swing and Heavyweight AWTGLCanvas conflict on Windows.
-        // We use BorderLayout to keep glViewer visible at all times, preventing native HWND destruction,
+        // We use BorderLayout to keep glViewer visible at all times, preventing native
+        // HWND destruction,
         // and draw the loading screen as a high-performance Java2D overlay.
         JPanel loadingPanel = new JPanel(new BorderLayout());
         loadingPanel.setBackground(Color.BLACK);
@@ -1304,34 +1442,90 @@ public class Viewer3DController extends JFrame {
 
         showView("LOADING"); // 初期表示: データロード中
 
-        // キーボードショートカット (Horos準拠: ESCで閉じる, 各ツール切替)
-        addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                switch (e.getKeyCode()) {
-                    case KeyEvent.VK_ESCAPE:
+        // JVM レベルでキー入力を確実に補足するグローバルキーディスパッチャー
+        // LWJGL の重量コンポーネント (AWTGLCanvas) がフォーカスを持つ場合でも、KeyboardFocusManager を通じて
+        // ショートカット (WL/WW, Rotate, Scissor, Dispose) が確実に動作するようにする。
+        keyboardShortcutDispatcher = e -> {
+            if (e.getID() != KeyEvent.KEY_PRESSED)
+                return false;
+
+            Window activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+            // 自分のウィンドウまたはその子ウィンドウ（ダイアログ等）がアクティブでない場合は無視
+            if (activeWindow != this && (activeWindow == null || activeWindow.getOwner() != this))
+                return false;
+
+            int keyCode = e.getKeyCode();
+            switch (keyCode) {
+                case KeyEvent.VK_W:
+                    selectTool(Tool3D.WLWW);
+                    return true;
+                case KeyEvent.VK_S:
+                    selectTool(Tool3D.ROTATE);
+                    return true;
+                case KeyEvent.VK_Z:
+                    selectTool(Tool3D.ZOOM);
+                    return true;
+                case KeyEvent.VK_M:
+                    selectTool(Tool3D.MEASURE);
+                    activeRoi = null;
+                    repaint();
+                    return true;
+                case KeyEvent.VK_O:
+                    selectTool(Tool3D.ROI);
+                    activeRoi = null;
+                    repaint();
+                    return true;
+                case KeyEvent.VK_C:
+                    selectTool(Tool3D.SCISSOR);
+                    activeRoi = null;
+                    repaint();
+                    return true;
+                case KeyEvent.VK_P:
+                    selectTool(Tool3D.PAN);
+                    return true;
+                case KeyEvent.VK_ESCAPE:
+                    if (currentTool == Tool3D.SCISSOR) {
+                        scissorPoints.clear();
+                        repaint();
+                        return true;
+                    } else {
                         dispose();
-                        break;
-                    case KeyEvent.VK_W:
-                        currentTool = Tool3D.WLWW;
-                        break;
-                    case KeyEvent.VK_S:
-                        currentTool = Tool3D.ROTATE;
-                        break;
-                    case KeyEvent.VK_Z:
-                        currentTool = Tool3D.ZOOM;
-                        break;
-                    case KeyEvent.VK_M:
-                        currentTool = Tool3D.MEASURE;
-                        activeRoi = new com.oculus.jj.model.ROI(DCMView.ToolMode.tMesure, 1, 1,
-                                new Point2D.Float(0, 0));
-                        activeRoi.setName("3D Measurement " + (roiList.size() + 1));
-                        break;
-                    case KeyEvent.VK_P:
-                        currentTool = Tool3D.PAN;
-                        break;
-                }
-                repaint();
+                        return true;
+                    }
+                case KeyEvent.VK_DELETE:
+                case KeyEvent.VK_BACK_SPACE:
+                    if (currentTool == Tool3D.SCISSOR) {
+                        if (scissorPoints.size() >= 3) {
+                            performScissorCut(true); // Clear Inside
+                            return true;
+                        } else if (!scissorPoints.isEmpty()) {
+                            scissorPoints.clear();
+                            repaint();
+                            return true;
+                        }
+                    } else if (activeRoi != null) {
+                        roiList.remove(activeRoi);
+                        activeRoi = null;
+                        repaint();
+                        return true;
+                    }
+                    break;
+                case KeyEvent.VK_ENTER:
+                    if (currentTool == Tool3D.SCISSOR && scissorPoints.size() >= 3) {
+                        performScissorCut(false); // Keep Inside
+                        return true;
+                    }
+                    break;
+            }
+            return false;
+        };
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(keyboardShortcutDispatcher);
+
+        // ダイアログが閉じられたらクリーンアップ
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent we) {
+                // クリーンアップ
             }
         });
     }
@@ -1450,6 +1644,30 @@ public class Viewer3DController extends JFrame {
             drawCropBox(g2d);
         drawMeasurements(g2d);
         drawOrientationOverlay(g2d);
+
+        // Draw Scissors instructions when drawing a lasso
+        if (currentTool == Tool3D.SCISSOR && !scissorPoints.isEmpty()) {
+            int w = glViewer != null ? glViewer.getWidth() : 0;
+            int h = glViewer != null ? glViewer.getHeight() : 0;
+            String text = "[Scissors] Delete: Clear Inside | Enter: Keep Inside (Clear Outside) | Esc: Cancel";
+            g2d.setFont(new Font("SansSerif", Font.BOLD, 12));
+            FontMetrics fm = g2d.getFontMetrics();
+            int tw = fm.stringWidth(text);
+            int tx = (w - tw) / 2;
+            int ty = h - 30;
+
+            // Draw semi-transparent background bubble
+            g2d.setColor(new Color(0, 0, 0, 180));
+            g2d.fillRoundRect(tx - 10, ty - fm.getAscent() - 6, tw + 20, fm.getHeight() + 12, 10, 10);
+
+            // Draw border (yellow-green to match lasso color)
+            g2d.setColor(new Color(173, 255, 47));
+            g2d.drawRoundRect(tx - 10, ty - fm.getAscent() - 6, tw + 20, fm.getHeight() + 12, 10, 10);
+
+            // Draw text
+            g2d.setColor(Color.WHITE);
+            g2d.drawString(text, tx, ty);
+        }
     }
 
     /** HOROS準拠: 方位ラベル(S/I/A/P/L/R)・Rボックス・WL情報を描画 */
@@ -1508,8 +1726,6 @@ public class Viewer3DController extends JFrame {
         g.setColor(getOrientationColor(labelRight));
         lw = fm.stringWidth(labelRight);
         g.drawString(labelRight, w - margin - lw, h / 2 + fm.getAscent() / 2);
-
-
 
         g.drawString(String.format("WL: %.0f  WW: %.0f", windowLevel, windowWidth), 10, 20);
         g.drawString(String.format("Mode: %s | %s", mode, isGpuEngine() ? "GPU" : "CPU"), 10, 36);
@@ -1688,7 +1904,8 @@ public class Viewer3DController extends JFrame {
     }
 
     private String[] computeOrientationLabels(double rx, double ry) {
-        // Mathematically correct transformation of camera screen-space UP and RIGHT vectors back to volume space
+        // Mathematically correct transformation of camera screen-space UP and RIGHT
+        // vectors back to volume space
         // for the model rotation matrix: R = rotateY(ry) * rotateX(rx)
 
         // Camera UP vector in volume space: U_vol = (0, cos(rx), -sin(rx))
@@ -1698,7 +1915,8 @@ public class Viewer3DController extends JFrame {
         String top = dominantAxis(ux_vol, uy_vol, uz_vol);
         String bottom = opposite(top);
 
-        // Camera RIGHT vector in volume space: R_vol = (cos(ry), -sin(ry) * sin(rx), sin(ry) * cos(rx))
+        // Camera RIGHT vector in volume space: R_vol = (cos(ry), -sin(ry) * sin(rx),
+        // sin(ry) * cos(rx))
         double rx_vol = Math.cos(ry);
         double ry_vol = -Math.sin(ry) * Math.sin(rx);
         double rz_vol = Math.sin(ry) * Math.cos(rx);
@@ -1773,7 +1991,8 @@ public class Viewer3DController extends JFrame {
 
         double rayStep = 1.0;
 
-        // If we are performing bone removal, search specifically for the first voxel >= 250 HU along the ray
+        // If we are performing bone removal, search specifically for the first voxel >=
+        // 250 HU along the ray
         if (currentTool == Tool3D.BONE_REMOVAL) {
             for (double vz = -zLimit; vz < zLimit; vz += rayStep) {
                 double vz_offset = vz - oz;
@@ -1820,11 +2039,356 @@ public class Viewer3DController extends JFrame {
     }
 
     private void drawMeasurements(Graphics2D g) {
-        if (roiList.isEmpty())
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+        if (w <= 0 || h <= 0)
             return;
+
+        double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+        double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+
+        double physX = dimX * spacingX;
+        double physY = dimY * spacingY;
+        double physZ = dimZ * spacingZ;
+        double maxPhys = Math.max(physX, Math.max(physY, physZ));
+
+        // GLViewer3D の投影ロジックと一致させる
+        double currentScale = Math.min(w, h) * zoom;
+        double ox = glViewer != null ? glViewer.getOffsetX() : 0.0;
+        double oy = glViewer != null ? glViewer.getOffsetY() : 0.0;
+
+        double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+
+        java.awt.Font originalFont = g.getFont();
+        g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+
+        if (!roiList.isEmpty()) {
+            for (com.oculus.jj.model.ROI roi : roiList) {
+                List<com.oculus.jj.model.ROI.Point3D> points = roi.getPoints3D();
+                if (points.isEmpty())
+                    continue;
+
+                Point prevP = null;
+                com.oculus.jj.model.ROI.Point3D prevV = null;
+
+                Color roiColor = (roi == activeRoi || roi == draggedRoi) ? Color.CYAN
+                        : com.oculus.jj.config.AppPreferences.getROIColor();
+
+                // First pass: Draw shadows and lines
+                if (points.size() >= 1) {
+                    Point[] screenPts = new Point[points.size()];
+                    for (int i = 0; i < points.size(); i++) {
+                        com.oculus.jj.model.ROI.Point3D vpt = points.get(i);
+
+                        // 1. Normalize to Unit Cube with Spacing
+                        double px_local = (vpt.x - cx) * spacingX / maxPhys;
+                        double py_local = (vpt.y - cy) * spacingY / maxPhys;
+                        double pz_local = (vpt.z - cz) * spacingZ / maxPhys;
+
+                        // 2. RX Rotate
+                        double ry_rx = py_local * cosX - pz_local * sinX;
+                        double rz_rx = py_local * sinX + pz_local * cosX;
+
+                        // 3. RY Rotate
+                        double rx_ry = px_local * cosY + rz_rx * sinY;
+                        double ry_ry = ry_rx;
+
+                        // 4. Project (Applying Offset and Screen Scale)
+                        int sx = (int) Math.round((rx_ry + ox) * currentScale + w / 2.0);
+                        int sy = (int) Math.round(h / 2.0 - (ry_ry + oy) * currentScale);
+                        screenPts[i] = new Point(sx, sy);
+                    }
+
+                    if (roi.getType() == DCMView.ToolMode.tMesure && points.size() >= 2) {
+                        // Draw shadow line
+                        g.setColor(Color.BLACK);
+                        g.setStroke(new BasicStroke(4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                        for (int i = 1; i < screenPts.length; i++) {
+                            g.drawLine(screenPts[i - 1].x, screenPts[i - 1].y, screenPts[i].x, screenPts[i].y);
+                        }
+                        // Draw colored measurement line
+                        g.setColor(roiColor);
+                        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                        for (int i = 1; i < screenPts.length; i++) {
+                            g.drawLine(screenPts[i - 1].x, screenPts[i - 1].y, screenPts[i].x, screenPts[i].y);
+                        }
+                    }
+                } else if (roi.getType() == DCMView.ToolMode.tOval && points.size() >= 2) {
+                    com.oculus.jj.model.ROI.Point3D p1 = points.get(0);
+                    com.oculus.jj.model.ROI.Point3D p2 = points.get(1);
+
+                    double tx1 = p1.x - cx;
+                    double ty1 = p1.y - cy;
+                    double tz1 = p1.z - cz;
+                    double ry_view1 = ty1 * cosX + tz1 * sinX;
+                    double tz0_1 = tz1 * cosX - ty1 * sinX;
+                    double rx_view1 = tx1 * cosY - tz0_1 * sinY;
+                    int sx1 = (int) Math.round((rx_view1 + ox) * currentScale + w / 2.0);
+                    int sy1 = (int) Math.round((ry_view1 + oy) * currentScale + h / 2.0);
+
+                    double tx2 = p2.x - cx;
+                    double ty2 = p2.y - cy;
+                    double tz2 = p2.z - cz;
+                    double ry_view2 = ty2 * cosX + tz2 * sinX;
+                    double tz0_2 = tz2 * cosX - ty2 * sinX;
+                    double rx_view2 = tx2 * cosY - tz0_2 * sinY;
+                    int sx2 = (int) Math.round((rx_view2 + ox) * currentScale + w / 2.0);
+                    int sy2 = (int) Math.round((ry_view2 + oy) * currentScale + h / 2.0);
+
+                    int minX = Math.min(sx1, sx2);
+                    int minY = Math.min(sy1, sy2);
+                    int width = Math.abs(sx1 - sx2);
+                    int height = Math.abs(sy1 - sy2);
+
+                    if (width > 0 && height > 0) {
+                        // Draw shadow oval (thick black line behind)
+                        g.setColor(Color.BLACK);
+                        g.setStroke(new BasicStroke(4f));
+                        g.drawOval(minX, minY, width, height);
+
+                        // Draw colored oval
+                        g.setColor(roiColor);
+                        g.setStroke(new BasicStroke(2f));
+                        g.drawOval(minX, minY, width, height);
+
+                        // Calculate physical area in cm²
+                        double rx_mm = (width / 2.0) / currentScale;
+                        double ry_mm = (height / 2.0) / currentScale;
+                        double area_cm2 = (Math.PI * rx_mm * ry_mm) / 100.0;
+
+                        // Compute voxel stats inside the projected ellipse at the depth of the first
+                        // point
+                        double depth = getRoiStartDepth(roi);
+                        double xc = (sx1 + sx2) / 2.0;
+                        double yc = (sy1 + sy2) / 2.0;
+                        double a = width / 2.0;
+                        double b = height / 2.0;
+
+                        int count = 0;
+                        double sum = 0;
+                        double minVal = Double.MAX_VALUE;
+                        double maxVal = -Double.MAX_VALUE;
+                        java.util.List<Integer> sampledVals = new java.util.ArrayList<>();
+
+                        // Only sample pixels in a grid inside the screen-space bounding box
+                        for (int y = minY; y <= minY + height; y++) {
+                            for (int x = minX; x <= minX + width; x++) {
+                                double term1 = Math.pow(x - xc, 2) / Math.pow(a, 2);
+                                double term2 = Math.pow(y - yc, 2) / Math.pow(b, 2);
+                                if (term1 + term2 <= 1.0) {
+                                    com.oculus.jj.model.ROI.Point3D vpt = getVoxelAtDepth(x, y, depth);
+                                    if (vpt != null && volume != null) {
+                                        int ix = (int) vpt.x;
+                                        int iy = (int) vpt.y;
+                                        int iz = (int) vpt.z;
+                                        if (ix >= 0 && ix < dimX && iy >= 0 && iy < dimY && iz >= 0 && iz < dimZ) {
+                                            int val = volume[iz * dimY * dimX + iy * dimX + ix];
+                                            sum += val;
+                                            if (val < minVal)
+                                                minVal = val;
+                                            if (val > maxVal)
+                                                maxVal = val;
+                                            sampledVals.add(val);
+                                            count++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        double mean = count > 0 ? sum / count : 0.0;
+                        double varianceSum = 0;
+                        for (int val : sampledVals) {
+                            varianceSum += Math.pow(val - mean, 2);
+                        }
+                        double sd = count > 1 ? Math.sqrt(varianceSum / (count - 1)) : 0.0;
+
+                        // Create label string
+                        String label;
+                        if (count > 0) {
+                            label = String.format("Area: %.2f cm²\nMean: %.1f HU\nSD: %.1f HU\nMin: %.0f, Max: %.0f",
+                                    area_cm2, mean, sd, minVal, maxVal);
+                        } else {
+                            label = String.format("Area: %.2f cm²", area_cm2);
+                        }
+
+                        // Display multiline label with semi-transparent background
+                        FontMetrics fm = g.getFontMetrics();
+                        String[] lines = label.split("\n");
+                        int maxTw = 0;
+                        for (String line : lines) {
+                            int tw = fm.stringWidth(line);
+                            if (tw > maxTw)
+                                maxTw = tw;
+                        }
+                        int th = fm.getHeight();
+                        int padX = 8;
+                        int padY = 6;
+                        int lineSpacing = 2;
+
+                        int bx = minX + width / 2 - maxTw / 2 - padX;
+                        int by = minY + height + 10;
+                        int bw = maxTw + padX * 2;
+                        int bh = lines.length * th + (lines.length - 1) * lineSpacing + padY * 2;
+
+                        g.setColor(new Color(0, 0, 0, 160));
+                        g.fillRoundRect(bx, by, bw, bh, 8, 8);
+                        g.setColor(new Color(255, 255, 255, 60));
+                        g.setStroke(new BasicStroke(1f));
+                        g.drawRoundRect(bx, by, bw, bh, 8, 8);
+
+                        g.setColor(Color.WHITE);
+                        for (int j = 0; j < lines.length; j++) {
+                            g.drawString(lines[j], bx + padX,
+                                    by + padY + (j + 1) * th + j * lineSpacing - fm.getDescent() - 1);
+                        }
+                    }
+                }
+
+                // Second pass: Draw nodes and labels
+                for (int i = 0; i < points.size(); i++) {
+                    if (roi.getType() == DCMView.ToolMode.tOval && roi != activeRoi) {
+                        continue;
+                    }
+                    com.oculus.jj.model.ROI.Point3D vpt = points.get(i);
+                    double tx = vpt.x - cx;
+                    double ty = vpt.y - cy;
+                    double tz = vpt.z - cz;
+                    double ry_view = ty * cosX + tz * sinX;
+                    double tz0 = tz * cosX - ty * sinX;
+                    double rx_view = tx * cosY - tz0 * sinY;
+
+                    int sx = (int) Math.round((rx_view + ox) * currentScale + w / 2.0);
+                    int sy = (int) Math.round((ry_view + oy) * currentScale + h / 2.0);
+
+                    if (roi.getType() == DCMView.ToolMode.t2DPoint) {
+                        // Marker for 3D Point ROI
+                        g.setColor(Color.BLACK);
+                        g.drawOval(sx - 6, sy - 6, 12, 12);
+                        g.setColor(roiColor);
+                        g.drawOval(sx - 5, sy - 5, 10, 10);
+                        g.fillOval(sx - 2, sy - 2, 4, 4);
+                    } else {
+                        // Double ring marker for measurement nodes (Horos-style)
+                        g.setColor(Color.BLACK);
+                        g.drawOval(sx - 4, sy - 4, 8, 8);
+                        g.setColor(roiColor);
+                        g.fillOval(sx - 3, sy - 3, 6, 6);
+                        g.setColor(Color.WHITE);
+                        g.drawOval(sx - 2, sy - 2, 4, 4);
+                    }
+
+                    if (prevP != null && roi.getType() == DCMView.ToolMode.tMesure) {
+                        // Calculate distance
+                        double spacing_x = (pixList != null && !pixList.isEmpty()) ? pixList.get(0).getPixelSpacingX()
+                                : spacingX;
+                        double spacing_y = (pixList != null && !pixList.isEmpty()) ? pixList.get(0).getPixelSpacingY()
+                                : spacingY;
+                        double dist = com.oculus.jj.model.Measurement3D.calculateDistance(
+                                prevV.x, prevV.y, prevV.z,
+                                vpt.x, vpt.y, vpt.z,
+                                spacing_x,
+                                spacing_y,
+                                spacingZ);
+
+                        String unit = com.oculus.jj.config.AppPreferences.getMeasureUnit();
+                        if ("cm".equals(unit))
+                            dist /= 10.0;
+
+                        String label = String.format("%.2f %s", dist, unit);
+
+                        // Compute label position
+                        int mx = (prevP.x + sx) / 2;
+                        int my = (prevP.y + sy) / 2;
+
+                        FontMetrics fm = g.getFontMetrics();
+                        int tw = fm.stringWidth(label);
+                        int th = fm.getHeight();
+                        int padX = 6;
+                        int padY = 4;
+                        int bx = mx - tw / 2 - padX;
+                        int by = my - th / 2 - padY;
+                        int bw = tw + padX * 2;
+                        int bh = th + padY * 2;
+
+                        // Rounded translucent background box
+                        g.setColor(new Color(0, 0, 0, 160));
+                        g.fillRoundRect(bx, by, bw, bh, 8, 8);
+                        g.setColor(new Color(255, 255, 255, 60));
+                        g.setStroke(new BasicStroke(1f));
+                        g.drawRoundRect(bx, by, bw, bh, 8, 8);
+
+                        // Contrast text
+                        g.setColor(Color.WHITE);
+                        g.drawString(label, mx - tw / 2, my + th / 2 - fm.getDescent() - 1);
+                    }
+
+                    prevP = new Point(sx, sy);
+                    prevV = vpt;
+                }
+            }
+        }
+
+        // Draw Scissor path if active and has points
+        if (currentTool == Tool3D.SCISSOR && !scissorPoints.isEmpty()) {
+            g.setColor(Color.BLACK);
+            g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (int i = 1; i < scissorPoints.size(); i++) {
+                Point p1 = scissorPoints.get(i - 1);
+                Point p2 = scissorPoints.get(i);
+                g.drawLine(p1.x, p1.y, p2.x, p2.y);
+            }
+            if (scissorPoints.size() >= 3) {
+                // Draw closing line
+                Point pStart = scissorPoints.get(0);
+                Point pEnd = scissorPoints.get(scissorPoints.size() - 1);
+                g.drawLine(pEnd.x, pEnd.y, pStart.x, pStart.y);
+            }
+
+            g.setColor(new Color(173, 255, 47)); // HOROS-style yellow-green lasso
+            g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (int i = 1; i < scissorPoints.size(); i++) {
+                Point p1 = scissorPoints.get(i - 1);
+                Point p2 = scissorPoints.get(i);
+                g.drawLine(p1.x, p1.y, p2.x, p2.y);
+            }
+            if (scissorPoints.size() >= 3) {
+                Point pStart = scissorPoints.get(0);
+                Point pEnd = scissorPoints.get(scissorPoints.size() - 1);
+                g.drawLine(pEnd.x, pEnd.y, pStart.x, pStart.y);
+            }
+
+            // Draw starting point handles or nodes
+            for (Point p : scissorPoints) {
+                g.setColor(Color.BLACK);
+                g.fillOval(p.x - 2, p.y - 2, 4, 4);
+                g.setColor(Color.WHITE);
+                g.fillOval(p.x - 1, p.y - 1, 2, 2);
+            }
+        }
+
+        g.setFont(originalFont);
+    }
+
+    private static class HitResult {
+        com.oculus.jj.model.ROI roi;
+        int nodeIndex;
+
+        HitResult(com.oculus.jj.model.ROI roi, int nodeIndex) {
+            this.roi = roi;
+            this.nodeIndex = nodeIndex;
+        }
+    }
+
+    private HitResult findHitNode(int mouseX, int mouseY) {
+        if (roiList.isEmpty())
+            return null;
 
         int w = glViewer != null ? glViewer.getWidth() : 0;
         int h = glViewer != null ? glViewer.getHeight() : 0;
+        if (w <= 0 || h <= 0)
+            return null;
+
         double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
         double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
         double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
@@ -1838,18 +2402,15 @@ public class Viewer3DController extends JFrame {
         double ox = glViewer != null ? glViewer.getOffsetX() * maxPhys : 0.0;
         double oy = glViewer != null ? glViewer.getOffsetY() * maxPhys : 0.0;
 
-        g.setColor(com.oculus.jj.config.AppPreferences.getROIColor());
-        g.setStroke(new BasicStroke(2));
+        double hitTolerance = 8.0; // pixels
 
         for (com.oculus.jj.model.ROI roi : roiList) {
             List<com.oculus.jj.model.ROI.Point3D> points = roi.getPoints3D();
-            if (points.isEmpty())
+            if (points == null)
                 continue;
 
-            Point prevP = null;
-            com.oculus.jj.model.ROI.Point3D prevV = null;
-
-            for (com.oculus.jj.model.ROI.Point3D vpt : points) {
+            for (int i = 0; i < points.size(); i++) {
+                com.oculus.jj.model.ROI.Point3D vpt = points.get(i);
                 double tx = vpt.x - cx;
                 double ty = vpt.y - cy;
                 double tz = vpt.z - cz;
@@ -1860,34 +2421,78 @@ public class Viewer3DController extends JFrame {
                 int sx = (int) Math.round((rx_view + ox) * currentScale + w / 2.0);
                 int sy = (int) Math.round((ry_view + oy) * currentScale + h / 2.0);
 
-                if (roi.getType() == DCMView.ToolMode.t2DPoint) {
-                    g.drawOval(sx - 5, sy - 5, 10, 10);
-                    g.fillOval(sx - 2, sy - 2, 4, 4);
-                } else {
-                    g.fillOval(sx - 3, sy - 3, 6, 6);
+                double dist = Math.hypot(mouseX - sx, mouseY - sy);
+                if (dist <= hitTolerance) {
+                    return new HitResult(roi, i);
                 }
-
-                if (prevP != null && roi.getType() == DCMView.ToolMode.tMesure) {
-                    g.drawLine(prevP.x, prevP.y, sx, sy);
-                    double dist = com.oculus.jj.model.Measurement3D.calculateDistance(
-                            prevV.x, prevV.y, prevV.z,
-                            vpt.x, vpt.y, vpt.z,
-                            pixList.get(0).getPixelSpacingX(),
-                            pixList.get(0).getPixelSpacingY(),
-                            spacingZ);
-
-                    String unit = com.oculus.jj.config.AppPreferences.getMeasureUnit();
-                    if ("cm".equals(unit))
-                        dist /= 10.0;
-
-                    String label = String.format("%.2f %s", dist, unit);
-                    g.drawString(label, (prevP.x + sx) / 2 + 5, (prevP.y + sy) / 2 - 5);
-                }
-
-                prevP = new Point(sx, sy);
-                prevV = vpt;
             }
         }
+        return null;
+    }
+
+    private double getRoiStartDepth(com.oculus.jj.model.ROI roi) {
+        List<com.oculus.jj.model.ROI.Point3D> points = roi.getPoints3D();
+        if (points == null || points.isEmpty())
+            return 0.0;
+        com.oculus.jj.model.ROI.Point3D vpt = points.get(0);
+
+        double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+        double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+        double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+
+        double tx = vpt.x - cx;
+        double ty = vpt.y - cy;
+        double tz = vpt.z - cz;
+        double tz0 = tz * cosX - ty * sinX;
+        double rz_view = tz0 * cosY + tx * sinY;
+        return rz_view;
+    }
+
+    private com.oculus.jj.model.ROI.Point3D getVoxelAtDepth(int sx, int sy, double vz_offset) {
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+        if (w <= 0 || h <= 0)
+            return null;
+
+        double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+        double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+        double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+        double physX = dimX * spacingX;
+        double physY = dimY * spacingY;
+        double physZ = dimZ * spacingZ;
+        double maxPhys = Math.max(physX, Math.max(physY, physZ));
+        double baseScale = Math.min(w, h) / maxPhys * 0.95;
+        double currentScale = baseScale * zoom;
+
+        double ox = glViewer != null ? glViewer.getOffsetX() * maxPhys : 0.0;
+        double oy = glViewer != null ? glViewer.getOffsetY() * maxPhys : 0.0;
+
+        double vx = (sx - w / 2.0) / currentScale - ox;
+        double vy = (sy - h / 2.0) / currentScale - oy;
+
+        double tx = vx * cosY + vz_offset * sinY;
+        double tz0 = -vx * sinY + vz_offset * cosY;
+        double ty = vy * cosX - tz0 * sinX;
+        double tz = vy * sinX + tz0 * cosX;
+
+        int ix = (int) Math.round(tx + cx);
+        int iy = (int) Math.round(ty + cy);
+        int iz = (int) Math.round(tz + cz);
+
+        if (ix < 0)
+            ix = 0;
+        if (ix >= dimX)
+            ix = dimX - 1;
+        if (iy < 0)
+            iy = 0;
+        if (iy >= dimY)
+            iy = dimY - 1;
+        if (iz < 0)
+            iz = 0;
+        if (iz >= dimZ)
+            iz = dimZ - 1;
+
+        return new com.oculus.jj.model.ROI.Point3D(ix, iy, iz);
     }
 
     private float getOpacity(int val, float low, float factor) {
@@ -1941,41 +2546,46 @@ public class Viewer3DController extends JFrame {
     }
 
     public void updateInfoLabel(int mouseX, int mouseY) {
-        if (infoLabel == null) return;
+        if (infoLabel == null)
+            return;
         int w = glViewer != null ? glViewer.getWidth() : 0;
         int h = glViewer != null ? glViewer.getHeight() : 0;
         boolean isPersp = glViewer != null && glViewer.isPerspective();
-        
+
         double physX = dimX * spacingX;
         double physY = dimY * spacingY;
         double physZ = dimZ * spacingZ;
         double maxPhys = Math.max(physX, Math.max(physY, physZ));
-        if (maxPhys <= 0.0001) maxPhys = 1.0;
+        if (maxPhys <= 0.0001)
+            maxPhys = 1.0;
         double baseScale = Math.min(w, h) / maxPhys * 0.95;
         double currentScale = baseScale * zoom;
-        if (currentScale <= 0.0001) currentScale = 0.0001;
+        if (currentScale <= 0.0001)
+            currentScale = 0.0001;
         double parallelScale = (h / 2.0) / currentScale;
         double spX = spacingX > 0.0001 ? spacingX : 1.0;
         double scaleFactor = 100.0 / (spX * parallelScale);
-        
-        com.oculus.jj.model.ROI.Point3D voxel = (mouseX >= 0 && mouseY >= 0) ? getVoxelUnderMouse(mouseX, mouseY) : null;
+
+        com.oculus.jj.model.ROI.Point3D voxel = (mouseX >= 0 && mouseY >= 0) ? getVoxelUnderMouse(mouseX, mouseY)
+                : null;
         if (voxel != null && volume != null) {
             int ix = (int) voxel.x;
             int iy = (int) voxel.y;
             int iz = (int) voxel.z;
-            
+
             int val = volume[iz * dimY * dimX + iy * dimX + ix];
-            
+
             double px = (ix - dimX / 2.0) * spacingX;
             double py = (iy - dimY / 2.0) * spacingY;
             double pz = (iz - dimZ / 2.0) * spacingZ;
-            
+
             String label;
             if (isPersp) {
                 label = String.format("View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm",
                         w, h, val, ix, iy, px, py);
             } else {
-                label = String.format("View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm   SCALE: %.3f %%",
+                label = String.format(
+                        "View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm   SCALE: %.3f %%",
                         w, h, val, ix, iy, px, py, scaleFactor);
             }
             infoLabel.setText(label);
@@ -1991,51 +2601,54 @@ public class Viewer3DController extends JFrame {
     }
 
     private void removeBoneAtVoxel(com.oculus.jj.model.ROI.Point3D pt) {
-        if (volume == null) return;
-        
+        if (volume == null)
+            return;
+
         int sx = (int) pt.x;
         int sy = (int) pt.y;
         int sz = (int) pt.z;
-        if (sx < 0 || sx >= dimX || sy < 0 || sy >= dimY || sz < 0 || sz >= dimZ) return;
-        
+        if (sx < 0 || sx >= dimX || sy < 0 || sy >= dimY || sz < 0 || sz >= dimZ)
+            return;
+
         int seedIdx = sz * dimY * dimX + sy * dimX + sx;
         short seedVal = volume[seedIdx];
-        if (seedVal < 250) return; // 骨ではない（閾値250 HU）
-        
+        if (seedVal < 250)
+            return; // 骨ではない（閾値250 HU）
+
         if (volumeBackup == null) {
             volumeBackup = new short[volume.length];
             System.arraycopy(volume, 0, volumeBackup, 0, volume.length);
         }
-        
+
         // Fast array-based primitive queue for 3D Flood Fill (Region Growing)
         int[] q = new int[dimX * dimY * dimZ];
         boolean[] visited = new boolean[dimX * dimY * dimZ];
         int head = 0;
         int tail = 0;
-        
+
         q[tail++] = seedIdx;
         visited[seedIdx] = true;
-        
-        int[] dx = {1, -1, 0, 0, 0, 0};
-        int[] dy = {0, 0, 1, -1, 0, 0};
-        int[] dz = {0, 0, 0, 0, 1, -1};
-        
+
+        int[] dx = { 1, -1, 0, 0, 0, 0 };
+        int[] dy = { 0, 0, 1, -1, 0, 0 };
+        int[] dz = { 0, 0, 0, 0, 1, -1 };
+
         int count = 0;
-        while(head < tail) {
+        while (head < tail) {
             int idx = q[head++];
             volume[idx] = -1024; // 空気に置換して消去
             count++;
-            
+
             int z = idx / (dimY * dimX);
             int rem = idx % (dimY * dimX);
             int y = rem / dimX;
             int x = rem % dimX;
-            
-            for(int i = 0; i < 6; i++) {
+
+            for (int i = 0; i < 6; i++) {
                 int nx = x + dx[i];
                 int ny = y + dy[i];
                 int nz = z + dz[i];
-                
+
                 if (nx >= 0 && nx < dimX && ny >= 0 && ny < dimY && nz >= 0 && nz < dimZ) {
                     int nIdx = nz * dimY * dimX + ny * dimX + nx;
                     if (!visited[nIdx] && volumeBackup[nIdx] >= 250) {
@@ -2045,9 +2658,9 @@ public class Viewer3DController extends JFrame {
                 }
             }
         }
-        
+
         System.out.println("Bone Removal: Removed " + count + " connected bone voxels.");
-        
+
         if (glViewer != null) {
             glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
             glViewer.triggerVolumeReupload();
@@ -2063,220 +2676,221 @@ public class Viewer3DController extends JFrame {
             applyConvolution2D(filterName, null, 0);
             return;
         }
-        
+
         float[] kernel = null;
         int size = 0;
-        
+
         switch (filterName) {
             case "Basic Smooth 5x5":
                 size = 5;
                 kernel = new float[] {
-                    1, 1, 1, 1, 1,
-                    1, 4, 4, 4, 1,
-                    1, 4, 12, 4, 1,
-                    1, 4, 4, 4, 1,
-                    1, 1, 1, 1, 1
+                        1, 1, 1, 1, 1,
+                        1, 4, 4, 4, 1,
+                        1, 4, 12, 4, 1,
+                        1, 4, 4, 4, 1,
+                        1, 1, 1, 1, 1
                 };
                 break;
             case "Blur 3x3":
                 size = 3;
                 kernel = new float[] {
-                    1, 2, 1,
-                    2, 4, 2,
-                    1, 2, 1
+                        1, 2, 1,
+                        2, 4, 2,
+                        1, 2, 1
                 };
                 break;
             case "Blur 5x5":
                 size = 5;
                 kernel = new float[] {
-                    1, 1, 2, 1, 1,
-                    1, 2, 3, 2, 1,
-                    2, 3, 4, 3, 2,
-                    1, 2, 3, 2, 1,
-                    1, 1, 2, 1, 1
+                        1, 1, 2, 1, 1,
+                        1, 2, 3, 2, 1,
+                        2, 3, 4, 3, 2,
+                        1, 2, 3, 2, 1,
+                        1, 1, 2, 1, 1
                 };
                 break;
             case "Bone Filter 3x3":
                 size = 3;
                 kernel = new float[] {
-                    -1, -1, -1,
-                    -1,  9, -1,
-                    -1, -1, -1
+                        -1, -1, -1,
+                        -1, 9, -1,
+                        -1, -1, -1
                 };
                 break;
             case "Edge 3x3":
                 size = 3;
                 kernel = new float[] {
-                    1, -2,  1,
-                    -2,  4, -2,
-                    1, -2,  1
+                        1, -2, 1,
+                        -2, 4, -2,
+                        1, -2, 1
                 };
                 break;
             case "Emboss":
                 size = 3;
                 kernel = new float[] {
-                    -1,  0,  0,
-                    0,  0,  0,
-                    0,  0,  1
+                        -1, 0, 0,
+                        0, 0, 0,
+                        0, 0, 1
                 };
                 break;
             case "Emboss diagonal":
                 size = 3;
                 kernel = new float[] {
-                    0,  1,  0,
-                    -1,  0,  1,
-                    0, -1,  0
+                        0, 1, 0,
+                        -1, 0, 1,
+                        0, -1, 0
                 };
                 break;
             case "Emboss heavy":
                 size = 3;
                 kernel = new float[] {
-                    -1, -1,  0,
-                    -1,  0,  1,
-                    0,  1,  1
+                        -1, -1, 0,
+                        -1, 0, 1,
+                        0, 1, 1
                 };
                 break;
             case "Emboss north":
                 size = 3;
                 kernel = new float[] {
-                    1,  2,  1,
-                    0,  0,  0,
-                    -1, -2, -1
+                        1, 2, 1,
+                        0, 0, 0,
+                        -1, -2, -1
                 };
                 break;
             case "Emboss west":
                 size = 3;
                 kernel = new float[] {
-                    1,  0, -1,
-                    2,  0, -2,
-                    1,  0, -1
+                        1, 0, -1,
+                        2, 0, -2,
+                        1, 0, -1
                 };
                 break;
             case "Excessive edges":
                 size = 3;
                 kernel = new float[] {
-                    1,  1,  1,
-                    1, -7,  1,
-                    1,  1,  1
+                        1, 1, 1,
+                        1, -7, 1,
+                        1, 1, 1
                 };
                 break;
             case "Gaussian blur":
                 size = 5;
                 kernel = new float[] {
-                    1, 1, 2, 1, 1,
-                    1, 2, 4, 2, 1,
-                    2, 4, 8, 4, 2,
-                    1, 2, 4, 2, 1,
-                    1, 1, 2, 1, 1
+                        1, 1, 2, 1, 1,
+                        1, 2, 4, 2, 1,
+                        2, 4, 8, 4, 2,
+                        1, 2, 4, 2, 1,
+                        1, 1, 2, 1, 1
                 };
                 break;
             case "Hat":
                 size = 5;
                 kernel = new float[] {
-                    0,  0, -1,  0,  0,
-                    0, -1, -2, -1,  0,
-                    -1, -2, 16, -2, -1,
-                    0, -1, -2, -1,  0,
-                    0,  0, -1,  0,  0
+                        0, 0, -1, 0, 0,
+                        0, -1, -2, -1, 0,
+                        -1, -2, 16, -2, -1,
+                        0, -1, -2, -1, 0,
+                        0, 0, -1, 0, 0
                 };
                 break;
             case "Highpass 5x5":
                 size = 5;
                 kernel = new float[] {
-                    0, -1, -1, -1,  0,
-                    -1,  2, -4,  2, -1,
-                    -1, -4, 13, -4, -1,
-                    -1,  2, -4,  2, -1,
-                    0, -1, -1, -1,  0
+                        0, -1, -1, -1, 0,
+                        -1, 2, -4, 2, -1,
+                        -1, -4, 13, -4, -1,
+                        -1, 2, -4, 2, -1,
+                        0, -1, -1, -1, 0
                 };
                 break;
             case "Inverted blur":
                 size = 5;
                 kernel = new float[] {
-                    3, 3, 2, 3, 3,
-                    3, 2, 1, 2, 3,
-                    2, 1, 0, 1, 2,
-                    3, 2, 1, 2, 3,
-                    3, 3, 2, 3, 3
+                        3, 3, 2, 3, 3,
+                        3, 2, 1, 2, 3,
+                        2, 1, 0, 1, 2,
+                        3, 2, 1, 2, 3,
+                        3, 3, 2, 3, 3
                 };
                 break;
             case "Laplacian":
                 size = 5;
                 kernel = new float[] {
-                    -1, -1, -1, -1, -1,
-                    -1, -1, -1, -1, -1,
-                    -1, -1, 24, -1, -1,
-                    -1, -1, -1, -1, -1,
-                    -1, -1, -1, -1, -1
+                        -1, -1, -1, -1, -1,
+                        -1, -1, -1, -1, -1,
+                        -1, -1, 24, -1, -1,
+                        -1, -1, -1, -1, -1,
+                        -1, -1, -1, -1, -1
                 };
                 break;
             case "Laplacian 4":
                 size = 3;
                 kernel = new float[] {
-                    0, -1,  0,
-                    -1,  4, -1,
-                    0, -1,  0
+                        0, -1, 0,
+                        -1, 4, -1,
+                        0, -1, 0
                 };
                 break;
             case "Laplacian 8":
                 size = 3;
                 kernel = new float[] {
-                    -1, -1, -1,
-                    -1,  8, -1,
-                    -1, -1, -1
+                        -1, -1, -1,
+                        -1, 8, -1,
+                        -1, -1, -1
                 };
                 break;
             case "Lowpass":
                 size = 3;
                 kernel = new float[] {
-                    1, 1, 1,
-                    1, 1, 1,
-                    1, 1, 1
+                        1, 1, 1,
+                        1, 1, 1,
+                        1, 1, 1
                 };
                 break;
             case "Negative blur":
                 size = 5;
                 kernel = new float[] {
-                    0,  0, -1,  0,  0,
-                    0, -1, -2, -1,  0,
-                    -1, -2, -3, -2, -1,
-                    0, -1, -2, -1,  0,
-                    0,  0, -1,  0,  0
+                        0, 0, -1, 0, 0,
+                        0, -1, -2, -1, 0,
+                        -1, -2, -3, -2, -1,
+                        0, -1, -2, -1, 0,
+                        0, 0, -1, 0, 0
                 };
                 break;
             case "Sharpen 3x3":
                 size = 3;
                 kernel = new float[] {
-                    -1,  0, -1,
-                    0,  7,  0,
-                    -1,  0, -1
+                        -1, 0, -1,
+                        0, 7, 0,
+                        -1, 0, -1
                 };
                 break;
             case "Sharpen 5x5":
                 size = 5;
                 kernel = new float[] {
-                    -1, -1, -1, -1, -1,
-                    -1,  2,  2,  2, -1,
-                    -1,  2,  8,  2, -1,
-                    -1,  2,  2,  2, -1,
-                    -1, -1, -1, -1, -1
+                        -1, -1, -1, -1, -1,
+                        -1, 2, 2, 2, -1,
+                        -1, 2, 8, 2, -1,
+                        -1, 2, 2, 2, -1,
+                        -1, -1, -1, -1, -1
                 };
                 break;
         }
-        
+
         if (kernel != null) {
             applyConvolution2D(filterName, kernel, size);
         }
     }
 
     private void applyConvolution2D(String name, float[] kernel, int size) {
-        if (volume == null) return;
-        
+        if (volume == null)
+            return;
+
         if (volumeBackup == null) {
             volumeBackup = new short[volume.length];
             System.arraycopy(volume, 0, volumeBackup, 0, volume.length);
         }
-        
+
         if (name == null || name.startsWith("Apply a filter")) {
             System.arraycopy(volumeBackup, 0, volume, 0, volume.length);
             if (glViewer != null) {
@@ -2289,7 +2903,7 @@ public class Viewer3DController extends JFrame {
             repaint();
             return;
         }
-        
+
         // Compute normalization factor (sum of elements)
         float norm = 0;
         for (float v : kernel) {
@@ -2300,11 +2914,11 @@ public class Viewer3DController extends JFrame {
                 kernel[i] /= norm;
             }
         }
-        
+
         int half = size / 2;
         short[] src = volumeBackup; // Always filter starting from clean backup data
         short[] dest = volume;
-        
+
         // Apply 2D convolution slice-by-slice along the Z-axis (axial planes)
         for (int z = 0; z < dimZ; z++) {
             int sliceOffset = z * dimY * dimX;
@@ -2313,17 +2927,21 @@ public class Viewer3DController extends JFrame {
                     float sum = 0;
                     for (int ky = 0; ky < size; ky++) {
                         int py = y + ky - half;
-                        if (py < 0) py = 0;
-                        else if (py >= dimY) py = dimY - 1;
-                        
+                        if (py < 0)
+                            py = 0;
+                        else if (py >= dimY)
+                            py = dimY - 1;
+
                         int pyOffset = sliceOffset + py * dimX;
                         int kRowOffset = ky * size;
-                        
+
                         for (int kx = 0; kx < size; kx++) {
                             int px = x + kx - half;
-                            if (px < 0) px = 0;
-                            else if (px >= dimX) px = dimX - 1;
-                            
+                            if (px < 0)
+                                px = 0;
+                            else if (px >= dimX)
+                                px = dimX - 1;
+
                             float kVal = kernel[kRowOffset + kx];
                             sum += src[pyOffset + px] * kVal;
                         }
@@ -2332,7 +2950,7 @@ public class Viewer3DController extends JFrame {
                 }
             }
         }
-        
+
         if (glViewer != null) {
             glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
             glViewer.triggerVolumeReupload();
@@ -2341,5 +2959,134 @@ public class Viewer3DController extends JFrame {
             cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
         }
         repaint();
+    }
+
+    private void performScissorCut(boolean clearInside) {
+        int w = glViewer != null ? glViewer.getWidth() : 0;
+        int h = glViewer != null ? glViewer.getHeight() : 0;
+        if (w <= 0 || h <= 0 || scissorPoints.size() < 3 || volume == null) {
+            scissorPoints.clear();
+            repaint();
+            return;
+        }
+
+        setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.WAIT_CURSOR));
+
+        try {
+            // 1. Create closed lasso path
+            java.awt.geom.Path2D.Float path = new java.awt.geom.Path2D.Float();
+            Point p0 = scissorPoints.get(0);
+            path.moveTo(p0.x, p0.y);
+            for (int i = 1; i < scissorPoints.size(); i++) {
+                Point p = scissorPoints.get(i);
+                path.lineTo(p.x, p.y);
+            }
+            path.closePath();
+
+            // 2. Pre-generate screen space mask for speed!
+            boolean[] mask = new boolean[w * h];
+            java.awt.geom.Rectangle2D bounds = path.getBounds2D();
+            int minX = Math.max(0, (int) Math.floor(bounds.getMinX()));
+            int maxX = Math.min(w - 1, (int) Math.ceil(bounds.getMaxX()));
+            int minY = Math.max(0, (int) Math.floor(bounds.getMinY()));
+            int maxY = Math.min(h - 1, (int) Math.ceil(bounds.getMaxY()));
+
+            for (int y = minY; y <= maxY; y++) {
+                for (int x = minX; x <= maxX; x++) {
+                    if (path.contains(x, y)) {
+                        mask[y * w + x] = true;
+                    }
+                }
+            }
+
+            // Ensure volumeBackup exists before editing
+            if (volumeBackup == null) {
+                volumeBackup = new short[volume.length];
+                System.arraycopy(volume, 0, volumeBackup, 0, volume.length);
+            }
+
+            double sinX = Math.sin(rotateX), cosX = Math.cos(rotateX);
+            double sinY = Math.sin(rotateY), cosY = Math.cos(rotateY);
+
+            double physX = dimX * spacingX;
+            double physY = dimY * spacingY;
+            double physZ = dimZ * spacingZ;
+            double maxPhys = Math.max(physX, Math.max(physY, physZ));
+
+            // GPU の描画ロジックと数学的に完全に一致させる
+            double currentScale = Math.min(w, h) * zoom;
+            double ox = glViewer != null ? glViewer.getOffsetX() : 0.0;
+            double oy = glViewer != null ? glViewer.getOffsetY() : 0.0;
+
+            double cx = dimX / 2.0, cy = dimY / 2.0, cz = dimZ / 2.0;
+            double w_half = w / 2.0;
+            double h_half = h / 2.0;
+
+            // Perform the cut
+            for (int iz = 0; iz < dimZ; iz++) {
+                double pz_local = (iz - cz) * spacingZ / maxPhys;
+                int iz_offset = iz * dimY * dimX;
+
+                for (int iy = 0; iy < dimY; iy++) {
+                    double py_local = (iy - cy) * spacingY / maxPhys;
+                    int iy_offset = iz_offset + iy * dimX;
+
+                    // GPU と同じ回転行列の適用 (RX -> RY)
+                    double ry_rx = py_local * cosX - pz_local * sinX;
+                    double rz_rx = py_local * sinX + pz_local * cosX;
+
+                    for (int ix = 0; ix < dimX; ix++) {
+                        double px_local = (ix - cx) * spacingX / maxPhys;
+
+                        double rx_ry = px_local * cosY + rz_rx * sinY;
+                        double ry_ry = ry_rx;
+
+                        // OpenGL(Y+上が正) と AWT Screen(Y+下が正) を反転させて同期
+                        double sx = (rx_ry + ox) * currentScale + w_half;
+                        double sy = h_half - (ry_ry + oy) * currentScale;
+
+                        int sx_int = (int) Math.round(sx);
+                        int sy_int = (int) Math.round(sy);
+
+                        boolean inside = false;
+                        if (sy_int >= 0 && sy_int < h && sx_int >= 0 && sx_int < w) {
+                            inside = mask[sy_int * w + sx_int];
+                        }
+
+                        if (clearInside) {
+                            if (inside) {
+                                volume[iy_offset + ix] = -1024;
+                            }
+                        } else {
+                            if (!inside) {
+                                volume[iy_offset + ix] = -1024;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Update Renderers
+            if (glViewer != null) {
+                glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
+                glViewer.triggerVolumeReupload();
+            }
+            if (cpuRenderer != null) {
+                cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
+            }
+        } finally {
+            setCursor(java.awt.Cursor.getDefaultCursor());
+            scissorPoints.clear();
+            repaint();
+        }
+    }
+
+    @Override
+    public void repaint() {
+        super.repaint();
+        if (glViewer != null) {
+            glViewer.markOverlayDirty();
+            glViewer.repaint();
+        }
     }
 }

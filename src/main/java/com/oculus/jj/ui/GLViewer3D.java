@@ -117,6 +117,7 @@ public class GLViewer3D extends AWTGLCanvas {
                     }
                 }
             }
+
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 markOverlayDirty();
@@ -126,6 +127,7 @@ public class GLViewer3D extends AWTGLCanvas {
                     }
                 }
             }
+
             @Override
             public void mouseDragged(java.awt.event.MouseEvent e) {
                 markOverlayDirty();
@@ -135,6 +137,7 @@ public class GLViewer3D extends AWTGLCanvas {
                     }
                 }
             }
+
             @Override
             public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
                 markOverlayDirty();
@@ -158,11 +161,15 @@ public class GLViewer3D extends AWTGLCanvas {
         this.dimY = h;
         this.dimZ = d;
         this.dataReady = true;
+        this.volumeNeedsReupload = true;
+
         // grad != null は GPU 初期化パス専用。CPU レンダラーは既にボリュームを持っているため
         // synchronized な setVolumeData() を呼ばない（render() ロック競合によるブロックを防ぐ）。
         if (cpuRenderer != null && grad == null) {
             cpuRenderer.setVolumeData(vol, w, h, d);
             requestCpuRender();
+        } else {
+            repaint();
         }
     }
 
@@ -170,6 +177,11 @@ public class GLViewer3D extends AWTGLCanvas {
 
     public void triggerVolumeReupload() {
         this.volumeNeedsReupload = true;
+        if (engineMode == ENGINE_CPU) {
+            requestCpuRender();
+        } else {
+            repaint();
+        }
     }
 
     public void setCpuRenderer(CPURaycastRenderer renderer) {
@@ -347,9 +359,17 @@ public class GLViewer3D extends AWTGLCanvas {
         }
     }
 
-    public float getOffsetX() { return offsetX; }
-    public float getOffsetY() { return offsetY; }
-    public float getOffsetZ() { return offsetZ; }
+    public float getOffsetX() {
+        return offsetX;
+    }
+
+    public float getOffsetY() {
+        return offsetY;
+    }
+
+    public float getOffsetZ() {
+        return offsetZ;
+    }
 
     public void setClipping(float x0, float x1, float y0, float y1, float z0, float z1) {
         markOverlayDirty();
@@ -489,10 +509,10 @@ public class GLViewer3D extends AWTGLCanvas {
         float ty = -(top + bottom) / (top - bottom);
         float tz = -(far + near) / (far - near);
         return new float[] {
-            x_ortho, 0, 0, 0,
-            0, y_ortho, 0, 0,
-            0, 0, z_ortho, 0,
-            tx, ty, tz, 1
+                x_ortho, 0, 0, 0,
+                0, y_ortho, 0, 0,
+                0, 0, z_ortho, 0,
+                tx, ty, tz, 1
         };
     }
 
@@ -850,8 +870,9 @@ public class GLViewer3D extends AWTGLCanvas {
         }
         float[] view = translate(0, 0, -1.2f / zoom);
         // yaw(Y) -> pitch(X) の順にすることで、初期姿勢でも横回転が効きやすい
-        float[] mdl = multiply(translate(offsetX, offsetY, offsetZ), multiply(multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0)),
-                scale(voxScaleX, voxScaleY, voxScaleZ)));
+        float[] mdl = multiply(translate(offsetX, offsetY, offsetZ),
+                multiply(multiply(rotate(rotateY, 0, 1, 0), rotate(rotateX, 1, 0, 0)),
+                        scale(voxScaleX, voxScaleY, voxScaleZ)));
 
         setMat4("projection", proj);
         setMat4("view", view);
@@ -1153,8 +1174,8 @@ public class GLViewer3D extends AWTGLCanvas {
                 for (int col = 0; col < width; col++) {
                     int p = argb[srcBase + col];
                     reusableOverlayBuffer.put((byte) ((p >> 16) & 0xFF)); // R
-                    reusableOverlayBuffer.put((byte) ((p >> 8) & 0xFF));  // G
-                    reusableOverlayBuffer.put((byte) (p & 0xFF));         // B
+                    reusableOverlayBuffer.put((byte) ((p >> 8) & 0xFF)); // G
+                    reusableOverlayBuffer.put((byte) (p & 0xFF)); // B
                     reusableOverlayBuffer.put((byte) ((p >> 24) & 0xFF)); // A
                 }
             }
@@ -1170,11 +1191,13 @@ public class GLViewer3D extends AWTGLCanvas {
             GL33.glTexParameteri(GL33.GL_TEXTURE_2D, GL33.GL_TEXTURE_WRAP_T, GL33.GL_CLAMP_TO_EDGE);
 
             if (sizeChanged) {
-                GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA8, width, height, 0, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, reusableOverlayBuffer);
+                GL33.glTexImage2D(GL33.GL_TEXTURE_2D, 0, GL33.GL_RGBA8, width, height, 0, GL33.GL_RGBA,
+                        GL33.GL_UNSIGNED_BYTE, reusableOverlayBuffer);
                 overlayWidth = width;
                 overlayHeight = height;
             } else {
-                GL33.glTexSubImage2D(GL33.GL_TEXTURE_2D, 0, 0, 0, width, height, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE, reusableOverlayBuffer);
+                GL33.glTexSubImage2D(GL33.GL_TEXTURE_2D, 0, 0, 0, width, height, GL33.GL_RGBA, GL33.GL_UNSIGNED_BYTE,
+                        reusableOverlayBuffer);
             }
         }
 

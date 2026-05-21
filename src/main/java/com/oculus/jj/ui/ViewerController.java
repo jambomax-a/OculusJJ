@@ -79,6 +79,11 @@ public class ViewerController extends JFrame {
                                 Window activeWindow = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
                                         .getActiveWindow();
 
+                                // 3Dビューワーがアクティブな場合は、2D側のグローバルショートカットを無効化する
+                                if (activeWindow instanceof Viewer3DController) {
+                                    return false;
+                                }
+
                                 // Debug log to see what window is active
                                 // if (activeWindow != null)
 
