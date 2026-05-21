@@ -56,6 +56,21 @@ public class TransferFunction {
         this.name = name;
     }
 
+    public TransferFunction copy() {
+        TransferFunction f = new TransferFunction(this.name);
+        f.colorPoints.addAll(this.colorPoints);
+        f.opacityPoints.addAll(this.opacityPoints);
+        if (this.tableRed != null)
+            f.tableRed = this.tableRed.clone();
+        if (this.tableGreen != null)
+            f.tableGreen = this.tableGreen.clone();
+        if (this.tableBlue != null)
+            f.tableBlue = this.tableBlue.clone();
+        if (this.tableAlpha != null)
+            f.tableAlpha = this.tableAlpha.clone();
+        return f;
+    }
+
     public void addColor(float hu, float r, float g, float b) {
         colorPoints.add(new ColorPoint(hu, r, g, b));
         colorPoints.sort(Comparator.comparingDouble(p -> p.huValue));
@@ -253,10 +268,10 @@ public class TransferFunction {
             int lastIdx = tableRed.length - 1;
             int idx = Math.max(0, Math.min(lastIdx, (int) Math.round(clampedT * lastIdx)));
             return new float[] {
-                tableRed[idx] / 255.0f,
-                tableGreen[idx] / 255.0f,
-                tableBlue[idx] / 255.0f,
-                tableAlpha[idx]
+                    tableRed[idx] / 255.0f,
+                    tableGreen[idx] / 255.0f,
+                    tableBlue[idx] / 255.0f,
+                    tableAlpha[idx]
             };
         }
         float[] rgb = interpolateColor(hu);
@@ -380,6 +395,282 @@ public class TransferFunction {
         tf.addOpacity(500, 0.30f); // 骨: やや透かして血管を見やすく
         tf.addOpacity(1000, 0.30f);
         return tf;
+    }
+
+    /** B/W Inverse: 白黒反転 */
+    public static TransferFunction createBWInverse() {
+        TransferFunction tf = new TransferFunction("B/W Inverse");
+        tf.addColor(-1024, 1.0f, 1.0f, 1.0f);
+        tf.addColor(3072, 0.0f, 0.0f, 0.0f);
+        return tf;
+    }
+
+    /** BlackBody: 黒体輻射風グラデーション */
+    public static TransferFunction createBlackBody() {
+        TransferFunction tf = new TransferFunction("BlackBody");
+        tf.addColor(-1024, 0.0f, 0.0f, 0.0f);
+        tf.addColor(-500, 0.5f, 0.0f, 0.0f);
+        tf.addColor(500, 1.0f, 0.5f, 0.0f);
+        tf.addColor(1500, 1.0f, 1.0f, 0.5f);
+        tf.addColor(3072, 1.0f, 1.0f, 1.0f);
+        return tf;
+    }
+
+    /** Jet: 標準的なレインボーマップ */
+    public static TransferFunction createJet() {
+        TransferFunction tf = new TransferFunction("Jet");
+        tf.addColor(-1024, 0.0f, 0.0f, 0.5f);
+        tf.addColor(-500, 0.0f, 0.0f, 1.0f);
+        tf.addColor(0, 0.0f, 1.0f, 1.0f);
+        tf.addColor(500, 1.0f, 1.0f, 0.0f);
+        tf.addColor(1000, 1.0f, 0.0f, 0.0f);
+        tf.addColor(3072, 0.5f, 0.0f, 0.0f);
+        return tf;
+    }
+
+    /** Hot Iron: 加熱された鉄のような色合い */
+    public static TransferFunction createHotIron() {
+        TransferFunction tf = new TransferFunction("Hot Iron");
+        tf.addColor(-1024, 0.0f, 0.0f, 0.0f);
+        tf.addColor(-200, 0.5f, 0.0f, 0.0f);
+        tf.addColor(600, 1.0f, 0.5f, 0.0f);
+        tf.addColor(1500, 1.0f, 1.0f, 0.5f);
+        tf.addColor(3072, 1.0f, 1.0f, 1.0f);
+        return tf;
+    }
+
+    /**
+     * 色マッピング（CLUT）のみを指定のタイプに変更する。
+     */
+    public void setColorType(String type) {
+        colorPoints.clear();
+        tableRed = null;
+        tableGreen = null;
+        tableBlue = null;
+        this.name = type;
+
+        switch (type) {
+            case "B/W Inverse":
+                addColor(HU_MIN, 1.0f, 1.0f, 1.0f);
+                addColor(HU_MAX, 0.0f, 0.0f, 0.0f);
+                break;
+            case "BlackBody":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-500, 0.5f, 0.0f, 0.0f);
+                addColor(500, 1.0f, 0.5f, 0.0f);
+                addColor(1500, 1.0f, 1.0f, 0.5f);
+                addColor(3072, 1.0f, 1.0f, 1.0f);
+                break;
+            case "Jet":
+                addColor(-1024, 0.0f, 0.0f, 0.5f);
+                addColor(-500, 0.0f, 0.0f, 1.0f);
+                addColor(0, 0.0f, 1.0f, 1.0f);
+                addColor(500, 1.0f, 1.0f, 0.0f);
+                addColor(1000, 1.0f, 0.0f, 0.0f);
+                addColor(3072, 0.5f, 0.0f, 0.0f);
+                break;
+            case "HotIron":
+            case "Hot Iron":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-200, 0.5f, 0.0f, 0.0f);
+                addColor(600, 1.0f, 0.5f, 0.0f);
+                addColor(1500, 1.0f, 1.0f, 0.5f);
+                addColor(3072, 1.0f, 1.0f, 1.0f);
+                break;
+            case "Endoscopy":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-200, 0.6f, 0.3f, 0.2f);
+                addColor(HU_MAX, 1.0f, 0.9f, 0.8f);
+                break;
+            case "HotMetal":
+            case "Hot Metal":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(0, 0.5f, 0.2f, 0.0f);
+                addColor(3072, 1.0f, 1.0f, 0.8f);
+                break;
+            case "PPU Inferno":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-300, 0.2f, 0.05f, 0.3f);
+                addColor(400, 0.7f, 0.15f, 0.4f);
+                addColor(1500, 0.95f, 0.5f, 0.1f);
+                addColor(3072, 0.98f, 0.93f, 0.6f);
+                break;
+            case "PPU Viridis":
+                addColor(-1024, 0.26f, 0.0f, 0.33f);
+                addColor(-300, 0.23f, 0.3f, 0.54f);
+                addColor(400, 0.12f, 0.56f, 0.55f);
+                addColor(1500, 0.36f, 0.78f, 0.38f);
+                addColor(3072, 0.99f, 0.89f, 0.14f);
+                break;
+            case "Rainbow":
+                addColor(-1024, 1.0f, 0.0f, 0.0f);
+                addColor(-200, 1.0f, 1.0f, 0.0f);
+                addColor(400, 0.0f, 1.0f, 0.0f);
+                addColor(1200, 0.0f, 1.0f, 1.0f);
+                addColor(2200, 0.0f, 0.0f, 1.0f);
+                addColor(3072, 1.0f, 0.0f, 1.0f);
+                break;
+            case "NIH":
+            case "PET":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-500, 0.0f, 0.0f, 1.0f);
+                addColor(0, 0.0f, 1.0f, 0.0f);
+                addColor(1000, 1.0f, 1.0f, 0.0f);
+                addColor(2000, 1.0f, 0.0f, 0.0f);
+                addColor(3072, 1.0f, 1.0f, 1.0f);
+                break;
+            case "GEcolor":
+            case "GE color":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-200, 1.0f, 0.0f, 0.0f);
+                addColor(500, 1.0f, 1.0f, 0.0f);
+                addColor(3072, 1.0f, 1.0f, 1.0f);
+                break;
+            case "Flow":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(0, 0.0f, 0.5f, 1.0f);
+                addColor(3072, 1.0f, 0.0f, 0.0f);
+                break;
+            case "French":
+                addColor(-1024, 0.0f, 0.0f, 0.5f);
+                addColor(0, 1.0f, 1.0f, 1.0f);
+                addColor(3072, 1.0f, 0.0f, 0.0f);
+                break;
+            case "HotGreen":
+            case "Hot Green":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(0, 0.0f, 1.0f, 0.0f);
+                addColor(1500, 1.0f, 1.0f, 0.0f);
+                addColor(3072, 1.0f, 1.0f, 1.0f);
+                break;
+            case "Spectrum":
+                addColor(-1024, 1.0f, 0.0f, 1.0f); // Violet
+                addColor(-500, 0.0f, 0.0f, 1.0f); // Blue
+                addColor(0, 0.0f, 1.0f, 1.0f); // Cyan
+                addColor(500, 0.0f, 1.0f, 0.0f); // Green
+                addColor(1000, 1.0f, 1.0f, 0.0f); // Yellow
+                addColor(2000, 1.0f, 0.0f, 0.0f); // Red
+                addColor(3072, 1.0f, 1.0f, 1.0f); // White
+                break;
+            case "Stern":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(0, 1.0f, 0.5f, 0.5f);
+                addColor(1500, 0.5f, 0.5f, 1.0f);
+                addColor(3072, 0.5f, 1.0f, 1.0f);
+                break;
+            case "UCLA":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(-500, 0.0f, 0.2f, 0.4f);
+                addColor(0, 0.0f, 0.6f, 0.6f);
+                addColor(500, 0.7f, 0.7f, 0.0f);
+                addColor(1500, 1.0f, 0.5f, 0.0f);
+                addColor(3072, 1.0f, 1.0f, 1.0f);
+                break;
+            case "VR Red Vessels":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(100, 0.5f, 0.0f, 0.0f);
+                addColor(500, 1.0f, 0.1f, 0.1f);
+                addColor(1500, 1.0f, 0.6f, 0.4f);
+                addColor(3072, 1.0f, 0.9f, 0.8f);
+                break;
+            case "Perfusion":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(0, 0.8f, 0.0f, 0.2f);
+                addColor(1000, 1.0f, 0.5f, 0.0f);
+                addColor(3072, 1.0f, 0.9f, 0.5f);
+                break;
+            case "Ratio":
+                addColor(-1024, 0.0f, 0.6f, 1.0f);
+                addColor(0, 1.0f, 1.0f, 1.0f);
+                addColor(3072, 1.0f, 0.4f, 0.0f);
+                break;
+            case "Gold":
+                addColor(-1024, 0.0f, 0.0f, 0.0f);
+                addColor(0, 0.6f, 0.4f, 0.1f);
+                addColor(1500, 1.0f, 0.8f, 0.2f);
+                addColor(3072, 1.0f, 1.0f, 0.9f);
+                break;
+            case "ired":
+                addColor(-1024, 0.2f, 0.0f, 0.0f);
+                addColor(3072, 1.0f, 0.5f, 0.5f);
+                break;
+            case "Hue1":
+                for (int i = 0; i <= 6; i++) {
+                    float h = i / 6.0f;
+                    float hu = HU_MIN + h * (HU_MAX - HU_MIN);
+                    java.awt.Color c = java.awt.Color.getHSBColor(h, 0.8f, 1.0f);
+                    addColor(hu, c.getRed() / 255.0f, c.getGreen() / 255.0f, c.getBlue() / 255.0f);
+                }
+                break;
+            case "VR Muscles-Bones":
+                // 内部的に再定義されたポイント群を適用
+                TransferFunction tmpMB = createVRMusclesBones();
+                this.colorPoints.clear();
+                this.colorPoints.addAll(tmpMB.colorPoints);
+                break;
+            case "VR Bones":
+                TransferFunction tmpBone = createBone();
+                this.colorPoints.clear();
+                this.colorPoints.addAll(tmpBone.colorPoints);
+                break;
+            default:
+                // Grayscale
+                addColor(HU_MIN, 0.0f, 0.0f, 0.0f);
+                addColor(HU_MAX, 1.0f, 1.0f, 1.0f);
+                break;
+        }
+    }
+
+    /**
+     * 不透明度テーブルを指定の関数型で上書きする
+     */
+    public void setOpacityType(String type) {
+        opacityPoints.clear();
+        switch (type) {
+            case "Linear Table":
+                addOpacity(HU_MIN, 0.0f);
+                addOpacity(HU_MAX, 1.0f);
+                break;
+            case "Logarithmic Table":
+                for (int i = 0; i <= 10; i++) {
+                    float t = i / 10.0f;
+                    float hu = HU_MIN + t * (HU_MAX - HU_MIN);
+                    float alpha = (float) (Math.log(1 + 9 * t) / Math.log(10));
+                    addOpacity(hu, alpha);
+                }
+                break;
+            case "Logarithmic Inverse Table":
+                for (int i = 0; i <= 10; i++) {
+                    float t = i / 10.0f;
+                    float hu = HU_MIN + t * (HU_MAX - HU_MIN);
+                    float alpha = 1.0f - (float) (Math.log(1 + 9 * (1.0f - t)) / Math.log(10));
+                    addOpacity(hu, alpha);
+                }
+                break;
+            case "Smooth Table":
+                addOpacity(HU_MIN, 0.0f);
+                addOpacity(HU_MIN + (HU_MAX - HU_MIN) * 0.2f, 0.05f);
+                addOpacity(HU_MIN + (HU_MAX - HU_MIN) * 0.5f, 0.5f);
+                addOpacity(HU_MIN + (HU_MAX - HU_MIN) * 0.8f, 0.95f);
+                addOpacity(HU_MAX, 1.0f);
+                break;
+            case "Inverse Linear Table":
+                addOpacity(HU_MIN, 1.0f);
+                addOpacity(HU_MAX, 0.0f);
+                break;
+            case "Inverse Logarithmic Table":
+                for (int i = 0; i <= 10; i++) {
+                    float t = i / 10.0f;
+                    float hu = HU_MIN + t * (HU_MAX - HU_MIN);
+                    float alpha = 1.0f - (float) (Math.log(1 + 9 * t) / Math.log(10));
+                    addOpacity(hu, alpha);
+                }
+                break;
+            default:
+                addOpacity(HU_MIN, 0.0f);
+                addOpacity(HU_MAX, 1.0f);
+                break;
+        }
     }
 
     /**

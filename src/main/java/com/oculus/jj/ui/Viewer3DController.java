@@ -944,27 +944,48 @@ public class Viewer3DController extends JFrame {
 
         JLabel lblWL = new JLabel("WL/WW:", JLabel.RIGHT);
         lblWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        JComboBox<String> cbWL = new JComboBox<>(
-                new String[] { "Other", "Default", "Bone", "Soft Tissue", "Lung", "Vascular" });
+        JComboBox<String> cbWL = new JComboBox<>(new String[] {
+                "Other",
+                "Default WL & WW",
+                "Full dynamic",
+                "----------------",
+                "1 - CT - Abdomen",
+                "2 - CT - Bone",
+                "3 - CT - Brain",
+                "4 - CT - Pulmonary",
+                "5 - VR - Endoscopy",
+                "----------------",
+                "Add Current WL/WW",
+                "Set WL/WW Manually"
+        });
         cbWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
         cbWL.setFocusable(false);
-        cbWL.setSelectedItem("Default");
+        cbWL.setSelectedItem("Other");
         cbWL.addActionListener(e -> {
             String item = (String) cbWL.getSelectedItem();
-            if ("Default".equals(item)) {
+            if (item == null || item.startsWith("-"))
+                return;
+
+            if ("Default WL & WW".equals(item)) {
+                windowLevel = 50;
+                windowWidth = 350;
+            } else if ("Full dynamic".equals(item)) {
                 windowLevel = 1024;
                 windowWidth = 4096;
-            } else if ("Bone".equals(item)) {
+            } else if (item.contains("Abdomen")) {
+                windowLevel = 60;
+                windowWidth = 400;
+            } else if (item.contains("Bone")) {
                 windowLevel = 300;
                 windowWidth = 1500;
-            } else if ("Soft Tissue".equals(item)) {
+            } else if (item.contains("Brain")) {
                 windowLevel = 40;
-                windowWidth = 400;
-            } else if ("Lung".equals(item)) {
-                windowLevel = -500;
+                windowWidth = 80;
+            } else if (item.contains("Pulmonary")) {
+                windowLevel = -600;
                 windowWidth = 1500;
-            } else if ("Vascular".equals(item)) {
-                windowLevel = 200;
+            } else if (item.contains("Endoscopy")) {
+                windowLevel = -200;
                 windowWidth = 1000;
             }
             if (glViewer != null) {
@@ -977,22 +998,58 @@ public class Viewer3DController extends JFrame {
 
         JLabel lblCLUT = new JLabel("CLUT:", JLabel.RIGHT);
         lblCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        JComboBox<String> cbCLUT = new JComboBox<>(
-                new String[] { "No CLUT", "Hot Iron", "Rainbow", "VR Muscles & Bones" });
+        JComboBox<String> cbCLUT = new JComboBox<>(new String[] {
+                "No CLUT",
+                "----------------",
+                "B/W Inverse",
+                "BlackBody",
+                "Endoscopy",
+                "Flow",
+                "French",
+                "GEcolor",
+                "GrayRainbow",
+                "HotGreen",
+                "HotIron",
+                "HotMetal",
+                "Hue1",
+                "Hue2",
+                "ired",
+                "Jet",
+                "NIH",
+                "Perfusion",
+                "PET",
+                "PPU Inferno",
+                "PPU Magma",
+                "PPU Plasma",
+                "PPU Viridis",
+                "Rainbow",
+                "Rainbow2",
+                "Rainbow3",
+                "Ratio",
+                "Spectrum",
+                "Stern",
+                "UCLA",
+                "Unnamed",
+                "VR Bones",
+                "VR Muscles-Bones",
+                "VR Red Vessels",
+                "----------------",
+                "8-bit CLUT Editor",
+                "16-bit CLUT Editor"
+        });
         cbCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
         cbCLUT.setFocusable(false);
-        cbCLUT.setSelectedItem("VR Muscles & Bones");
+        cbCLUT.setSelectedItem("VR Muscles-Bones");
         cbCLUT.addActionListener(e -> {
             String clut = (String) cbCLUT.getSelectedItem();
-            if ("VR Muscles & Bones".equals(clut)) {
+            if (clut == null || clut.startsWith("-"))
+                return;
+
+            if (currentTF == null) {
                 currentTF = TransferFunction.createVRMusclesBones();
-            } else if ("Hot Iron".equals(clut)) {
-                currentTF = TransferFunction.createSoftTissue();
-            } else if ("Rainbow".equals(clut)) {
-                currentTF = TransferFunction.createVascular();
-            } else {
-                currentTF = TransferFunction.createBone();
             }
+            currentTF.setColorType(clut);
+
             if (glViewer != null) {
                 glViewer.setTransferFunction(currentTF);
             }
@@ -1003,9 +1060,34 @@ public class Viewer3DController extends JFrame {
 
         JLabel lblOpacity = new JLabel("Opacity:", JLabel.RIGHT);
         lblOpacity.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        JComboBox<String> cbOpacity = new JComboBox<>(new String[] { "Linear", "Logarithmic" });
+        JComboBox<String> cbOpacity = new JComboBox<>(new String[] {
+                "Linear Table",
+                "Logarithmic Inverse Table",
+                "Logarithmic Table",
+                "Smooth Table",
+                "Inverse Linear Table",
+                "Inverse Logarithmic Table",
+                "----------------",
+                "Add an Opacity Table"
+        });
         cbOpacity.setFont(new Font("SansSerif", Font.PLAIN, 10));
         cbOpacity.setFocusable(false);
+        cbOpacity.setSelectedItem("Linear Table");
+        cbOpacity.addActionListener(e -> {
+            String op = (String) cbOpacity.getSelectedItem();
+            if (op == null || op.startsWith("-"))
+                return;
+
+            if (currentTF == null) {
+                currentTF = TransferFunction.createVRMusclesBones();
+            }
+            currentTF.setOpacityType(op);
+
+            if (glViewer != null) {
+                glViewer.setTransferFunction(currentTF);
+            }
+            repaint();
+        });
         gridLeft.add(lblOpacity);
         gridLeft.add(cbOpacity);
 
@@ -1035,7 +1117,8 @@ public class Viewer3DController extends JFrame {
             JMenuItem itemMB = new JMenuItem("VR Muscle & Bone (Creamy)");
             itemMB.addActionListener(ev -> {
                 currentTF = TransferFunction.createVRMusclesBones();
-                cbCLUT.setSelectedItem("VR Muscles & Bones");
+                cbCLUT.setSelectedItem("VR Muscles-Bones");
+                cbOpacity.setSelectedItem("Linear Table");
                 if (glViewer != null)
                     glViewer.setTransferFunction(currentTF);
                 repaint();
@@ -1045,17 +1128,30 @@ public class Viewer3DController extends JFrame {
             JMenuItem itemBone = new JMenuItem("Bone Only");
             itemBone.addActionListener(ev -> {
                 currentTF = TransferFunction.createBone();
-                cbCLUT.setSelectedItem("No CLUT");
+                cbCLUT.setSelectedItem("VR Bones");
+                cbOpacity.setSelectedItem("Linear Table");
                 if (glViewer != null)
                     glViewer.setTransferFunction(currentTF);
                 repaint();
             });
             menu.add(itemBone);
 
+            JMenuItem itemRed = new JMenuItem("VR Red Vessels");
+            itemRed.addActionListener(ev -> {
+                currentTF.setColorType("VR Red Vessels");
+                cbCLUT.setSelectedItem("VR Red Vessels");
+                cbOpacity.setSelectedItem("Logarithmic Table");
+                if (glViewer != null)
+                    glViewer.setTransferFunction(currentTF);
+                repaint();
+            });
+            menu.add(itemRed);
+
             JMenuItem itemSoft = new JMenuItem("Soft Tissue (Hot Iron)");
             itemSoft.addActionListener(ev -> {
                 currentTF = TransferFunction.createSoftTissue();
-                cbCLUT.setSelectedItem("Hot Iron");
+                cbCLUT.setSelectedItem("HotIron");
+                cbOpacity.setSelectedItem("Linear Table");
                 if (glViewer != null)
                     glViewer.setTransferFunction(currentTF);
                 repaint();
@@ -1066,6 +1162,7 @@ public class Viewer3DController extends JFrame {
             itemLung.addActionListener(ev -> {
                 currentTF = TransferFunction.createLung();
                 cbCLUT.setSelectedItem("No CLUT");
+                cbOpacity.setSelectedItem("Linear Table");
                 if (glViewer != null)
                     glViewer.setTransferFunction(currentTF);
                 repaint();
@@ -2581,12 +2678,13 @@ public class Viewer3DController extends JFrame {
 
             String label;
             if (isPersp) {
-                label = String.format("View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm",
-                        w, h, val, ix, iy, px, py);
+                label = String.format(
+                        "View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm  Z: %.1f mm",
+                        w, h, val, ix, iy, px, py, pz);
             } else {
                 label = String.format(
-                        "View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm   SCALE: %.3f %%",
-                        w, h, val, ix, iy, px, py, scaleFactor);
+                        "View Size: %d x %d   Pixel: %d HU   X: %d px  Y: %d px   X: %.1f mm  Y: %.1f mm  Z: %.1f mm   SCALE: %.3f %%",
+                        w, h, val, ix, iy, px, py, pz, scaleFactor);
             }
             infoLabel.setText(label);
         } else {
