@@ -592,8 +592,7 @@ public class Viewer3DController extends JFrame {
                                 }
                             }
                         }
-                        // コピー済みスライスを即座に解放
-                        pixList.set(z, null);
+                        // pixList.set(z, null); // HOROS-20240407互換のため、2D連動用に参照を保持する
 
                         // 50枚ごとにコンソールに進捗を出す
                         if (z % 50 == 0) {
@@ -2734,13 +2733,14 @@ public class Viewer3DController extends JFrame {
         int count = 0;
         while (head < tail) {
             int idx = q[head++];
-            volume[idx] = -1024; // 空気に置換して消去
-            count++;
-
             int z = idx / (dimY * dimX);
             int rem = idx % (dimY * dimX);
             int y = rem / dimX;
             int x = rem % dimX;
+
+            volume[idx] = -1024; // 空気に置換して消去
+            update2DData(z, y, x, (short) -1024); // 2D連動
+            count++;
 
             for (int i = 0; i < 6; i++) {
                 int nx = x + dx[i];
@@ -2766,6 +2766,12 @@ public class Viewer3DController extends JFrame {
         if (cpuRenderer != null) {
             cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
         }
+
+        // HOROS-20240407連動: 2Dビューも更新
+        if (viewer2D != null && viewer2D.getImageView() != null) {
+            viewer2D.getImageView().repaint();
+        }
+
         repaint();
     }
 
@@ -3059,6 +3065,24 @@ public class Viewer3DController extends JFrame {
         repaint();
     }
 
+    private void update2DData(int z, int y, int x, short huValue) {
+        if (pixList != null && z >= 0 && z < pixList.size()) {
+            DicomPix pix = pixList.get(z);
+            if (pix != null) {
+                short[] rawData = pix.getShortData();
+                if (rawData != null) {
+                    int offset = y * dimX + x;
+                    if (offset >= 0 && offset < rawData.length) {
+                        float s = pix.getRescaleSlope();
+                        float inter = pix.getRescaleIntercept();
+                        // (PIXEL * Slope) + Intercept = HU => PIXEL = (HU - Intercept) / Slope
+                        rawData[offset] = (short) Math.round((huValue - inter) / s);
+                    }
+                }
+            }
+        }
+    }
+
     private void performScissorCut(boolean clearInside) {
         int w = glViewer != null ? glViewer.getWidth() : 0;
         int h = glViewer != null ? glViewer.getHeight() : 0;
@@ -3154,10 +3178,12 @@ public class Viewer3DController extends JFrame {
                         if (clearInside) {
                             if (inside) {
                                 volume[iy_offset + ix] = -1024;
+                                update2DData(iz, iy, ix, (short) -1024);
                             }
                         } else {
                             if (!inside) {
                                 volume[iy_offset + ix] = -1024;
+                                update2DData(iz, iy, ix, (short) -1024);
                             }
                         }
                     }
@@ -3171,6 +3197,11 @@ public class Viewer3DController extends JFrame {
             }
             if (cpuRenderer != null) {
                 cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
+            }
+
+            // 4. Update 2D Viewer (HOROS-20240407連動)
+            if (viewer2D != null && viewer2D.getImageView() != null) {
+                viewer2D.getImageView().repaint();
             }
         } finally {
             setCursor(java.awt.Cursor.getDefaultCursor());
