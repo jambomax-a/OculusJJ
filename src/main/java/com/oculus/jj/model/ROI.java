@@ -1604,9 +1604,7 @@ public class ROI {
     }
 
     private double calculateLength(Point2D.Float p1, Point2D.Float p2) {
-        double dx = (p1.x - p2.x) * pixelSpacingX;
-        double dy = (p1.y - p2.y) * pixelSpacingY;
-        return Math.sqrt(dx * dx + dy * dy);
+        return calculateDistanceBetween(p1, p2);
     }
 
     // Getters and Setters
@@ -1867,6 +1865,12 @@ public class ROI {
     }
 
     public double getArea() {
+        if (type == DCMView.ToolMode.tAxis && points.size() >= 4) {
+            double len1 = calculateDistanceBetween(points.get(0), points.get(1));
+            double len2 = calculateDistanceBetween(points.get(2), points.get(3));
+            // 楕円近似面積を計算 (PI * a/2 * b/2)
+            return (Math.PI * len1 * len2) / 4.0;
+        }
         return rtotal;
     }
 
@@ -1874,13 +1878,32 @@ public class ROI {
         double perimeter = 0;
         if (points.size() < 2)
             return 0;
+
         for (int i = 0; i < points.size() - 1; i++) {
-            perimeter += points.get(i).distance(points.get(i + 1));
+            perimeter += calculateDistanceBetween(points.get(i), points.get(i + 1));
         }
         if (closed && points.size() > 2) {
-            perimeter += points.get(points.size() - 1).distance(points.get(0));
+            perimeter += calculateDistanceBetween(points.get(points.size() - 1), points.get(0));
         }
         return perimeter;
+    }
+
+    private double calculateDistanceBetween(Point2D.Float p1, Point2D.Float p2) {
+        double spX = pixelSpacingX;
+        double spY = pixelSpacingY;
+
+        if (sourcePix != null) {
+            // 線分の中点でのサンプリング（USマルチリージョン対応）
+            double midX = (p1.x + p2.x) / 2.0;
+            double midY = (p1.y + p2.y) / 2.0;
+            spX = sourcePix.getPixelSpacingXAt(midX, midY);
+            spY = sourcePix.getPixelSpacingYAt(midX, midY);
+        }
+
+        double dx = (p2.x - p1.x) * spX;
+        double dy = (p2.y - p1.y) * spY;
+
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
     public void updateStatistics() {
@@ -1889,9 +1912,13 @@ public class ROI {
     }
 
     private String formatLength(double lengthInCm) {
+        if (pixelUnit != null && !pixelUnit.isEmpty() && !pixelUnit.equals("mm")) {
+            return String.format("%.2f %s", lengthInCm * 10.0, pixelUnit);
+        }
+
         if (lengthInCm < 0.001) { // < 0.01 mm
             return String.format("%.2f \u00B5m", lengthInCm * 10000.0);
-        } else if (lengthInCm < 0.1) { // < 1.0 mm
+        } else if (lengthInCm < 1.0) { // < 10.0 mm (Horos usually stays mm under 1cm)
             return String.format("%.2f mm", lengthInCm * 10.0);
         } else {
             return String.format("%.2f cm", lengthInCm);
@@ -1899,6 +1926,10 @@ public class ROI {
     }
 
     private String formatArea(double areaInCm2) {
+        if (pixelUnit != null && !pixelUnit.isEmpty() && !pixelUnit.equals("mm")) {
+            // ピクセル単位がある場合（USなど）は、その単位系で面積を表示
+            return String.format("%.2f %s\u00B2", areaInCm2 * 100.0, pixelUnit);
+        }
         return String.format("%.2f cm\u00B2", areaInCm2);
     }
 
@@ -1921,6 +1952,13 @@ public class ROI {
         textualBoxLine6 = null;
 
         switch (type) {
+            case tMesure:
+                if (points.size() >= 2) {
+                    double lengthInMm = calculateLength();
+                    textualBoxLine2 = String.format("L: %s", formatLength(lengthInMm / 10.0));
+                }
+                break;
+
             case t2DPoint:
                 textualBoxLine1 = String.format("Point %d", id);
                 if (points.size() > 0) {
@@ -1935,23 +1973,26 @@ public class ROI {
                 if (points.size() >= 2) {
                     Point2D.Float p0 = points.get(0);
                     Point2D.Float p1 = points.get(1);
-                    double len1 = p0.distance(p1) * pixelSpacingX / 10.0;
+                    double len1 = calculateDistanceBetween(p0, p1) / 10.0;
                     textualBoxLine2 = String.format("L: %s", formatLength(len1));
 
                     if (points.size() >= 4) {
                         Point2D.Float p2 = points.get(2);
                         Point2D.Float p3 = points.get(3);
-                        double len2 = p2.distance(p3) * pixelSpacingX / 10.0;
+                        double len2 = calculateDistanceBetween(p2, p3) / 10.0;
                         textualBoxLine3 = String.format("S: %s", formatLength(len2));
+
+                        // 面積表示を追加（楕円近似など）
+                        textualBoxLine4 = String.format("Area: %s", formatArea(getArea() / 100.0));
                     }
                 }
                 break;
 
             case tOPolygon: {
                 updateStatistics();
-                double perimeter = getPerimeter() * pixelSpacingX;
+                double perimeter = getPerimeter();
                 if (points.size() >= 3) {
-                    double gap = points.get(0).distance(points.get(points.size() - 1)) * pixelSpacingX;
+                    double gap = calculateDistanceBetween(points.get(0), points.get(points.size() - 1));
                     if (gap < perimeter / 3.0) { // RATIO_FOROPOLYGONAREA = 3.0
                         textualBoxLine2 = String.format("Area: %s", formatArea(getArea() / 100.0));
                         textualBoxLine3 = String.format("Mean: %.2f SD: %.2f", getMean(), getStDev());
@@ -1964,7 +2005,6 @@ public class ROI {
                 break;
             }
 
-            case tROI:
             case tCPolygon:
             case tOval:
             case tPencil:
@@ -1974,8 +2014,28 @@ public class ROI {
                 }
                 updateStatistics();
                 textualBoxLine2 = String.format("Area: %s", formatArea(getArea() / 100.0));
+                // 面積が 0 より大きい場合のみ統計（平均値・標準偏差等）を表示 (Horos準拠)
+                if (getArea() > 0) {
+                    textualBoxLine3 = String.format("Mean: %.2f SD: %.2f", getMean(), getStDev());
+                    textualBoxLine4 = String.format("Min: %.1f Max: %.1f", getMin(), getMax());
+                    textualBoxLine5 = String.format("Perim: %s", formatLength(getPerimeter() / 10.0));
+                } else {
+                    textualBoxLine3 = String.format("Perim: %s", formatLength(getPerimeter() / 10.0));
+                }
+                break;
+
+            case tROI:
+                if (textualBoxLine1 == null) {
+                    textualBoxLine1 = String.format("Region %d", id);
+                }
+                updateStatistics();
+                textualBoxLine2 = String.format("Area: %s", formatArea(getArea() / 100.0));
                 textualBoxLine3 = String.format("Mean: %.2f SD: %.2f", getMean(), getStDev());
                 textualBoxLine4 = String.format("Min: %.1f Max: %.1f", getMin(), getMax());
+                // HOROS-20240407: Rectangle ROI displays W x L instead of Perimeter
+                double width = rect.width * pixelSpacingX / 10.0;
+                double height = rect.height * pixelSpacingY / 10.0;
+                textualBoxLine5 = String.format("Size: %s x %s", formatLength(width), formatLength(height));
                 break;
 
             case tAngle:

@@ -528,8 +528,14 @@ public class DicomDatabase {
                             height INTEGER,
                             width INTEGER,
                             sliceLocation REAL,
-                            FOREIGN KEY (seriesId) REFERENCES Series(id)
-                        )
+                           patientName TEXT,
+                           studyDate TEXT,
+                           seriesDate TEXT,
+                           acquisitionDate TEXT,
+                           manufacturerModelString TEXT,
+                           deviceSerialNumber TEXT,
+                           FOREIGN KEY (seriesId) REFERENCES Series(id)
+                       )
                     """);
 
             // Albumテーブル
@@ -591,6 +597,8 @@ public class DicomDatabase {
 
             // データベースマイグレーション: hiddenカラムを追加
             migrateDatabase();
+            // 追加のメタデータカラム（sliceThickness等）を適用
+            migrateImageMetadata();
         }
     }
 
@@ -624,13 +632,49 @@ public class DicomDatabase {
                         // // logger.warn("Failed to add 'hidden' column to Study table: " + e.getMessage());
                     }
                 }
-            }
-        } catch (Exception e) {
-            // // logger.warn("Failed to check/migrate database schema: " + e.getMessage());
-        }
+           }
+       } catch (Exception e) {
+           // // logger.warn("Failed to check/migrate database schema: " + e.getMessage());
+       }
     }
 
-    /**
+     /**
+     * Imageテーブルへのメタデータカラム追加（migration）
+     */
+     private void migrateImageMetadata() {
+         try (Statement stmt = sqliteConnection.createStatement()) {
+             // sliceThickness, spacingBetweenSlices, pixelSpacingX, pixelSpacingY の追加を試行
+             String[] numericCols = {"sliceThickness", "spacingBetweenSlices", "pixelSpacingX", "pixelSpacingY", "kvp", "ma", "tr", "te"};
+             for (String col : numericCols) {
+                 try {
+                     stmt.execute("ALTER TABLE Image ADD COLUMN " + col + " REAL DEFAULT 0");
+                 } catch (SQLException e) {
+                     if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
+                         // // logger.info(col + " already exists in Image table");
+                     } else {
+                         // // logger.warn("Failed to add ' " + col + "' to Image table: " + e.getMessage());
+                     }
+                 }
+             }
+			// dynamicRange, frequency の追加を試行
+             String[] textCols = {"dynamicRange", "frequency"};
+             for (String col : textCols) {
+                 try {
+                     stmt.execute("ALTER TABLE Image ADD COLUMN " + col + " TEXT");
+                 } catch (SQLException e) {
+                     if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
+                         // // logger.info(col + " already exists in Image table");
+                     } else {
+                         // // logger.warn("Failed to add ' " + col + "' to Image table: " + e.getMessage());
+                     }
+                 }
+             }
+         } catch (SQLException e) {
+             // // logger.error("Error during Image metadata migration: " + e.getMessage());
+         }
+     }
+
+     /**
      * データベースからデータを読み込む
      * HOROS-20240407準拠: 起動時にDBからStudy-Series-Imageを読み込む
      */
@@ -1460,10 +1504,7 @@ public class DicomDatabase {
         }
     }
 
-    /**
-     * SeriesのDBIDを取得
-     */
-    private int getSeriesDbId(String seriesInstanceUID) throws SQLException {
+    public int getSeriesDbId(String seriesInstanceUID) throws SQLException {
         String sql = "SELECT id FROM Series WHERE seriesInstanceUID = ?";
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
             pstmt.setString(1, seriesInstanceUID);
@@ -1479,14 +1520,14 @@ public class DicomDatabase {
     /**
      * Imageを保存
      */
-    private void saveImage(DicomImage image, int seriesDbId) throws SQLException {
+    public void saveImage(DicomImage image, int seriesDbId) throws SQLException {
         String sql = """
                     INSERT OR REPLACE INTO Image
                     (sopInstanceUID, seriesId, pathNumber, pathString, completePath, inDatabaseFolder, instanceNumber,
-                     numberOfFrames, frameID, date, modality, fileType, height, width, sliceLocation)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     numberOfFrames, frameID, date, modality, fileType, height, width, sliceThickness, spacingBetweenSlices, pixelSpacingX, pixelSpacingY, sliceLocation, patientName, studyDate, seriesDate, acquisitionDate, manufacturerModelString, deviceSerialNumber, kvp, ma, tr, te, dynamicRange, frequency)		
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)		
                 """;
-
+		
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
             pstmt.setString(1, image.getSopInstanceUID());
             pstmt.setInt(2, seriesDbId);
@@ -1504,8 +1545,24 @@ public class DicomDatabase {
             pstmt.setString(12, image.getFileType());
             pstmt.setInt(13, image.getHeight() != null ? image.getHeight() : 0);
             pstmt.setInt(14, image.getWidth() != null ? image.getWidth() : 0);
-            pstmt.setFloat(15, image.getSliceLocation() != null ? image.getSliceLocation().floatValue() : 0);
-
+            pstmt.setDouble(15, image.getSliceThickness() != null ? image.getSliceThickness() : 0.0);
+            pstmt.setDouble(16, image.getSpacingBetweenSlices() != null ? image.getSpacingBetweenSlices() : 0.0);
+            pstmt.setDouble(17, image.getPixelSpacingX() != null ? image.getPixelSpacingX() : 0.0);
+            pstmt.setDouble(18, image.getPixelSpacingY() != null ? image.getPixelSpacingY() : 0.0);
+            pstmt.setDouble(19, image.getSliceLocation() != null ? image.getSliceLocation() : 0.0);
+            pstmt.setString(20, image.getPatientName());
+            pstmt.setString(21, image.getStudyDate() != null ? image.getStudyDate().toString() : null);
+            pstmt.setString(22, image.getSeriesDate() != null ? image.getSeriesDate().toString() : null);
+            pstmt.setString(23, image.getAcquisitionDate() != null ? image.getAcquisitionDate().toString() : null);
+            pstmt.setString(24, image.getManufacturerModelString());
+            pstmt.setString(25, image.getDeviceSerialNumber());
+            pstmt.setDouble(26, image.getKvp() != null ? image.getKvp() : 0.0);
+            pstmt.setDouble(27, image.getMa() != null ? image.getMa() : 0.0);
+            pstmt.setDouble(28, image.getTr() != null ? image.getTr() : 0.0);
+            pstmt.setDouble(29, image.getTe() != null ? image.getTe() : 0.0);
+            pstmt.setString(30, image.getDynamicRange());
+            pstmt.setString(31, image.getFrequency());
+			
             pstmt.executeUpdate();
         }
     }

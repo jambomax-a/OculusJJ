@@ -1,5 +1,6 @@
 package com.oculus.jj.ui;
 
+import com.oculus.jj.utils.UIStyle;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.Graphics2D;
@@ -22,14 +23,14 @@ public class ThumbnailButton extends JButton {
     private static final int SIZEWIDTH = 110; // 100 -> 110 に増やして文字切れを防ぐ
 
     // HOROS-20240407準拠: ViewerController.m 4887-4901行目
-    public static final Color SELECTED_ITEM_COLOR = new Color(252, 177, 141); // 鮭色
-    public static final Color FUSIONED_ITEM_COLOR = new Color(195, 249, 145); // 薄緑
-    public static final Color OPEN_ITEM_COLOR = new Color(249, 240, 140); // 薄黄
-    public static final Color DIFFERENT_STUDY_COLOR = new Color(140, 140, 140); // グレー
+    public static final Color SELECTED_ITEM_COLOR = UIStyle.SELECTED_ITEM_COLOR;
+    public static final Color FUSIONED_ITEM_COLOR = UIStyle.FUSIONED_ITEM_COLOR;
+    public static final Color OPEN_ITEM_COLOR = UIStyle.OPEN_ITEM_COLOR;
+    public static final Color DIFFERENT_STUDY_COLOR = UIStyle.DIFFERENT_STUDY_COLOR;
 
     // セパレータ（罫線）の色 - HOROS準拠
-    private static final Color BORDER_COLOR = new Color(160, 160, 160);
-    private static final Color BOTTOM_LINE_COLOR = new Color(60, 60, 60); // よりはっきりした下線 (暗いグレー)
+    private static final Color BORDER_COLOR = UIStyle.BORDER_COLOR;
+    private static final Color BOTTOM_LINE_COLOR = UIStyle.BOTTOM_LINE_COLOR;
 
     // HOROS-20240407準拠: ThumbnailCell.h 43行目
     // BOOL rightClick;
@@ -137,13 +138,15 @@ public class ThumbnailButton extends JButton {
         addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
-                // // System.out.println("ThumbnailButton.mousePressed: button=" + e.getButton() + ", isRightMouseButton="
-// //                         + javax.swing.SwingUtilities.isRightMouseButton(e));
+                // // System.out.println("ThumbnailButton.mousePressed: button=" + e.getButton()
+                // + ", isRightMouseButton="
+                // // + javax.swing.SwingUtilities.isRightMouseButton(e));
                 // HOROS-20240407準拠: ThumbnailCell.m 65-66行目
                 // rightClick = YES; [self performClick: self];
                 if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
                     rightClick = true;
-                    // // System.out.println("ThumbnailButton.mousePressed: RIGHT CLICK, calling matrixPreviewPressed");
+                    // // System.out.println("ThumbnailButton.mousePressed: RIGHT CLICK, calling
+                    // matrixPreviewPressed");
                     // Java SwingではJButtonのActionListenerは右クリックで発火しないため、直接呼び出す
                     if (viewer != null) {
                         viewer.matrixPreviewPressed(ThumbnailButton.this);
@@ -157,7 +160,7 @@ public class ThumbnailButton extends JButton {
         // HOROS-20240407準拠: 左クリック時にmatrixPreviewPressedを呼び出す
         addActionListener(e -> {
             // // System.out.println("ThumbnailButton.actionPerformed: LEFT CLICK - "
-// //                     + (representedObject != null ? representedObject.toString() : "null"));
+            // // + (representedObject != null ? representedObject.toString() : "null"));
             if (viewer != null) {
                 viewer.matrixPreviewPressed(this);
             }

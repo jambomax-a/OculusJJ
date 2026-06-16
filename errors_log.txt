@@ -1,0 +1,216 @@
+﻿.\gradlew.bat : WARNING: A restricted method in java.lang.System has been called
+At line:2 char:1
++ .\gradlew.bat compileJava > errors_log.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING: A rest...has been called:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnam
+ed module (file:/C:/Users/jam11/.gradle/wrapper/dists/gradle-9.2.1-all/2lbhfocpgk6niea1fja7mj8kz/gradle-9.2.1/lib/nativ
+e-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+> Task :compileJava FAILED
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:48: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[0] = 1 - 2 * (yy + zz);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:49: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[1] = 2 * (xy + wz);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:50: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[2] = 2 * (xz - wy);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:51: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[3] = 0;
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:53: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[4] = 2 * (xy - wz);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:54: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[5] = 1 - 2 * (xx + zz);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:55: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[6] = 2 * (yz + wx);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:56: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[7] = 0;
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:58: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[8] = 2 * (xz + wy);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:59: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[9] = 2 * (yz - wx);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:60: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[10] = 1 - 2 * (xx + yy);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:61: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[11] = 0;
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:63: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[12] = 2 * (wx - yz);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:64: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[13] = 2 * (wy + xz);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:65: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[14] = 2 * (wz + xy);
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:66: エラー: dataはMatrix4x4でprivateアクセスされます
+        m.data[15] = 1;
+         ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomImage.java:94: エラー: シンボルを見つけられません
+        return instanceUID;
+               ^
+  シンボル:   変数 instanceUID
+  場所: クラス DicomImage
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomFileImporter.java:82: エラー: クラス DicomDatabaseのメソッド saveIm
+ageは指定された型に適用できません。
+            database.saveImage(image); 
+                    ^
+  期待値: DicomImage,int
+  検出値:    DicomImage
+  理由: 実引数リストと仮引数リストの長さが異なります
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\DatabaseContextManager.java:23: エラー: クラス LocalDicomRepos
+itoryのコンストラクタ LocalDicomRepositoryは指定された型に適用できません。
+        repositoryManager.registerRepository(name, new LocalDicomRepository(new DicomPathService(basePath)));
+                                                   ^
+  期待値: 引数がありません
+  検出値:    DicomPathService
+  理由: 実引数リストと仮引数リストの長さが異なります
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:17: エラー: LocalDicomRepositoryは
+abstractでなく、DicomRepository内のabstractメソッドloadImageFromFile(String)をオーバーライドしません
+public class LocalDicomRepository implements DicomRepository {
+       ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:144: エラー: setNullに適切なメソッドが見つかり
+ません(int)
+                stmt.setNull(6);
+                    ^
+    メソッド PreparedStatement.setNull(int,int)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+    メソッド PreparedStatement.setNull(int,int,String)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:149: エラー: setNullに適切なメソッドが見つかり
+ません(int)
+                stmt.setNull(7);
+                    ^
+    メソッド PreparedStatement.setNull(int,int)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+    メソッド PreparedStatement.setNull(int,int,String)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+ノート: C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\ui\BrowserController.javaは推奨されないAPIを使用またはオーバーライドしています。
+ノート: 詳細は、-Xlint:deprecationオプションを指定して再コンパイルしてください。
+エラー22個
+
+[Incubating] Problems report is available at: file:///C:/Users/jam11/OculusJJ/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':compileJava'.
+> Compilation failed; see the compiler output below.
+  ノート: C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\ui\BrowserController.javaは推奨されないAPIを使用またはオーバーライドしています。
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomFileImporter.java:82: エラー: クラス DicomDatabaseのメソッド save
+Imageは指定された型に適用できません。
+              database.saveImage(image); 
+                      ^
+    期待値: DicomImage,int
+    検出値:    DicomImage
+    理由: 実引数リストと仮引数リストの長さが異なります
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\DatabaseContextManager.java:23: エラー: クラス LocalDicomRep
+ositoryのコンストラクタ LocalDicomRepositoryは指定された型に適用できません。
+          repositoryManager.registerRepository(name, new LocalDicomRepository(new DicomPathService(basePath)));
+                                                     ^
+    期待値: 引数がありません
+    検出値:    DicomPathService
+    理由: 実引数リストと仮引数リストの長さが異なります
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:144: エラー: setNullに適切なメソッドが見つ
+かりません(int)
+                  stmt.setNull(6);
+                      ^
+      メソッド PreparedStatement.setNull(int,int)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+      メソッド PreparedStatement.setNull(int,int,String)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:149: エラー: setNullに適切なメソッドが見つ
+かりません(int)
+                  stmt.setNull(7);
+                      ^
+      メソッド PreparedStatement.setNull(int,int)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+      メソッド PreparedStatement.setNull(int,int,String)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+  ノート: 詳細は、-Xlint:deprecationオプションを指定して再コンパイルしてください。
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:17: エラー: LocalDicomRepositor
+yはabstractでなく、DicomRepository内のabstractメソッドloadImageFromFile(String)をオーバーライドしません
+  public class LocalDicomRepository implements DicomRepository {
+         ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomImage.java:94: エラー: シンボルを見つけられません
+          return instanceUID;
+                 ^
+    シンボル:   変数 instanceUID
+    場所: クラス DicomImage
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:48: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[0] = 1 - 2 * (yy + zz);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:49: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[1] = 2 * (xy + wz);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:50: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[2] = 2 * (xz - wy);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:51: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[3] = 0;
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:53: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[4] = 2 * (xy - wz);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:54: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[5] = 1 - 2 * (xx + zz);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:55: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[6] = 2 * (yz + wx);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:56: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[7] = 0;
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:58: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[8] = 2 * (xz + wy);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:59: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[9] = 2 * (yz - wx);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:60: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[10] = 1 - 2 * (xx + yy);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:61: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[11] = 0;
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:63: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[12] = 2 * (wx - yz);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:64: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[13] = 2 * (wy + xz);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:65: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[14] = 2 * (wz + xy);
+           ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\math\Quaternion.java:66: エラー: dataはMatrix4x4でprivateアクセスされます
+          m.data[15] = 1;
+           ^
+  エラー22個
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to generate a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 1s
+1 actionable task: 1 executed

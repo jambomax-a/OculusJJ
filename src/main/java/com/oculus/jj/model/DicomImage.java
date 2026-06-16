@@ -17,18 +17,27 @@ public class DicomImage {
     public static final int OSIRIX_DICOM_IMAGE_SIZE_UNKNOWN = Integer.MAX_VALUE;
 
     // ========== インスタンスフィールド ==========
-    private String completePathCache;
-    private String sopInstanceUID;
+    private String patientName;
+    private LocalDateTime studyDate;
+    private LocalDateTime seriesDate;
+    private LocalDateTime acquisitionDate;
+    private String manufacturerModelString;
+    private String deviceSerialNumber;
+    private String imagePositionPatient;
     private Boolean inDatabaseFolder;
     private Integer height;
     private Integer width;
     private Integer numberOfFrames;
     private Integer numberOfSeries;
-    private Boolean isKeyImage;
     private LocalDateTime dicomTime;
     private String extension;
     private String modality;
     private String fileType;
+    private String dynamicRange;
+    private String frequency;
+    private String studyInstanceUID;
+    private String seriesInstanceUID;
+    private Double windowWidth;
     private Image thumbnail;
 
     // プロパティ
@@ -37,34 +46,43 @@ public class DicomImage {
     private String comment3;
     private String comment4;
     private byte[] compressedSopInstanceUID;
+    private String sopInstanceUID;
     private LocalDateTime date;
     private Integer frameID;
     private Integer instanceNumber;
     private Boolean importedFile;
     private Integer pathNumber;
     private String pathString;
+    private String completePathCache;
     private Double rotationAngle;
     private Double scale;
     private Double sliceLocation;
+    private Double sliceThickness;
+    private Double spacingBetweenSlices;
+    private Double pixelSpacingX;
+    private Double pixelSpacingY;
+    private Double kvp;
+    private Double ma;
+    private String fieldStrength;
+    private Double tr;
+    private Double te;
     private String stateText;
     private String storedExtension;
     private String storedFileType;
     private Integer storedHeight;
     private Boolean storedInDatabaseFolder;
-    private Boolean storedIsKeyImage;
     private String storedModality;
     @Deprecated
     private Boolean storedMountedVolume;
     private Integer storedNumberOfFrames;
     private Integer storedNumberOfSeries;
-    private Integer storedWidth;
     private Double windowLevel;
-    private Double windowWidth;
     private Boolean xFlipped;
     private Double xOffset;
     private Boolean yFlipped;
     private Double yOffset;
     private Double zoom;
+    private DicomSeries series;
 
     // キャッシュ
     private transient DicomPix cachedDicomPix;
@@ -72,22 +90,546 @@ public class DicomImage {
     // HOROS-20240407準拠: ROIの保存 (フレームごとに保持)
     private java.util.Map<Integer, List<com.oculus.jj.model.ROI>> frameRois = new java.util.concurrent.ConcurrentHashMap<>();
 
-    // リレーション
-    private DicomSeries series;
+    // ========== Getter/Setter ==========
 
-    // ========== コンストラクタ ==========
-
-    public DicomImage() {
-        // TODO: 初期化
+    public String getPatientName() {
+        return patientName;
     }
 
-    // HOROS-20240407準拠: DCMPixのキャッシュ取得/設定
+    public void setPatientName(String patientName) {
+        this.patientName = patientName;
+    }
+
+    public LocalDateTime getStudyDate() {
+        return studyDate;
+    }
+
+    public void setStudyDate(LocalDateTime studyDate) {
+        this.studyDate = studyDate;
+    }
+
+    // dcm4che3 attrs.getDate() 対応 (Date -> LocalDateTime)
+    public void setStudyDate(java.util.Date date) {
+        if (date != null) {
+            this.studyDate = date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+        }
+    }
+
+    public LocalDateTime getSeriesDate() {
+        return seriesDate;
+    }
+
+    public void setSeriesDate(LocalDateTime seriesDate) {
+        this.seriesDate = seriesDate;
+    }
+
+    public void setSeriesDate(java.util.Date date) {
+        if (date != null) {
+            this.seriesDate = date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+        }
+    }
+
+    public LocalDateTime getAcquisitionDate() {
+        return acquisitionDate;
+    }
+
+    public void setAcquisitionDate(LocalDateTime acquisitionDate) {
+        this.acquisitionDate = acquisitionDate;
+    }
+
+    public void setAcquisitionDate(java.util.Date date) {
+        if (date != null) {
+            this.acquisitionDate = date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
+        }
+    }
+
+    public String getManufacturerModelString() {
+        return manufacturerModelString;
+    }
+
+    public void setManufacturerModelString(String manufacturerModelString) {
+        this.manufacturerModelString = manufacturerModelString;
+    }
+
+    public String getImagePositionPatient() {
+        return imagePositionPatient;
+    }
+
+    public void setImagePositionPatient(String imagePositionPatient) {
+        this.imagePositionPatient = imagePositionPatient;
+    }
+
+    public Boolean getInDatabaseFolder() {
+        return inDatabaseFolder;
+    }
+
+    public void setInDatabaseFolder(Boolean inDatabaseFolder) {
+        this.inDatabaseFolder = inDatabaseFolder;
+    }
+
+    public Integer getHeight() {
+        return height;
+    }
+
+    public void setHeight(Integer height) {
+        this.height = height;
+    }
+
+    public Integer getWidth() {
+        return width;
+    }
+
+    public void setWidth(Integer width) {
+        this.width = width;
+    }
+
+    public Integer getNumberOfFrames() {
+        return numberOfFrames;
+    }
+
+    public void setNumberOfFrames(Integer numberOfFrames) {
+        this.numberOfFrames = numberOfFrames;
+    }
+
+    public Integer getNumberOfSeries() {
+        return numberOfSeries;
+    }
+
+    public void setNumberOfSeries(Integer numberOfSeries) {
+        this.numberOfSeries = numberOfSeries;
+    }
+
+    public LocalDateTime getDicomTime() {
+        return dicomTime;
+    }
+
+    public void setDicomTime(LocalDateTime dicomTime) {
+        this.dicomTime = dicomTime;
+    }
+
+    public String getExtension() {
+        return extension;
+    }
+
+    public void setExtension(String extension) {
+        this.extension = extension;
+    }
+
+    public String getModality() {
+        return modality;
+    }
+
+    public void setModality(String modality) {
+        this.modality = modality;
+    }
+
+    public String getFileType() {
+        return fileType;
+    }
+
+    public void setFileType(String fileType) {
+        this.fileType = fileType;
+    }
+
+    public String getDynamicRange() {
+        return dynamicRange;
+    }
+
+    public void setDynamicRange(String dynamicRange) {
+        this.dynamicRange = dynamicRange;
+    }
+
+    public String getFrequency() {
+        return frequency;
+    }
+
+    public void setFrequency(String frequency) {
+        this.frequency = frequency;
+    }
+
+    public String getDeviceSerialNumber() {
+        return deviceSerialNumber;
+    }
+
+    public void setDeviceSerialNumber(String deviceSerialNumber) {
+        this.deviceSerialNumber = deviceSerialNumber;
+    }
+
+    public Image getThumbnail() {
+        return thumbnail;
+    }
+
+    public void setThumbnail(Image thumbnail) {
+        this.thumbnail = thumbnail;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    public String getComment2() {
+        return comment2;
+    }
+
+    public void setComment2(String comment2) {
+        this.comment2 = comment2;
+    }
+
+    public String getComment3() {
+        return comment3;
+    }
+
+    public void setComment3(String comment3) {
+        this.comment3 = comment3;
+    }
+
+    public String getComment4() {
+        return comment4;
+    }
+
+    public void setComment4(String comment4) {
+        this.comment4 = comment4;
+    }
+
+    public byte[] getCompressedSopInstanceUID() {
+        return compressedSopInstanceUID;
+    }
+
+    public void setCompressedSopInstanceUID(byte[] compressedSopInstanceUID) {
+        this.compressedSopInstanceUID = compressedSopInstanceUID;
+    }
+
+    public String getSopInstanceUID() {
+        return sopInstanceUID;
+    }
+
+    public void setSopInstanceUID(String sopInstanceUID) {
+        this.sopInstanceUID = sopInstanceUID;
+    }
+
+    public String getStudyInstanceUID() {
+        return studyInstanceUID;
+    }
+
+    public void setStudyInstanceUID(String studyInstanceUID) {
+        this.studyInstanceUID = studyInstanceUID;
+    }
+
+    public String getSeriesInstanceUID() {
+        return seriesInstanceUID;
+    }
+
+    public void setSeriesInstanceUID(String seriesInstanceUID) {
+        this.seriesInstanceUID = seriesInstanceUID;
+    }
+
+    public LocalDateTime getDate() {
+        return date;
+    }
+
+    public void setDate(LocalDateTime date) {
+        this.date = date;
+    }
+
+    public Integer getFrameID() {
+        return frameID;
+    }
+
+    public void setFrameID(Integer frameID) {
+        this.frameID = frameID;
+    }
+
+    public Integer getInstanceNumber() {
+        return instanceNumber;
+    }
+
+    public void setInstanceNumber(Integer instanceNumber) {
+        this.instanceNumber = instanceNumber;
+    }
+
+    public Boolean getImportedFile() {
+        return importedFile;
+    }
+
+    public void setImportedFile(Boolean importedFile) {
+        this.importedFile = importedFile;
+    }
+
+    public Integer getPathNumber() {
+        return pathNumber;
+    }
+
+    public void setPathNumber(Integer pathNumber) {
+        this.pathNumber = pathNumber;
+    }
+
+    public String getPathString() {
+        return pathString;
+    }
+
+    public void setPathString(String pathString) {
+        this.pathString = pathString;
+    }
+
+    public Double getRotationAngle() {
+        return rotationAngle;
+    }
+
+    public void setRotationAngle(Double rotationAngle) {
+        this.rotationAngle = rotationAngle;
+    }
+
+    public Double getScale() {
+        return scale;
+    }
+
+    public void setScale(Double scale) {
+        this.scale = scale;
+    }
+
+    public Double getSliceLocation() {
+        return sliceLocation;
+    }
+
+    public void setSliceLocation(Double sliceLocation) {
+        this.sliceLocation = sliceLocation;
+    }
+
+    public Double getSliceThickness() {
+        return sliceThickness;
+    }
+
+    public void setSliceThickness(Double sliceThickness) {
+        this.sliceThickness = sliceThickness;
+    }
+
+    public Double getSpacingBetweenSlices() {
+        return spacingBetweenSlices;
+    }
+
+    public void setSpacingBetweenSlices(Double spacingBetweenSlices) {
+        this.spacingBetweenSlices = spacingBetweenSlices;
+    }
+
+    public Double getPixelSpacingX() {
+        return pixelSpacingX;
+    }
+
+    public void setPixelSpacingX(Double pixelSpacingX) {
+        this.pixelSpacingX = pixelSpacingX;
+    }
+
+    public Double getPixelSpacingY() {
+        return pixelSpacingY;
+    }
+
+    public void setPixelSpacingY(Double pixelSpacingY) {
+        this.pixelSpacingY = pixelSpacingY;
+    }
+
+    public Double getKvp() {
+        return kvp;
+    }
+
+    public void setKvp(Double kvp) {
+        this.kvp = kvp;
+    }
+
+    public Double getMa() {
+        return ma;
+    }
+
+    public void setMa(Double ma) {
+        this.ma = ma;
+    }
+
+    public String getFieldStrength() {
+        return fieldStrength;
+    }
+
+    public void setFieldStrength(String fieldStrength) {
+        this.fieldStrength = fieldStrength;
+    }
+
+    public Double getTr() {
+        return tr;
+    }
+
+    public void setTr(Double tr) {
+        this.tr = tr;
+    }
+
+    public Double getTe() {
+        return te;
+    }
+
+    public void setTe(Double te) {
+        this.te = te;
+    }
+
+    public String getStateText() {
+        return stateText;
+    }
+
+    public void setStateText(String stateText) {
+        this.stateText = stateText;
+    }
+
+    public String getStoredExtension() {
+        return storedExtension;
+    }
+
+    public void setStoredExtension(String storedExtension) {
+        this.storedExtension = storedExtension;
+    }
+
+    public String getStoredFileType() {
+        return storedFileType;
+    }
+
+    public void setStoredFileType(String storedFileType) {
+        this.storedFileType = storedFileType;
+    }
+
+    public Integer getStoredHeight() {
+        return storedHeight;
+    }
+
+    public void setStoredHeight(Integer storedHeight) {
+        this.storedHeight = storedHeight;
+    }
+
+    public Boolean getStoredInDatabaseFolder() {
+        return storedInDatabaseFolder;
+    }
+
+    public void setStoredInDatabaseFolder(Boolean storedInDatabaseFolder) {
+        this.storedInDatabaseFolder = storedInDatabaseFolder;
+    }
+
+    public String getStoredModality() {
+        return storedModality;
+    }
+
+    public void setStoredModality(String storedModality) {
+        this.storedModality = storedModality;
+    }
+
+    @Deprecated
+    public Boolean getStoredMountedVolume() {
+        return storedMountedVolume;
+    }
+
+    @Deprecated
+    public void setStoredMountedVolume(Boolean storedMountedVolume) {
+        this.storedMountedVolume = storedMountedVolume;
+    }
+
+    public Integer getStoredNumberOfFrames() {
+        return storedNumberOfFrames;
+    }
+
+    public void setStoredNumberOfFrames(Integer storedNumberOfFrames) {
+        this.storedNumberOfFrames = storedNumberOfFrames;
+    }
+
+    public Integer getStoredNumberOfSeries() {
+        return storedNumberOfSeries;
+    }
+
+    public void setStoredNumberOfSeries(Integer storedNumberOfSeries) {
+        this.storedNumberOfSeries = storedNumberOfSeries;
+    }
+
+    public Double getWindowLevel() {
+        return windowLevel;
+    }
+
+    public void setWindowLevel(Double windowLevel) {
+        this.windowLevel = windowLevel;
+    }
+
+    public Double getWindowWidth() {
+        return windowWidth;
+    }
+
+    public void setWindowWidth(Double windowWidth) {
+        this.windowWidth = windowWidth;
+    }
+
+    public Boolean getXFlipped() {
+        return xFlipped;
+    }
+
+    public void setXFlipped(Boolean xFlipped) {
+        this.xFlipped = xFlipped;
+    }
+
+    public Double getXOffset() {
+        return xOffset;
+    }
+
+    public void setXOffset(Double xOffset) {
+        this.xOffset = xOffset;
+    }
+
+    public Boolean getYFlipped() {
+        return yFlipped;
+    }
+
+    public void setYFlipped(Boolean yFlipped) {
+        this.yFlipped = yFlipped;
+    }
+
+    public Double getYOffset() {
+        return yOffset;
+    }
+
+    public void setYOffset(Double yOffset) {
+        this.yOffset = yOffset;
+    }
+
+    public Double getZoom() {
+        return zoom;
+    }
+
+    public void setZoom(Double zoom) {
+        this.zoom = zoom;
+    }
+
+    public DicomSeries getSeries() {
+        return series;
+    }
+
+    public void setSeries(DicomSeries series) {
+        this.series = series;
+    }
+
+    public String getSeriesId() {
+        // HOROS-20240407準拠: seriesInstanceUIDを文字列で返す
+        return series != null ? series.getSeriesInstanceUID() : seriesInstanceUID;
+    }
+
+    // DicomPix.java が int を期待しているため、互換性のために追加
+    public int getSeriesIdInt() {
+        return series != null ? series.getId() : 0;
+    }
+
     public DicomPix getCachedDicomPix() {
         return cachedDicomPix;
     }
 
     public void setCachedDicomPix(DicomPix cachedDicomPix) {
         this.cachedDicomPix = cachedDicomPix;
+    }
+
+    public void setCompletePath(String path) {
+        this.pathString = path;
+        this.completePathCache = path;
     }
 
     /**
@@ -326,23 +868,10 @@ public class DicomImage {
         return null;
     }
 
-    /**
-     * サムネイルを取得
-     */
     public Image thumbnail() {
         return thumbnail;
     }
 
-    /**
-     * サムネイルを設定
-     */
-    public void setThumbnail(Image image) {
-        this.thumbnail = image;
-    }
-
-    /**
-     * 既に利用可能なサムネイルを取得
-     */
     public Image thumbnailIfAlreadyAvailable() {
         return thumbnail;
     }
@@ -462,27 +991,6 @@ public class DicomImage {
     }
 
     /**
-     * 幅を取得
-     */
-    public Integer width() {
-        return width;
-    }
-
-    /**
-     * キー画像かどうか
-     */
-    public Boolean isKeyImage() {
-        return isKeyImage;
-    }
-
-    /**
-     * キー画像を設定
-     */
-    public void setIsKeyImage(Boolean keyImage) {
-        this.isKeyImage = keyImage;
-    }
-
-    /**
      * ローカルパスの完全パスを取得
      * HOROS-20240407準拠: + (NSString*) completePathForLocalPath:(NSString*) path
      * directory:(NSString*) directory (954-968行目)
@@ -544,7 +1052,8 @@ public class DicomImage {
             java.io.File directFile = new java.io.File(dbLocation, path);
             if (directFile.exists()) {
                 // // System.out.println(
-// //                         "[DEBUG] completePathForLocalPath - Found directly at: " + directFile.getAbsolutePath());
+                // // "[DEBUG] completePathForLocalPath - Found directly at: " +
+                // directFile.getAbsolutePath());
                 return directFile.getAbsolutePath();
             }
 
@@ -562,10 +1071,12 @@ public class DicomImage {
             String resultPath = dbLocation + File.separator + val + File.separator + path;
             java.io.File resultFile = new java.io.File(resultPath);
             if (!resultFile.exists()) {
-                // // System.out.println("[DEBUG] completePathForLocalPath - File NOT found at subfolder: " + resultPath);
+                // // System.out.println("[DEBUG] completePathForLocalPath - File NOT found at
+                // subfolder: " + resultPath);
                 // フォールバック: DATABASE.noindex直下をもう一度確認（念のため絶対パス化して）
             } else {
-                // // System.out.println("[DEBUG] completePathForLocalPath - Found at subfolder: " + resultPath);
+                // // System.out.println("[DEBUG] completePathForLocalPath - Found at subfolder:
+                // " + resultPath);
             }
             return resultPath;
         } else {
@@ -574,363 +1085,4 @@ public class DicomImage {
         }
     }
 
-    // ========== プロパティアクセサ ==========
-
-    public String getComment() {
-        return comment;
-    }
-
-    public void setComment(String comment) {
-        this.comment = comment;
-    }
-
-    public String getComment2() {
-        return comment2;
-    }
-
-    public void setComment2(String comment2) {
-        this.comment2 = comment2;
-    }
-
-    public String getComment3() {
-        return comment3;
-    }
-
-    public void setComment3(String comment3) {
-        this.comment3 = comment3;
-    }
-
-    public String getComment4() {
-        return comment4;
-    }
-
-    public void setComment4(String comment4) {
-        this.comment4 = comment4;
-    }
-
-    public byte[] getCompressedSopInstanceUID() {
-        return compressedSopInstanceUID;
-    }
-
-    public void setCompressedSopInstanceUID(byte[] compressedSopInstanceUID) {
-        this.compressedSopInstanceUID = compressedSopInstanceUID;
-    }
-
-    public LocalDateTime getDate() {
-        return date;
-    }
-
-    public void setDate(LocalDateTime date) {
-        this.date = date;
-    }
-
-    public Integer getFrameID() {
-        return frameID;
-    }
-
-    public void setFrameID(Integer frameID) {
-        this.frameID = frameID;
-    }
-
-    public Integer getInstanceNumber() {
-        return instanceNumber;
-    }
-
-    public void setInstanceNumber(Integer instanceNumber) {
-        this.instanceNumber = instanceNumber;
-    }
-
-    public Boolean getImportedFile() {
-        return importedFile;
-    }
-
-    public void setImportedFile(Boolean importedFile) {
-        this.importedFile = importedFile;
-    }
-
-    public Integer getPathNumber() {
-        return pathNumber;
-    }
-
-    public void setPathNumber(Integer pathNumber) {
-        this.pathNumber = pathNumber;
-    }
-
-    public String getPathString() {
-        return pathString;
-    }
-
-    public void setPathString(String pathString) {
-        this.pathString = pathString;
-    }
-
-    public Double getRotationAngle() {
-        return rotationAngle;
-    }
-
-    public void setRotationAngle(Double rotationAngle) {
-        this.rotationAngle = rotationAngle;
-    }
-
-    public Double getScale() {
-        return scale;
-    }
-
-    public void setScale(Double scale) {
-        this.scale = scale;
-    }
-
-    public Double getSliceLocation() {
-        return sliceLocation;
-    }
-
-    public void setSliceLocation(Double sliceLocation) {
-        this.sliceLocation = sliceLocation;
-    }
-
-    public String getStateText() {
-        return stateText;
-    }
-
-    public void setStateText(String stateText) {
-        this.stateText = stateText;
-    }
-
-    public String getStoredExtension() {
-        return storedExtension;
-    }
-
-    public void setStoredExtension(String storedExtension) {
-        this.storedExtension = storedExtension;
-    }
-
-    public String getStoredFileType() {
-        return storedFileType;
-    }
-
-    public void setStoredFileType(String storedFileType) {
-        this.storedFileType = storedFileType;
-    }
-
-    public Integer getStoredHeight() {
-        return storedHeight;
-    }
-
-    public void setStoredHeight(Integer storedHeight) {
-        this.storedHeight = storedHeight;
-    }
-
-    public Boolean getStoredInDatabaseFolder() {
-        return storedInDatabaseFolder;
-    }
-
-    public void setStoredInDatabaseFolder(Boolean storedInDatabaseFolder) {
-        this.storedInDatabaseFolder = storedInDatabaseFolder;
-    }
-
-    public Boolean getStoredIsKeyImage() {
-        return storedIsKeyImage;
-    }
-
-    public void setStoredIsKeyImage(Boolean storedIsKeyImage) {
-        this.storedIsKeyImage = storedIsKeyImage;
-    }
-
-    public String getStoredModality() {
-        return storedModality;
-    }
-
-    public void setStoredModality(String storedModality) {
-        this.storedModality = storedModality;
-    }
-
-    @Deprecated
-    public Boolean getStoredMountedVolume() {
-        return storedMountedVolume;
-    }
-
-    @Deprecated
-    public void setStoredMountedVolume(Boolean storedMountedVolume) {
-        this.storedMountedVolume = storedMountedVolume;
-    }
-
-    public Integer getStoredNumberOfFrames() {
-        return storedNumberOfFrames;
-    }
-
-    public void setStoredNumberOfFrames(Integer storedNumberOfFrames) {
-        this.storedNumberOfFrames = storedNumberOfFrames;
-    }
-
-    public Integer getStoredNumberOfSeries() {
-        return storedNumberOfSeries;
-    }
-
-    public void setStoredNumberOfSeries(Integer storedNumberOfSeries) {
-        this.storedNumberOfSeries = storedNumberOfSeries;
-    }
-
-    public Integer getStoredWidth() {
-        return storedWidth;
-    }
-
-    public void setStoredWidth(Integer storedWidth) {
-        this.storedWidth = storedWidth;
-    }
-
-    public Double getWindowLevel() {
-        return windowLevel;
-    }
-
-    public void setWindowLevel(Double windowLevel) {
-        this.windowLevel = windowLevel;
-    }
-
-    public Double getWindowWidth() {
-        return windowWidth;
-    }
-
-    public void setWindowWidth(Double windowWidth) {
-        this.windowWidth = windowWidth;
-    }
-
-    public Boolean getXFlipped() {
-        return xFlipped;
-    }
-
-    public void setXFlipped(Boolean xFlipped) {
-        this.xFlipped = xFlipped;
-    }
-
-    public Double getXOffset() {
-        return xOffset;
-    }
-
-    public void setXOffset(Double xOffset) {
-        this.xOffset = xOffset;
-    }
-
-    public Boolean getYFlipped() {
-        return yFlipped;
-    }
-
-    public void setYFlipped(Boolean yFlipped) {
-        this.yFlipped = yFlipped;
-    }
-
-    public Double getYOffset() {
-        return yOffset;
-    }
-
-    public void setYOffset(Double yOffset) {
-        this.yOffset = yOffset;
-    }
-
-    public Double getZoom() {
-        return zoom;
-    }
-
-    public void setZoom(Double zoom) {
-        this.zoom = zoom;
-    }
-
-    public DicomSeries getSeries() {
-        return series;
-    }
-
-    public void setSeries(DicomSeries series) {
-        this.series = series;
-    }
-
-    /**
-     * シリーズIDを取得
-     * HOROS-20240407: [[image valueForKeyPath:@"series.id"] intValue]
-     */
-    public int getSeriesId() {
-        if (series != null && series.getId() != null) {
-            return series.getId();
-        }
-        return 0;
-    }
-
-    // 追加のプロパティ
-    public Integer getNumberOfFrames() {
-        return numberOfFrames;
-    }
-
-    public void setNumberOfFrames(Integer numberOfFrames) {
-        this.numberOfFrames = numberOfFrames;
-    }
-
-    public String getModality() {
-        return modality;
-    }
-
-    public void setModality(String modality) {
-        this.modality = modality;
-    }
-
-    public Integer getHeight() {
-        return height;
-    }
-
-    public void setHeight(Integer height) {
-        this.height = height;
-    }
-
-    public Integer getWidth() {
-        return width;
-    }
-
-    public void setWidth(Integer width) {
-        this.width = width;
-    }
-
-    public Boolean getInDatabaseFolder() {
-        return inDatabaseFolder;
-    }
-
-    public void setInDatabaseFolder(Boolean inDatabaseFolder) {
-        this.inDatabaseFolder = inDatabaseFolder;
-    }
-
-    public String getExtension() {
-        return extension;
-    }
-
-    public void setExtension(String extension) {
-        this.extension = extension;
-    }
-
-    public String getFileType() {
-        return fileType;
-    }
-
-    public void setFileType(String fileType) {
-        this.fileType = fileType;
-    }
-
-    public String getSopInstanceUID() {
-        return sopInstanceUID;
-    }
-
-    public void setSopInstanceUID(String sopInstanceUID) {
-        this.sopInstanceUID = sopInstanceUID;
-    }
-
-    public LocalDateTime getDicomTime() {
-        return dicomTime;
-    }
-
-    public void setDicomTime(LocalDateTime dicomTime) {
-        this.dicomTime = dicomTime;
-    }
-
-    public Integer getNumberOfSeries() {
-        return numberOfSeries;
-    }
-
-    public void setNumberOfSeries(Integer numberOfSeries) {
-        this.numberOfSeries = numberOfSeries;
-    }
 }

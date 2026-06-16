@@ -1,5 +1,6 @@
 package com.oculus.jj.ui;
 
+import com.oculus.jj.utils.UIStyle;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -1438,7 +1439,7 @@ public class ViewerController extends JFrame {
                     copy.add(replicateMenu((javax.swing.JMenu) originalItem));
                 } else {
                     javax.swing.JMenuItem itemCopy = new javax.swing.JMenuItem(originalItem.getText());
-                    itemCopy.setForeground(Color.BLACK);
+                    itemCopy.setForeground(UIStyle.TEXT_COLOR);
                     itemCopy.setAccelerator(originalItem.getAccelerator());
                     // 元のリスナーをコピー
                     for (java.awt.event.ActionListener al : originalItem.getActionListeners()) {

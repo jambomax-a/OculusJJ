@@ -25,9 +25,11 @@ public class DicomStudy {
     private boolean reentry;
 
     // プロパティ
+    private String id;
     private String accessionNumber;
     private String comment;
     private String comment2;
+    private String patientName;
     private String comment3;
     private String comment4;
     private LocalDateTime date;
@@ -37,7 +39,13 @@ public class DicomStudy {
     private String dictateURL;
     private Boolean expanded;
     private Boolean hasDICOM;
-    private String id;
+    public String getPatientName() {
+        return patientName;
+    }
+
+    public void setPatientName(String patientName) {
+        this.patientName = patientName;
+    }
     private String institutionName;
     private Boolean lockedStudy;
     private String modality;

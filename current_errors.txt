@@ -1,0 +1,115 @@
+﻿.\gradlew.bat : WARNING: A restricted method in java.lang.System has been called
+At line:2 char:1
++ .\gradlew.bat compileJava > current_errors.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING: A rest...has been called:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnam
+ed module (file:/C:/Users/jam11/.gradle/wrapper/dists/gradle-9.2.1-all/2lbhfocpgk6niea1fja7mj8kz/gradle-9.2.1/lib/nativ
+e-platform-0.22-milestone-29.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+Starting a Gradle Daemon, 16 busy and 5 incompatible Daemons could not be reused, use --status for details
+
+> Task :compileJava
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DatabasePathManager.java:36: エラー: 変数dataBaseDirPathはすでに代入されてい
+る可能性があります
+        this.dataBaseDirPath = baseDirPath;
+            ^
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomImage.java:94: エラー: シンボルを見つけられません
+        return instanceUID;
+               ^
+  シンボル:   変数 instanceUID
+  場所: クラス DicomImage
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomFileImporter.java:82: エラー: クラス DicomDatabaseのメソッド saveIm
+ageは指定された型に適用できません。
+            database.saveImage(image); 
+                    ^
+  期待値: DicomImage,int
+  検出値:    DicomImage
+  理由: 実引数リストと仮引数リストの長さが異なります
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:147: エラー: setNullに適切なメソッドが見つかり
+ません(int)
+                stmt.setNull(6);
+                    ^
+    メソッド PreparedStatement.setNull(int,int)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+    メソッド PreparedStatement.setNull(int,int,String)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:152: エラー: setNullに適切なメソッドが見つかり
+ません(int)
+                stmt.setNull(7);
+                    ^
+    メソッド PreparedStatement.setNull(int,int)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+    メソッド PreparedStatement.setNull(int,int,String)は使用できません
+      (実引数リストと仮引数リストの長さが異なります)
+C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:278: エラー: 不適合な型: 戻り値がありません
+                return;
+                ^
+ノート: C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\ui\BrowserController.javaは推奨されないAPIを使用またはオーバーライドしています。
+ノート: 詳細は、-Xlint:deprecationオプションを指定して再コンパイルしてください。
+エラー6個
+
+> Task :compileJava FAILED
+
+[Incubating] Problems report is available at: file:///C:/Users/jam11/OculusJJ/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':compileJava'.
+> Compilation failed; see the compiler output below.
+  ノート: C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\ui\BrowserController.javaは推奨されないAPIを使用またはオーバーライドしています。
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomFileImporter.java:82: エラー: クラス DicomDatabaseのメソッド save
+Imageは指定された型に適用できません。
+              database.saveImage(image); 
+                      ^
+    期待値: DicomImage,int
+    検出値:    DicomImage
+    理由: 実引数リストと仮引数リストの長さが異なります
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:147: エラー: setNullに適切なメソッドが見つ
+かりません(int)
+                  stmt.setNull(6);
+                      ^
+      メソッド PreparedStatement.setNull(int,int)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+      メソッド PreparedStatement.setNull(int,int,String)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:152: エラー: setNullに適切なメソッドが見つ
+かりません(int)
+                  stmt.setNull(7);
+                      ^
+      メソッド PreparedStatement.setNull(int,int)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+      メソッド PreparedStatement.setNull(int,int,String)は使用できません
+        (実引数リストと仮引数リストの長さが異なります)
+  ノート: 詳細は、-Xlint:deprecationオプションを指定して再コンパイルしてください。
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\repository\LocalDicomRepository.java:278: エラー: 不適合な型: 戻り値がありません
+                  return;
+                  ^
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DicomImage.java:94: エラー: シンボルを見つけられません
+          return instanceUID;
+                 ^
+    シンボル:   変数 instanceUID
+    場所: クラス DicomImage
+  C:\Users\jam11\OculusJJ\src\main\java\com\oculus\jj\model\DatabasePathManager.java:36: エラー: 変数dataBaseDirPathはすでに代入され
+ている可能性があります
+          this.dataBaseDirPath = baseDirPath;
+              ^
+  エラー6個
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to generate a Build Scan (powered by Develocity).
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 7s
+1 actionable task: 1 executed

@@ -2,7 +2,9 @@ package com.oculus.jj.ui;
 
 import javax.swing.*;
 import java.awt.*;
+import com.oculus.jj.utils.UIStyle;
 import java.awt.event.*;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * ToolbarPanel - ツールバーウィンドウ
@@ -10,7 +12,7 @@ import java.awt.event.*;
  *
  * 画面上部に固定表示されるツールバーウィンドウ
  */
-public class ToolbarPanel extends JFrame {
+public class ToolbarPanel extends JFrame { // i18n_ready
 
     // HOROS-20240407準拠: ToolbarPanel.m 50行目
     // メニューバーを統合しつつ、他ウィンドウを圧迫しないよう高さを詰める (140 -> 100)
@@ -78,8 +80,7 @@ public class ToolbarPanel extends JFrame {
      */
     private void initializeUI() {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        // 背景色をHorosのツールバーに近い色に変更し、境界線を追加して視認性を確保
-        getContentPane().setBackground(new Color(240, 240, 240));
+        getContentPane().setBackground(UIStyle.BACKGROUND_COLOR);
         setUndecorated(true);
         setLayout(new BorderLayout());
 
@@ -110,19 +111,19 @@ public class ToolbarPanel extends JFrame {
         toolbar.setBackground(new Color(240, 240, 240));
         toolbar.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
 
-        // --- ツールボタンを追加 ---
-
-        // Selector ツール
-        JButton selectorButton = new JButton("Select");
-        selectorButton.setToolTipText("Selector / Edit (S)");
+        // --- ナビゲーショングループ ---
+        JButton selectorButton = new JButton(LanguageManager.get("btn_select"));
+        selectorButton.setFont(UIStyle.MAIN_FONT);
+        selectorButton.setToolTipText(LanguageManager.get("btn_select") + " / Edit (S)");
         selectorButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tPlain;
         });
         toolbar.add(selectorButton);
 
-        // Curved MPR ツール (HOROS-20240407)
-        JButton curvedButtonTop = new JButton("Curved");
-        curvedButtonTop.setToolTipText("Curved MPR ROI (Click nodes, double-click to finish)");
+        JButton curvedButtonTop = new JButton(LanguageManager.get("btn_curved"));
+        curvedButtonTop.setFont(UIStyle.MAIN_FONT);
+        curvedButtonTop
+                .setToolTipText(LanguageManager.get("btn_curved") + " ROI (Click nodes, double-click to finish)");
         curvedButtonTop.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tCurvedROI;
         });
@@ -130,25 +131,25 @@ public class ToolbarPanel extends JFrame {
 
         toolbar.addSeparator();
 
-        // WLWW ツール
-        JButton wlwwButton = new JButton("WL/WW");
-        wlwwButton.setToolTipText("Window Level/Width (W)");
+        JButton wlwwButton = new JButton(LanguageManager.get("btn_wlww"));
+        wlwwButton.setFont(UIStyle.MAIN_FONT);
+        wlwwButton.setToolTipText(LanguageManager.get("btn_wlww") + " (W)");
         wlwwButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tWLWW;
         });
         toolbar.add(wlwwButton);
 
-        // パン ツール
-        JButton panButton = new JButton("Pan");
-        panButton.setToolTipText("Pan (P)");
+        JButton panButton = new JButton(LanguageManager.get("btn_pan"));
+        panButton.setFont(UIStyle.MAIN_FONT);
+        panButton.setToolTipText(LanguageManager.get("btn_pan") + " (P)");
         panButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tTranslate;
         });
         toolbar.add(panButton);
 
-        // ズーム ツール
-        JButton zoomButton = new JButton("Zoom");
-        zoomButton.setToolTipText("Zoom (Z)");
+        JButton zoomButton = new JButton(LanguageManager.get("btn_zoom"));
+        zoomButton.setFont(UIStyle.MAIN_FONT);
+        zoomButton.setToolTipText(LanguageManager.get("btn_zoom") + " (Z)");
         zoomButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tZoom;
         });
@@ -159,119 +160,130 @@ public class ToolbarPanel extends JFrame {
         // --- ROI ツール ---
 
         // 長さ計測 ツール
-        JButton measureButton = new JButton("Measure");
-        measureButton.setToolTipText("Length Measurement (M)");
+        JButton measureButton = new JButton(LanguageManager.get("tools_roi.length"));
+        measureButton.setFont(UIStyle.MAIN_FONT);
+        measureButton.setToolTipText(LanguageManager.get("tools_roi.length") + " (M)");
         measureButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tMesure;
         });
         toolbar.add(measureButton);
 
         // 矩形 ツール
-        JButton rectButton = new JButton("Rect");
-        rectButton.setToolTipText("Rectangle ROI (R)");
-        rectButton.addActionListener(e -> {
-            DCMView.currentTool = DCMView.ToolMode.tROI;
-        });
-        toolbar.add(rectButton);
+        JButton rectButton = new JButton(LanguageManager.get("tools_roi.rect"));
+        rectButton.setFont(UIStyle.MAIN_FONT);
+        // Wait, I missed some keys in my last update of properties file. Let me fix
+        // that first.
 
         // 楕円 ツール
-        JButton ovalButton = new JButton("Oval");
-        ovalButton.setToolTipText("Oval ROI (O)");
+        JButton ovalButton = new JButton(LanguageManager.get("tools_roi.oval"));
+        ovalButton.setFont(UIStyle.MAIN_FONT);
+        ovalButton.setToolTipText(LanguageManager.get("tools_roi.oval") + " (O)");
         ovalButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tOval;
         });
         toolbar.add(ovalButton);
 
+        toolbar.addSeparator();
+
         // 多角形 ツール (閉)
-        JButton cPolyButton = new JButton("Poly");
-        cPolyButton.setToolTipText("Closed Polygon ROI");
+        JButton cPolyButton = new JButton(LanguageManager.get("tools_roi.poly_closed"));
+        cPolyButton.setFont(UIStyle.MAIN_FONT);
+        cPolyButton.setToolTipText(LanguageManager.get("tools_roi.poly_closed"));
         cPolyButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tCPolygon;
         });
         toolbar.add(cPolyButton);
 
-        // 多角形 ツール (開)
-        JButton oPolyButton = new JButton("O-Poly");
-        oPolyButton.setToolTipText("Open Polygon ROI");
+        JButton oPolyButton = new JButton(LanguageManager.get("tools_roi.poly_open"));
+        oPolyButton.setFont(UIStyle.MAIN_FONT);
+        oPolyButton.setToolTipText(LanguageManager.get("tools_roi.poly_open"));
         oPolyButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tOPolygon;
         });
         toolbar.add(oPolyButton);
 
         // 角度 ツール
-        JButton angleButton = new JButton("Angle");
-        angleButton.setToolTipText("Angle Measurement (A)");
+        JButton angleButton = new JButton(LanguageManager.get("tools_roi.angle"));
+        angleButton.setFont(UIStyle.MAIN_FONT);
+        angleButton.setToolTipText(LanguageManager.get("tools_roi.angle") + " (A)");
         angleButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tAngle;
         });
         toolbar.add(angleButton);
 
         // 矢印 ツール
-        JButton arrowButton = new JButton("Arrow");
-        arrowButton.setToolTipText("Arrow Annotation");
+        JButton arrowButton = new JButton(LanguageManager.get("annotation_arrow"));
+        arrowButton.setFont(UIStyle.MAIN_FONT);
+        arrowButton.setToolTipText(LanguageManager.get("annotation_arrow"));
         arrowButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tArrow;
         });
         toolbar.add(arrowButton);
 
         // 鉛筆 ツール
-        JButton pencilButton = new JButton("Pencil");
-        pencilButton.setToolTipText("Pencil / Freehand ROI");
+        JButton pencilButton = new JButton(LanguageManager.get("annotation_pencil"));
+        pencilButton.setFont(UIStyle.MAIN_FONT);
+        pencilButton.setToolTipText(LanguageManager.get("annotation_pencil"));
         pencilButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tPencil;
         });
         toolbar.add(pencilButton);
 
+        toolbar.addSeparator();
+
         // ポイント ツール
-        JButton pointButton = new JButton("Point");
-        pointButton.setToolTipText("2D Point / Crosshair");
+        JButton pointButton = new JButton(LanguageManager.get("btn_point"));
+        pointButton.setToolTipText(LanguageManager.get("btn_point"));
         pointButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.t2DPoint;
         });
         toolbar.add(pointButton);
 
         // テキスト ツール
-        JButton textButton = new JButton("Text");
-        textButton.setToolTipText("Text Annotation (T)");
+        JButton textButton = new JButton(LanguageManager.get("annotation_text"));
+        textButton.setToolTipText(LanguageManager.get("annotation_text"));
         textButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tText;
         });
         toolbar.add(textButton);
 
         // Axis ツール
-        JButton axisButton = new JButton("Axis");
-        axisButton.setToolTipText("Axis ROI / Tumor measurement");
+        JButton axisButton = new JButton(LanguageManager.get("tools_roi.axis"));
+        axisButton.setToolTipText(LanguageManager.get("tools_roi.axis"));
         axisButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tAxis;
         });
         toolbar.add(axisButton);
 
         // Dynamic Angle ツール
-        JButton dAngleButton = new JButton("D-Angle");
-        dAngleButton.setToolTipText("Dynamic Angle Measurement");
+        JButton dAngleButton = new JButton(LanguageManager.get("tools_roi.dangle"));
+        dAngleButton.setToolTipText(LanguageManager.get("tools_roi.dangle"));
         dAngleButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tDynamicAngle;
         });
         toolbar.add(dAngleButton);
 
         // Perpendicular ツール
-        JButton perpButton = new JButton("Perp");
-        perpButton.setToolTipText("Perpendicular Lines");
+        JButton perpButton = new JButton(LanguageManager.get("tools_roi.perp"));
+        perpButton.setToolTipText(LanguageManager.get("tools_roi.perp"));
         perpButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tPerpendicular;
         });
         toolbar.add(perpButton);
 
-        // Curved MPR ツール (HOROS-20240407)
-        JButton curvedButton = new JButton("Curved");
-        curvedButton.setToolTipText("Curved MPR ROI (Click nodes, double-click to finish)");
-        curvedButton.addActionListener(e -> {
-            DCMView.currentTool = DCMView.ToolMode.tCurvedROI;
+        // --- Curved MPR ツール (HOROS-20240407)
+        JButton cprButton = new JButton(LanguageManager.get("tools_roi.curved_3d"));
+        cprButton.setToolTipText(LanguageManager.get("tt_curved_3d"));
+        cprButton.addActionListener(e -> {
+            BrowserController current = BrowserController.currentBrowser();
+            if (current != null) {
+                current.cprViewer(null);
+            }
         });
-        toolbar.add(curvedButton);
+        toolbar.add(cprButton);
 
         // Brush ツール
-        JButton brushButton = new JButton("Brush");
+        JButton brushButton = new JButton(LanguageManager.get("tools_roi.brush"));
         brushButton.setToolTipText("Brush ROI / Pixel Mask");
         brushButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tBrush;
@@ -281,8 +293,8 @@ public class ToolbarPanel extends JFrame {
         toolbar.add(brushButton);
 
         // Repulsor ツール
-        JButton repulsorButton = new JButton("Repulse");
-        repulsorButton.setToolTipText("Repulsor / ROI Sculpting Tool (E)");
+        JButton repulsorButton = new JButton(LanguageManager.get("btn_repulse"));
+        repulsorButton.setToolTipText(LanguageManager.get("tt_repulse"));
         repulsorButton.addActionListener(e -> {
             DCMView.currentTool = DCMView.ToolMode.tRepulsor;
         });
@@ -292,8 +304,8 @@ public class ToolbarPanel extends JFrame {
 
         // --- 3D / MPR ツール ---
         // HOROS-20240407準拠: 2D MPR (3D MPR)
-        JButton mprButton = new JButton("3D MPR");
-        mprButton.setToolTipText("Multi-Planar Reconstruction (3D MPR)");
+        JButton mprButton = new JButton(LanguageManager.get("tools_roi.mpr"));
+        mprButton.setToolTipText(LanguageManager.get("tt_mpr"));
         mprButton.addActionListener(e -> {
             if (viewer != null) {
                 MPRController.openMPR(viewer);
@@ -302,8 +314,8 @@ public class ToolbarPanel extends JFrame {
         toolbar.add(mprButton);
 
         // HOROS-20240407準拠: Curved MPR (3D Curved)
-        JButton cprButton = new JButton("3D Curved");
-        cprButton.setToolTipText("Curved Planar Reconstruction (3D Curved)");
+        cprButton = new JButton(LanguageManager.get("tools_roi.curved_3d"));
+        cprButton.setToolTipText(LanguageManager.get("tt_curved_3d"));
         cprButton.addActionListener(e -> {
             BrowserController current = BrowserController.currentBrowser();
             if (current != null) {
@@ -313,8 +325,8 @@ public class ToolbarPanel extends JFrame {
         toolbar.add(cprButton);
 
         // HOROS-20240407準拠: 3D MIP
-        JButton mipButton = new JButton("3D MIP");
-        mipButton.setToolTipText("Maximum Intensity Projection (3D MIP)");
+        JButton mipButton = new JButton(LanguageManager.get("advanced.mip3d"));
+        mipButton.setToolTipText(LanguageManager.get("tt_mip3d"));
         mipButton.addActionListener(e -> {
             if (viewer != null) {
                 Viewer3DController.openMIP(viewer);
@@ -323,8 +335,8 @@ public class ToolbarPanel extends JFrame {
         toolbar.add(mipButton);
 
         // HOROS-20240407準拠: 3D VR (Volume Rendering)
-        JButton vrButton = new JButton("3D VR");
-        vrButton.setToolTipText("3D Volume Rendering");
+        JButton vrButton = new JButton(LanguageManager.get("tools_roi.vr"));
+        vrButton.setToolTipText(LanguageManager.get("tt_vr3d"));
         vrButton.addActionListener(e -> {
             if (viewer != null) {
                 Viewer3DController.openVR(viewer);
@@ -335,8 +347,7 @@ public class ToolbarPanel extends JFrame {
         // ツールバーを中央（メニューの下）に配置
         add(toolbar, BorderLayout.CENTER);
 
-        // 背景色を設定
-        getContentPane().setBackground(new Color(240, 240, 240));
+        getContentPane().setBackground(UIStyle.BACKGROUND_COLOR);
     }
 
     /**

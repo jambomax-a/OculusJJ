@@ -4699,7 +4699,7 @@ public class BrowserController extends JFrame {
                                         0, // imageIndex
                                         1, // numberOfImages
                                         frame, // frameNumber
-                                        0, // seriesId
+                                        "0", // seriesId (String)
                                         false,
                                         image // imageObj
                                 );
