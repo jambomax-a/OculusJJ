@@ -1871,14 +1871,36 @@ public class ROI {
             // 楕円近似面積を計算 (PI * a/2 * b/2)
             return (Math.PI * len1 * len2) / 4.0;
         }
+
+        // HOROS-20240407準拠: 統計計算（ピクセルカウント）がまだ行われていない場合の解析的計算
+        if (rtotal == 0 && rect != null) {
+            double w = rect.width * pixelSpacingX;
+            double h = rect.height * pixelSpacingY;
+
+            if (type == DCMView.ToolMode.tOval) {
+                return (Math.PI * w * h) / 4.0;
+            } else if (type == DCMView.ToolMode.tROI) {
+                return w * h;
+            }
+        }
         return rtotal;
     }
 
     public double getPerimeter() {
-        double perimeter = 0;
         if (points.size() < 2)
             return 0;
 
+        // HOROS-20240407準拠: 楕円と矩形は解析的に計算する
+        if (type == DCMView.ToolMode.tOval && rect != null) {
+            double a = rect.width * pixelSpacingX / 2.0;
+            double b = rect.height * pixelSpacingY / 2.0;
+            // ラマヌジャンの近似式 (周長)
+            return Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+        } else if (type == DCMView.ToolMode.tROI && rect != null) {
+            return 2.0 * (rect.width * pixelSpacingX + rect.height * pixelSpacingY);
+        }
+
+        double perimeter = 0;
         for (int i = 0; i < points.size() - 1; i++) {
             perimeter += calculateDistanceBetween(points.get(i), points.get(i + 1));
         }

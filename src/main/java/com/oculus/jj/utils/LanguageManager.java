@@ -93,8 +93,23 @@ public class LanguageManager {
         return properties.getProperty(key, key);
     }
 
+    /**
+     * Get a localized string with fallback default value.
+     */
+    public String getString(String key, String defaultValue) {
+        if (properties == null) return defaultValue;
+        return properties.getProperty(key, defaultValue);
+    }
+
     // Convenience method for common usage
     public static String get(String key) {
         return getInstance().getString(key);
+    }
+
+    /**
+     * Get a localized string with fallback default value.
+     */
+    public static String get(String key, String defaultValue) {
+        return getInstance().getString(key, defaultValue);
     }
 }

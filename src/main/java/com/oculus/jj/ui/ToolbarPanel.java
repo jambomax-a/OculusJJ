@@ -302,7 +302,32 @@ public class ToolbarPanel extends JFrame { // i18n_ready
 
         toolbar.addSeparator();
 
-        // --- 3D / MPR ツール ---
+        // --- WLWW プリセット (HOROS-20240407準拠) ---
+        String[] presets = { "Standard", "Bone", "Lung", "Brain", "Soft Tissue" };
+        JComboBox<String> presetCombo = new JComboBox<>(presets);
+        presetCombo.setMaximumSize(new Dimension(100, 25));
+        presetCombo.addActionListener(e -> {
+            String selected = (String) presetCombo.getSelectedItem();
+            DCMView current = viewer != null ? viewer.getImageView() : null;
+            if (current != null) {
+                current.applyWLPreset(selected);
+            }
+        });
+        toolbar.add(new JLabel(" WL: "));
+        toolbar.add(presetCombo);
+
+        // --- 同期トグル ---
+        JCheckBox syncCheck = new JCheckBox("Sync", DCMView.syncro != DCMView.syncroOFF);
+        syncCheck.setOpaque(false);
+        syncCheck.setForeground(Color.WHITE);
+        syncCheck.addActionListener(e -> {
+            DCMView.syncro = syncCheck.isSelected() ? DCMView.syncroABS : DCMView.syncroOFF;
+        });
+        toolbar.add(syncCheck);
+
+        toolbar.addSeparator();
+
+        // --- 画面編集ツール (Flip/Rotate) ---
         // HOROS-20240407準拠: 2D MPR (3D MPR)
         JButton mprButton = new JButton(LanguageManager.get("tools_roi.mpr"));
         mprButton.setToolTipText(LanguageManager.get("tt_mpr"));
@@ -312,17 +337,6 @@ public class ToolbarPanel extends JFrame { // i18n_ready
             }
         });
         toolbar.add(mprButton);
-
-        // HOROS-20240407準拠: Curved MPR (3D Curved)
-        cprButton = new JButton(LanguageManager.get("tools_roi.curved_3d"));
-        cprButton.setToolTipText(LanguageManager.get("tt_curved_3d"));
-        cprButton.addActionListener(e -> {
-            BrowserController current = BrowserController.currentBrowser();
-            if (current != null) {
-                current.cprViewer(null);
-            }
-        });
-        toolbar.add(cprButton);
 
         // HOROS-20240407準拠: 3D MIP
         JButton mipButton = new JButton(LanguageManager.get("advanced.mip3d"));
@@ -343,6 +357,45 @@ public class ToolbarPanel extends JFrame { // i18n_ready
             }
         });
         toolbar.add(vrButton);
+
+        toolbar.addSeparator();
+
+        // --- 画像編集ツール (Flip/Rotate) ---
+        JButton flipXButton = new JButton("Flip H");
+        flipXButton.setToolTipText("Flip Horizontal");
+        flipXButton.addActionListener(e -> {
+            DCMView current = viewer != null ? viewer.getImageView() : null;
+            if (current != null)
+                current.toggleXFlipped();
+        });
+        toolbar.add(flipXButton);
+
+        JButton flipYButton = new JButton("Flip V");
+        flipYButton.setToolTipText("Flip Vertical");
+        flipYButton.addActionListener(e -> {
+            DCMView current = viewer != null ? viewer.getImageView() : null;
+            if (current != null)
+                current.toggleYFlipped();
+        });
+        toolbar.add(flipYButton);
+
+        JButton rotRButton = new JButton("Rot 90 R");
+        rotRButton.setToolTipText("Rotate 90 Right");
+        rotRButton.addActionListener(e -> {
+            DCMView current = viewer != null ? viewer.getImageView() : null;
+            if (current != null)
+                current.rotateRight();
+        });
+        toolbar.add(rotRButton);
+
+        JButton rotLButton = new JButton("Rot 90 L");
+        rotLButton.setToolTipText("Rotate 90 Left");
+        rotLButton.addActionListener(e -> {
+            DCMView current = viewer != null ? viewer.getImageView() : null;
+            if (current != null)
+                current.rotateLeft();
+        });
+        toolbar.add(rotLButton);
 
         // ツールバーを中央（メニューの下）に配置
         add(toolbar, BorderLayout.CENTER);

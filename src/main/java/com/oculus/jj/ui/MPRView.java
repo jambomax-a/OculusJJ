@@ -61,11 +61,18 @@ public class MPRView extends JPanel {
         repaint();
     }
 
+    /**
+     * 現在の画像を取得する（ヒストグラム計算用）
+     */
+    public BufferedImage getCurrentImage() {
+        return image;
+    }
+
     public double[][] getSamplingBasis_forMovement() {
         return getSamplingBasis();
     }
 
-    private double[][] getSamplingBasis() {
+    public double[][] getSamplingBasis() {
         if (controller == null)
             return null;
 
@@ -132,11 +139,36 @@ public class MPRView extends JPanel {
 
         MouseAdapter adapter = new MouseAdapter() {
             @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    if (direction != Direction.THREE_D) {
+                        if (hitTest(e.getX(), e.getY()) == DragMode.CENTER) {
+                            // HOROS-2024.04.07 準拠: ダブルクリックでクロスヘアをボリューム中心にリセット
+                            controller.resetCrosshair();
+                        }
+                    } else {
+                        // 3Dビューのダブルクリックでオリエンテーションをリセット
+                        controller.resetOrientation();
+                    }
+                }
+            }
+
+            @Override
             public void mousePressed(MouseEvent e) {
                 // HOROS-20240407 準拠: クリックしたビューをハイライト（赤枠表示）対象にする
                 controller.setHighlightedView(direction);
 
                 lastMousePos = e.getPoint();
+
+                // ダブルクリックでリセット (Horos準拠)
+                if (e.getClickCount() == 2) {
+                    if (direction == Direction.THREE_D) {
+                        controller.resetOrientation();
+                    } else {
+                        controller.resetCrosshair();
+                    }
+                    return;
+                }
 
                 // Shift + Click で曲線ポイントを追加
                 if (e.isShiftDown() && direction != Direction.THREE_D) {
@@ -162,6 +194,11 @@ public class MPRView extends JPanel {
             }
 
             private double[] screenToWorld(int px, int py) {
+                double[][] basis = getSamplingBasis();
+                double[] normal = basis[0];
+                double[] vx = basis[1], vy = basis[2];
+
+                // クリック位置（ピクセル）から正規化された画像座標への変換
                 double imgRatio = controller.getAspectRatio(direction);
                 double viewRatio = (double) getWidth() / getHeight();
                 int drawW, drawH, sx, sy;
@@ -175,14 +212,9 @@ public class MPRView extends JPanel {
                 sx = (int) ((getWidth() - drawW) / 2 + panX * getWidth());
                 sy = (int) ((getHeight() - drawH) / 2 + panY * getHeight());
 
-                // クリック位置（ピクセル）から正規化された画像座標への変換
                 double normX = (px - sx) / (double) drawW - 0.5;
                 double normY = (py - sy) / (double) drawH - 0.5;
 
-                double[][] basis = getSamplingBasis();
-                double[] vx = basis[1], vy = basis[2];
-
-                // 画像平面上での移動量を計算 (voxels)
                 double dx_vox = normX * controller.getDim(direction, 0);
                 double dy_vox = normY * controller.getDim(direction, 1);
 
@@ -190,8 +222,6 @@ public class MPRView extends JPanel {
                 double spY = controller.getSpacing(direction, 1);
 
                 // --- 修正: 表示中のスライス面の中心座標を基準にする ---
-                // (Orthogonalモードでクロスヘア位置とサンプリング中心がずれている場合でも、正しい座標を取得するため)
-                double[] normal = basis[0];
                 double dist = (controller.getCurX() - controller.getVolCX()) * normal[0]
                         + (controller.getCurY() - controller.getVolCY()) * normal[1]
                         + (controller.getCurZ() - controller.getVolCZ()) * normal[2];
@@ -316,7 +346,16 @@ public class MPRView extends JPanel {
                 double scaleX = (double) controller.getDim(direction, 0) / drawW;
                 double scaleY = (double) controller.getDim(direction, 1) / drawH;
 
-                controller.updatePosition_rel(direction, dx * scaleX, dy * scaleY);
+                // HOROS-20240407 準拠: ドラッグモードに応じて移動方向を制限する
+                // これにより、垂直線（Sagittal）だけを動かしたり、水平線（Coronal）だけを動かしたりしやすくなる。
+                if (dragMode == DragMode.VERTICAL) {
+                    controller.updatePosition_rel(direction, dx * scaleX, 0);
+                } else if (dragMode == DragMode.HORIZONTAL) {
+                    controller.updatePosition_rel(direction, 0, dy * scaleY);
+                } else {
+                    // CENTER または NONE の場合は両方動かす
+                    controller.updatePosition_rel(direction, dx * scaleX, dy * scaleY);
+                }
             }
 
             private void updatePanPos_rel(int dx, int dy) {
@@ -595,8 +634,8 @@ public class MPRView extends JPanel {
             g.fillRect(0, 0, w, h);
             g.setColor(new Color(255, 200, 0)); // 明いオレンジ
             g.setFont(new Font("SansSerif", Font.BOLD, 18));
-            String msg1 = "--- 3D CURVED MPR MODE ---";
-            String msg2 = "SHIFT + CLICK on 2D views to draw centerline";
+            String msg1 = com.oculus.jj.utils.LanguageManager.get("mpr.mode.3dCurved");
+            String msg2 = com.oculus.jj.utils.LanguageManager.get("mpr.hint.curved");
             FontMetrics fm = g.getFontMetrics();
             g.drawString(msg1, w / 2 - fm.stringWidth(msg1) / 2, h / 2 - 20);
             g.drawString(msg2, w / 2 - fm.stringWidth(msg2) / 2, h / 2 + 20);
@@ -913,6 +952,9 @@ public class MPRView extends JPanel {
                 // Curved MPR の 3D タイルでもセンターラインを表示
                 drawCurveOnCurvedView(g2, sx, sy, drawW, drawH);
             }
+
+            // 測定結果を描画 (HOROS-20240407準拠: ROIManager相当のMeasurementHistory)
+            drawMeasurements(g2, sx, sy, drawW, drawH);
         }
 
         // アノテーション (Horos準拠)
@@ -964,6 +1006,182 @@ public class MPRView extends JPanel {
             int ty = ly + (int) (i * 10 * pixelsPerMmY);
             int tw = (i % 5 == 0) ? 8 : 4;
             g2.drawLine(lx, ty, lx + tw, ty);
+        }
+    }
+
+    /**
+     * 測定結果を描画する (HOROS-20240407準拠: ROIManager相当のMeasurementHistoryから描画)
+     * 
+     * @param g2      Graphics2D
+     * @param sx      画像描画左上X
+     * @param sy      画像描画左上Y
+     * @param drawW   画像幅
+     * @param drawH   画像高さ
+     */
+    private void drawMeasurements(Graphics2D g2, int sx, int sy, int drawW, int drawH) {
+        if (controller == null || image == null)
+            return;
+
+        // サムネイルの場合は測定結果を表示しない
+        if (isThumbnail)
+            return;
+
+        double[][] basis = getSamplingBasis();
+        if (basis == null || basis.length < 3)
+            return;
+
+        double[] vx = basis[1], vy = basis[2];
+        double volCX = controller.getVolCX(), volCY = controller.getVolCY(), volCZ = controller.getVolCZ();
+        double scaleX = (double) drawW / controller.getDim(direction, 0);
+        double scaleY = (double) drawH / controller.getDim(direction, 1);
+
+        // 距離測定結果を描画
+        java.util.List<com.oculus.jj.model.Measurement3D.DistanceResult> distances = 
+            controller.getDistanceMeasurements();
+        if (distances != null) {
+            int colorIndex = 0;
+            Color[] measurementColors = { Color.GREEN, Color.MAGENTA, Color.CYAN, Color.ORANGE, Color.WHITE };
+            
+            for (int i = 0; i < distances.size(); i++) {
+                com.oculus.jj.model.Measurement3D.DistanceResult result = distances.get(i);
+                if (result == null) continue;
+
+                // 色をローテーション
+                g2.setColor(measurementColors[i % measurementColors.length]);
+                g2.setStroke(new BasicStroke(2.0f));
+
+                // 始点と終点を画面座標に変換して描画
+                com.oculus.jj.model.Measurement3D.Point3D start = result.startPoint;
+                com.oculus.jj.model.Measurement3D.Point3D end = result.endPoint;
+
+                int startX, startY, endX, endY;
+                
+                // 始点を画面座標に変換
+                double startDX = start.x - volCX;
+                double startDY = start.y - volCY;
+                double startDZ = start.z - volCZ;
+                double startScreenX = startDX * vx[0] + startDY * vx[1] + startDZ * vx[2];
+                double startScreenY = startDX * vy[0] + startDY * vy[1] + startDZ * vy[2];
+                
+                startX = sx + (int) ((controller.getDim(direction, 0) / 2.0 + startScreenX / controller.getSpacing(direction, 0)) * scaleX);
+                startY = sy + (int) ((controller.getDim(direction, 1) / 2.0 + startScreenY / controller.getSpacing(direction, 1)) * scaleY);
+
+                // 終点を画面座標に変換
+                double endDX = end.x - volCX;
+                double endDY = end.y - volCY;
+                double endDZ = end.z - volCZ;
+                double endScreenX = endDX * vx[0] + endDY * vx[1] + endDZ * vx[2];
+                double endScreenY = endDX * vy[0] + endDY * vy[1] + endDZ * vy[2];
+                
+                endX = sx + (int) ((controller.getDim(direction, 0) / 2.0 + endScreenX / controller.getSpacing(direction, 0)) * scaleX);
+                endY = sy + (int) ((controller.getDim(direction, 1) / 2.0 + endScreenY / controller.getSpacing(direction, 1)) * scaleY);
+
+                // 測定ラインを描画
+                g2.drawLine(startX, startY, endX, endY);
+
+                // 始点と終点を丸でマーク
+                g2.fillOval(startX - 4, startY - 4, 8, 8);
+                g2.drawOval(startX - 4, startY - 4, 8, 8);
+                g2.fillOval(endX - 4, endY - 4, 8, 8);
+                g2.drawOval(endX - 4, endY - 4, 8, 8);
+
+                // 距離値を描画（中央に）
+                int midX = (startX + endX) / 2;
+                int midY = (startY + endY) / 2;
+                
+                // 背景を少し暗くして文字を見やすくする
+                String distanceText = String.format("%.1f mm", result.distanceMM);
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                int textWidth = fm.stringWidth(distanceText);
+                g2.setColor(new Color(0, 0, 0, 128));
+                g2.fillRect(midX - textWidth / 2 - 4, midY - fm.getHeight() / 2 - 2, textWidth + 8, fm.getHeight() + 4);
+                
+                g2.setColor(Color.YELLOW);
+                g2.drawString(distanceText, midX - fm.stringWidth(distanceText) / 2, midY + fm.getAscent() / 2);
+
+                colorIndex++;
+            }
+        }
+
+        // 角度測定結果を描画
+        java.util.List<com.oculus.jj.model.Measurement3D.AngleResult> angles = 
+            controller.getAngleMeasurements();
+        if (angles != null) {
+            int colorIndex = 0;
+            Color[] angleColors = { new Color(255, 165, 0), new Color(173, 216, 230), 
+                                    new Color(255, 192, 203), new Color(144, 238, 144) };
+            
+            for (int i = 0; i < angles.size(); i++) {
+                com.oculus.jj.model.Measurement3D.AngleResult result = angles.get(i);
+                if (result == null) continue;
+
+                g2.setColor(angleColors[i % angleColors.length]);
+                g2.setStroke(new BasicStroke(2.0f));
+
+                // 頂点
+                com.oculus.jj.model.Measurement3D.Point3D vertex = result.vertex;
+                double vdx = vertex.x - volCX;
+                double vdy = vertex.y - volCY;
+                double vdZ = vertex.z - volCZ;
+                double vScreenX = vdx * vx[0] + vdy * vx[1] + vdZ * vx[2];
+                double vScreenY = vdx * vy[0] + vdy * vy[1] + vdZ * vy[2];
+                
+                int vertexX = sx + (int) ((controller.getDim(direction, 0) / 2.0 + vScreenX / controller.getSpacing(direction, 0)) * scaleX);
+                int vertexY = sy + (int) ((controller.getDim(direction, 1) / 2.0 + vScreenY / controller.getSpacing(direction, 1)) * scaleY);
+
+                // 頂点を三角でマーク
+                java.awt.Polygon triangle = new java.awt.Polygon();
+                triangle.addPoint(vertexX, vertexY - 6);
+                triangle.addPoint(vertexX - 5, vertexY + 4);
+                triangle.addPoint(vertexX + 5, vertexY + 4);
+                g2.fillPolygon(triangle);
+                g2.drawPolygon(triangle);
+
+                // 脚1を描画
+                com.oculus.jj.model.Measurement3D.Point3D p1 = result.p1;
+                double p1dx = p1.x - volCX;
+                double p1dy = p1.y - volCY;
+                double p1dz = p1.z - volCZ;
+                double p1ScreenX = p1dx * vx[0] + p1dy * vx[1] + p1dz * vx[2];
+                double p1ScreenY = p1dx * vy[0] + p1dy * vy[1] + p1dz * vy[2];
+                
+                int p1X = sx + (int) ((controller.getDim(direction, 0) / 2.0 + p1ScreenX / controller.getSpacing(direction, 0)) * scaleX);
+                int p1Y = sy + (int) ((controller.getDim(direction, 1) / 2.0 + p1ScreenY / controller.getSpacing(direction, 1)) * scaleY);
+                
+                g2.drawLine(vertexX, vertexY, p1X, p1Y);
+                g2.fillOval(p1X - 3, p1Y - 3, 6, 6);
+
+                // 脚2を描画
+                com.oculus.jj.model.Measurement3D.Point3D p2 = result.p2;
+                double p2dx = p2.x - volCX;
+                double p2dy = p2.y - volCY;
+                double p2dz = p2.z - volCZ;
+                double p2ScreenX = p2dx * vx[0] + p2dy * vx[1] + p2dz * vx[2];
+                double p2ScreenY = p2dx * vy[0] + p2dy * vy[1] + p2dz * vy[2];
+                
+                int p2X = sx + (int) ((controller.getDim(direction, 0) / 2.0 + p2ScreenX / controller.getSpacing(direction, 0)) * scaleX);
+                int p2Y = sy + (int) ((controller.getDim(direction, 1) / 2.0 + p2ScreenY / controller.getSpacing(direction, 1)) * scaleY);
+                
+                g2.drawLine(vertexX, vertexY, p2X, p2Y);
+                g2.fillOval(p2X - 3, p2Y - 3, 6, 6);
+
+                // 角度値を描画（頂点の近く）
+                String angleText = String.format("%.1f°", result.angleDegrees);
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                int textWidth = fm.stringWidth(angleText);
+                
+                int labelX = vertexX;
+                int labelY = vertexY - 15;
+                if (labelY < sy + 10) labelY = sy + 10;
+                
+                g2.setColor(new Color(0, 0, 0, 128));
+                g2.fillRect(labelX - textWidth / 2 - 4, labelY - fm.getHeight() / 2 - 2, textWidth + 8, fm.getHeight() + 4);
+                
+                g2.setColor(Color.ORANGE);
+                g2.drawString(angleText, labelX - fm.stringWidth(angleText) / 2, labelY + fm.getAscent() / 2);
+
+                colorIndex++;
+            }
         }
     }
 
@@ -1138,20 +1356,32 @@ public class MPRView extends JPanel {
         if (!highlighted)
             return;
 
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        g2.setFont(new Font("SansSerif", Font.BOLD, 12));
         g2.setColor(Color.WHITE);
         int lx = 10, ly = 25;
 
-        g2.drawString(String.format("WL: %.0f WW: %.0f", controller.getWindowLevel(), controller.getWindowWidth()), lx,
-                ly);
+        // HOROS-2024.04.07 準拠: 文字列をローカライズ
+        String[] labels = {
+                com.oculus.jj.utils.LanguageManager.get("mpr.label.sagittal"),
+                com.oculus.jj.utils.LanguageManager.get("mpr.label.coronal"),
+                com.oculus.jj.utils.LanguageManager.get("mpr.label.axial")
+        };
+        String labelStr = (direction == Direction.THREE_D) ? "3D" : labels[direction.ordinal()];
+
+        g2.drawString(labelStr, lx, ly);
+        ly += 16;
+        g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.wlww"),
+                controller.getWindowLevel(), controller.getWindowWidth()), lx, ly);
         ly += 14;
         Point lp = getLocalPixelIndex();
-        g2.drawString(String.format("X: %d px Y: %d px Val: %.2f", lp.x, lp.y, controller.getVoxelValueAtFocus()), lx,
-                ly);
+        g2.drawString(String.format(
+                com.oculus.jj.utils.LanguageManager.get("mpr.info.pos_vox") + " "
+                        + com.oculus.jj.utils.LanguageManager.get("mpr.info.voxelValue"),
+                lp.x, lp.y, controller.getVoxelValueAtFocus()), lx, ly);
         ly += 14;
-        g2.drawString(String.format("X: %.2f mm Y: %.2f mm Z: %.2f mm", controller.getCurX(), controller.getCurY(),
-                controller.getCurZ()), lx, ly);
+        g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.pos_mm"),
+                controller.getCurX(), controller.getCurY(), controller.getCurZ()), lx, ly);
     }
 
     private void draw3DAnnotations(Graphics2D g2, boolean highlighted, MPRController.LayoutType layout) {
@@ -1186,7 +1416,9 @@ public class MPRView extends JPanel {
             if (direction == Direction.THREE_D) {
                 g2.setFont(new Font("SansSerif", Font.BOLD, 14));
                 g2.setColor(Color.CYAN);
-                String title = (layout == MPRController.LayoutType.CURVED_MPR) ? "CPR OUTPUT" : "3D MPR VIEW";
+                String title = (layout == MPRController.LayoutType.CURVED_MPR)
+                        ? com.oculus.jj.utils.LanguageManager.get("mpr.title.cpr")
+                        : com.oculus.jj.utils.LanguageManager.get("mpr.title.3d");
                 g2.drawString(title, w / 2 - g2.getFontMetrics().stringWidth(title) / 2, 25);
                 g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
             }
@@ -1197,32 +1429,36 @@ public class MPRView extends JPanel {
             int lx = 15, ly = (direction == Direction.THREE_D) ? 45 : 25;
 
             if (controller != null && !isThumbnail) {
-                g2.drawString(String.format("Image size: %d x %d", controller.getDimOriginalX(),
-                        controller.getDimOriginalY()), lx, ly);
+                g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.imageSize"),
+                        controller.getDimOriginalX(), controller.getDimOriginalY()), lx, ly);
                 ly += 15;
-                g2.drawString(String.format("View size: %d x %d", w, h), lx, ly);
+                g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.viewSize"),
+                        w, h), lx, ly);
                 ly += 15;
-                g2.drawString(
-                        String.format("WL: %.0f WW: %.0f", controller.getWindowLevel(), controller.getWindowWidth()),
-                        lx, ly);
+                g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.wlww"),
+                        controller.getWindowLevel(), controller.getWindowWidth()), lx, ly);
                 ly += 15;
 
                 Point lp = (direction == Direction.THREE_D) ? new Point(0, 0) : getLocalPixelIndex();
-                g2.drawString(
-                        String.format("X: %d px Y: %d px Val: %.1f", lp.x, lp.y, controller.getVoxelValueAtFocus()), lx,
-                        ly);
+                g2.drawString(String.format(
+                        com.oculus.jj.utils.LanguageManager.get("mpr.info.pos_vox") + " "
+                                + com.oculus.jj.utils.LanguageManager.get("mpr.info.voxelValue"),
+                        lp.x, lp.y, controller.getVoxelValueAtFocus()), lx, ly);
                 ly += 15;
-                g2.drawString(String.format("X: %.2f mm Y: %.2f mm", controller.getCurX(), controller.getCurY()), lx,
-                        ly);
+                g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.pos_mm")
+                        .replace(" Z: %.2f mm", ""), // 2DビューではZを隠す（オプション）
+                        controller.getCurX(), controller.getCurY()), lx, ly);
                 ly += 15;
 
                 // --- 追加: Slab 情報 (Horos準拠) ---
                 if (controller.getSlabMode() != MPRController.SlabMode.NONE) {
                     g2.setColor(new Color(255, 200, 0)); // 黄色
-                    String slabInfo = String.format("Slab Mode: %s", controller.getSlabMode().name());
+                    String slabInfo = String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.slabMode"),
+                            controller.getSlabMode().name());
                     g2.drawString(slabInfo, lx, ly);
                     ly += 15;
-                    String thickInfo = String.format("Thickness: %.2f mm", controller.getSlabThickness());
+                    String thickInfo = String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.thickness"),
+                            controller.getSlabThickness());
                     g2.drawString(thickInfo, lx, ly);
                     ly += 15;
                     g2.setColor(Color.WHITE);
@@ -1238,7 +1474,8 @@ public class MPRView extends JPanel {
                                     + Math.pow(pts.get(i + 1)[1] - pts.get(i)[1], 2)
                                     + Math.pow(pts.get(i + 1)[2] - pts.get(i)[2], 2));
                         }
-                        g2.drawString(String.format("Length: %.1f mm", totalD), lx, ly);
+                        g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.length"), totalD),
+                                lx, ly);
                     }
                 }
             }
@@ -1281,7 +1518,8 @@ public class MPRView extends JPanel {
                     targetDist = dFocus + interval;
 
                 g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
-                g2.drawString(String.format("%.1f mm", targetDist), 12, h - 12);
+                g2.drawString(String.format(com.oculus.jj.utils.LanguageManager.get("mpr.info.distance"), targetDist),
+                        12, h - 12);
             }
         } catch (Exception ex) {
             // ignore
@@ -1349,10 +1587,13 @@ public class MPRView extends JPanel {
         // Z: +Superior (Inferior -> Superior)
         double ax = Math.abs(v[0]), ay = Math.abs(v[1]), az = Math.abs(v[2]);
         if (ax > ay && ax > az)
-            return (v[0] > 0) ? "L" : "R";
+            return (v[0] > 0) ? com.oculus.jj.utils.LanguageManager.get("mpr.label.left")
+                    : com.oculus.jj.utils.LanguageManager.get("mpr.label.right");
         if (ay > ax && ay > az)
-            return (v[1] > 0) ? "P" : "A";
-        return (v[2] > 0) ? "S" : "I";
+            return (v[1] > 0) ? com.oculus.jj.utils.LanguageManager.get("mpr.label.posterior")
+                    : com.oculus.jj.utils.LanguageManager.get("mpr.label.anterior");
+        return (v[2] > 0) ? com.oculus.jj.utils.LanguageManager.get("mpr.label.superior")
+                : com.oculus.jj.utils.LanguageManager.get("mpr.label.inferior");
     }
 
     private void drawCrosshairs(Graphics2D g2, int sx, int sy, int drawW, int drawH) {

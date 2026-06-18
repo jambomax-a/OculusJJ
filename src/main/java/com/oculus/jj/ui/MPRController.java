@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.time.format.DateTimeFormatter;
 import com.oculus.jj.model.DicomPix;
 import com.oculus.jj.model.DicomStudy;
+import com.oculus.jj.model.Measurement3D;
 
 /**
  * MPRController - Orthogonal MPR実装
@@ -41,22 +42,40 @@ public class MPRController extends JFrame {
     private double[] vA = { 0, 0, 1 }; // Z-axis
 
     private double[] orientation = new double[9];
+    private double[] initialOrientation = new double[9]; // オリジナルの方向を保持
     private double originX, originY, originZ;
 
     // 3D回転パラメータ (3D表示用のみ)
     private double rotateX = Math.toRadians(-20);
     private double rotateY = Math.toRadians(20);
 
-    private float windowLevel = 40;
+   private float windowLevel = 40;
     private float windowWidth = 400;
+
+    // UI コンポーネント
+    private JPanel contentPane;
+
+    // MPRビュー一覧（ヒストグラム用）
+    private List<MPRView> allViews = new ArrayList<>();
 
     // --- 厚み（Thick Slab）対応 ---
     public enum SlabMode {
         NONE, AVERAGE, MIP, MINIP
     }
 
-    private double slabThickness = 1.0; // mm
-    private SlabMode slabMode = SlabMode.MIP;
+    private double slabThickness = com.oculus.jj.config.ConfigManager.getDouble("mpr.slab.thickness", com.oculus.jj.config.ConfigManager.DEFAULT_SLAB_THICKNESS); // mm
+    private SlabMode slabMode = parseSlabMode(com.oculus.jj.config.ConfigManager.getString("mpr.slab.mode", "MIP"));
+
+    /**
+     * スラブモードを文字列から列挙型に変換する。
+     */
+    private static SlabMode parseSlabMode(String mode) {
+        try {
+            return SlabMode.valueOf(mode.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return SlabMode.MIP; // デフォルトはMIP
+        }
+    }
 
     public void setSlabThickness(double mm) {
         this.slabThickness = mm;
@@ -74,6 +93,21 @@ public class MPRController extends JFrame {
 
     public SlabMode getSlabMode() {
         return slabMode;
+    }
+
+    // ウィンドウレベル/幅関連メソッド（ヒストグラム用）
+    public List<MPRView> getAllViews() {
+        return allViews;
+    }
+
+    public void addView(MPRView view) {
+        if (!allViews.contains(view)) {
+            allViews.add(view);
+        }
+    }
+
+    public void removeView(MPRView view) {
+        allViews.remove(view);
     }
 
     private float rescaleSlope = 1.0f;
@@ -96,6 +130,53 @@ public class MPRController extends JFrame {
     private List<MPRView> thumbnailViews = new ArrayList<>(); // サムネイルViewを管理
     private double thumbInterval_mm = 35.2; // A-B, B-C 間の距離 (デフォルト 35.2mm)
 
+    // --- 測定結果の管理 (HOROS-20240407準拠: ROIManager相当) ---
+    private Measurement3D.MeasurementHistory measurementHistory = new Measurement3D.MeasurementHistory();
+
+    public List<Measurement3D.DistanceResult> getDistanceMeasurements() {
+        return measurementHistory.getDistanceMeasurements();
+    }
+
+    public List<Measurement3D.AngleResult> getAngleMeasurements() {
+        return measurementHistory.getAngleMeasurements();
+    }
+
+    /**
+     * 2点間の距離を測定する (HOROS-20240407準拠)
+     */
+    public Measurement3D.DistanceResult measureDistance(
+            double x1, double y1, double z1, double x2, double y2, double z2) {
+        Measurement3D.DistanceResult result = Measurement3D.measureDistance(x1, y1, z1, x2, y2, z2);
+        if (result != null) {
+            measurementHistory.addDistanceMeasurement(result);
+            updateAllViews(true);
+        }
+        return result;
+    }
+
+    /**
+     * 3点（頂点と両端）で角度を測定する (HOROS-20240407準拠)
+     */
+    public Measurement3D.AngleResult measureAngle(
+            double x1, double y1, double z1, 
+            double vx, double vy, double vz, 
+            double x2, double y2, double z2) {
+        Measurement3D.AngleResult result = Measurement3D.measureAngle(x1, y1, z1, vx, vy, vz, x2, y2, z2);
+        if (result != null) {
+            measurementHistory.addAngleMeasurement(result);
+            updateAllViews(true);
+        }
+        return result;
+    }
+
+    /**
+     * 全ての測定結果をクリアする
+     */
+    public void clearMeasurements() {
+        measurementHistory.clear();
+        updateAllViews(true);
+    }
+
     public void setThumbInterval(double mm) {
         this.thumbInterval_mm = mm;
         if (this.thumbInterval_mm < 0.1)
@@ -107,26 +188,12 @@ public class MPRController extends JFrame {
         }
     }
 
-    private List<MPRView> getAllViews() {
-        List<MPRView> views = new ArrayList<>();
-        if (axialView != null)
-            views.add(axialView);
-        if (sagittalView != null)
-            views.add(sagittalView);
-        if (coronalView != null)
-            views.add(coronalView);
-        if (threeDView != null)
-            views.add(threeDView);
-        // サムネイルViewも管理されている場合はここに追加が必要ですが、
-        // 現在は setLayoutCurvedMPR でローカル変数として生成されています。
-        return views;
-    }
-
     public double getThumbInterval() {
         return thumbInterval_mm;
     }
 
     /**
+     * 現在の注視点 (curX, curY, curZ) が曲線上のどの位置（始点からの距離 mm）にあるかを計算する。
      * 現在の注視点 (curX, curY, curZ) が曲線上のどの位置（始点からの距離 mm）にあるかを計算する。
      * 最も近いセグメント上の点を探す。
      */
@@ -307,6 +374,9 @@ public class MPRController extends JFrame {
             this.orientation = new double[] { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
         }
 
+        // オリジナルの方向をバックアップしておく
+        System.arraycopy(this.orientation, 0, this.initialOrientation, 0, 9);
+
         // HOROS-20240407準拠: Slice spacingの計算
         if (pixList.size() > 1) {
             DicomPix second = pixList.get(1);
@@ -322,7 +392,8 @@ public class MPRController extends JFrame {
             spacingZ = 1.0;
         }
 
-        // // System.out.println("[DEBUG] MPR Spacing: X=" + spacingX + ", Y=" + spacingY + ", Z=" + spacingZ);
+        // // System.out.println("[DEBUG] MPR Spacing: X=" + spacingX + ", Y=" +
+        // spacingY + ", Z=" + spacingZ);
 
         windowLevel = first.getWindowLevel();
         windowWidth = first.getWindowWidth();
@@ -342,7 +413,8 @@ public class MPRController extends JFrame {
             }
         }
 
-        // // System.out.println("[DEBUG] MPR Window: Level=" + windowLevel + ", Width=" + windowWidth);
+        // // System.out.println("[DEBUG] MPR Window: Level=" + windowLevel + ", Width="
+        // + windowWidth);
 
         volume = new short[dimZ][dimY][dimX];
         for (int z = 0; z < dimZ; z++) {
@@ -361,7 +433,8 @@ public class MPRController extends JFrame {
                 }
             } else {
                 // // System.err.println("[ERROR] MPR Slice " + z + " failed. Reason: "
-// //                         + (src == null ? "null data" : "size mismatch " + src.length + " vs " + (dimX * dimY)));
+                // // + (src == null ? "null data" : "size mismatch " + src.length + " vs " +
+                // (dimX * dimY)));
                 if (z > 0) {
                     // 前のスライスをコピーして「空隙」を目立たなくする
                     for (int y = 0; y < dimY; y++) {
@@ -394,20 +467,30 @@ public class MPRController extends JFrame {
         volCZ = curZ;
     }
 
-    private JToolBar mprToolbar;
-    private JPanel contentPane;
+    private JToolBar commonToolbar;
+    private JToolBar mprSpecificToolbar;
 
     private void initializeUI() {
         setTitle("J-Horos MPR (v2025.02.09-STABLE)");
-        setSize(1280, 1024);
+
+        // 外部設定からウィンドウサイズを取得（デフォルト値を使用）
+        int width = com.oculus.jj.config.ConfigManager.getInt("window.width", com.oculus.jj.config.ConfigManager.DEFAULT_WINDOW_SIZE_WIDTH);
+        int height = com.oculus.jj.config.ConfigManager.getInt("window.height", com.oculus.jj.config.ConfigManager.DEFAULT_WINDOW_SIZE_HEIGHT);
+        setSize(width, height);
+
         setLocationRelativeTo(null);
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         setLayout(new BorderLayout());
 
-        mprToolbar = createToolbar();
-        add(mprToolbar, BorderLayout.NORTH);
+        commonToolbar = createCommonToolbar();
+        mprSpecificToolbar = createMprSpecificToolbar();
+
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(commonToolbar, BorderLayout.WEST);
+        topPanel.add(mprSpecificToolbar, BorderLayout.EAST);
+        add(topPanel, BorderLayout.NORTH);
 
         axialView = new MPRView(this, MPRView.Direction.AXIAL);
         sagittalView = new MPRView(this, MPRView.Direction.SAGITTAL);
@@ -420,56 +503,69 @@ public class MPRController extends JFrame {
         updateLayout();
     }
 
-    private JToolBar createToolbar() {
+    private JToolBar createCommonToolbar() {
         JToolBar tb = new JToolBar();
         tb.setFloatable(false);
         tb.setBackground(new Color(240, 240, 240));
 
-        JButton btnOrth = new JButton("Orthogonal");
+        // --- 共通操作ボタン (すべてのレイアウトで表示) ---
+        JButton btnOrth = new JButton(com.oculus.jj.utils.LanguageManager.get("mpr.layout.orthogonal"));
         btnOrth.addActionListener(e -> setLayoutOrthogonal());
         tb.add(btnOrth);
 
-        JButton btn3D = new JButton("3D MPR");
+        JButton btn3D = new JButton(com.oculus.jj.utils.LanguageManager.get("mpr.layout.3d"));
         btn3D.addActionListener(e -> setLayout3DMPR());
         tb.add(btn3D);
 
-        JButton btnCurv = new JButton("Curved MPR");
+        JButton btnCurv = new JButton(com.oculus.jj.utils.LanguageManager.get("mpr.layout.curved"));
         btnCurv.addActionListener(e -> setLayoutCurvedMPR());
         tb.add(btnCurv);
 
         tb.addSeparator();
-        JButton btnReset = new JButton("Reset");
+        JButton btnReset = new JButton(com.oculus.jj.utils.LanguageManager.get("button.reset"));
         btnReset.addActionListener(e -> {
-            curX = volCX;
-            curY = volCY;
-            curZ = volCZ;
-            updateAllViews(true);
+            resetOrientation();
+            resetCrosshair();
         });
         tb.add(btnReset);
 
-        JButton btnClearCurve = new JButton("Clear Curve");
+        return tb;
+    }
+
+    private JToolBar createMprSpecificToolbar() {
+        JToolBar tb = new JToolBar();
+        tb.setFloatable(false);
+        tb.setBackground(new Color(240, 240, 240));
+
+        // --- MPR専用ボタン (Orthogonalレイアウト時のみ表示) ---
+        JPanel mprSpecificPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        mprSpecificPanel.setOpaque(false);
+
+        JButton btnClearCurve = new JButton(com.oculus.jj.utils.LanguageManager.get("mpr.toolbar.clearCurve"));
         btnClearCurve.addActionListener(e -> clearCurvePoints());
-        tb.add(btnClearCurve);
+        mprSpecificPanel.add(btnClearCurve);
 
         tb.addSeparator();
-        tb.add(new JLabel(" Slab Mode: "));
+        tb.add(new JLabel(" " + com.oculus.jj.utils.LanguageManager.get("mpr.label.slabMode")));
         JComboBox<SlabMode> comboSlab = new JComboBox<>(SlabMode.values());
         comboSlab.setSelectedItem(slabMode);
         comboSlab.addActionListener(e -> {
             this.slabMode = (SlabMode) comboSlab.getSelectedItem();
             updateAllViews(true);
         });
-        tb.add(comboSlab);
+        mprSpecificPanel.add(comboSlab);
 
-        tb.add(new JLabel(" Thickness: "));
+        tb.add(new JLabel(" " + com.oculus.jj.utils.LanguageManager.get("mpr.label.thickness")));
         JSpinner spinThick = new JSpinner(new SpinnerNumberModel(slabThickness, 0.5, 200.0, 0.5));
         spinThick.setPreferredSize(new Dimension(80, 25));
         spinThick.addChangeListener(e -> {
             this.slabThickness = (Double) spinThick.getValue();
             updateAllViews(true);
         });
-        tb.add(spinThick);
-        tb.add(new JLabel(" mm "));
+        mprSpecificPanel.add(spinThick);
+        mprSpecificPanel.add(new JLabel(" mm "));
+
+        tb.add(mprSpecificPanel);
 
         return tb;
     }
@@ -482,17 +578,48 @@ public class MPRController extends JFrame {
         } else {
             setLayout3DMPR();
         }
+
+        // ビューごとのメニュー最適化: 3D MPR モードではスラブ関連のツールを非表示にする
+        if (mprSpecificToolbar != null) {
+            mprSpecificToolbar
+                    .setVisible(currentLayout == LayoutType.ORTHOGONAL || currentLayout == LayoutType.CURVED_MPR);
+        }
+
+        // メニューバーのビュータイプに応じた表示制御
+        updateMenuBarForViewType();
+    }
+    
+    /**
+     * 現在のレイアウトに基づいてメニューバーを更新する
+     */
+    private void updateMenuBarForViewType() {
+        if (getJMenuBar() != null) {
+            MainMenuBar menuBar = (MainMenuBar) getJMenuBar();
+            switch (currentLayout) {
+                case ORTHOGONAL:
+                    menuBar.updateForViewType(MainMenuBar.ViewType.MPR_ORTHOGONAL);
+                    break;
+                case CURVED_MPR:
+                    menuBar.updateForViewType(MainMenuBar.ViewType.MPR_ORTHOGONAL);
+                    break;
+                case THREE_D_MPR:
+                    menuBar.updateForViewType(MainMenuBar.ViewType.VIEWER_3D);
+                    break;
+            }
+        }
     }
 
     private void setLayoutOrthogonal() {
         this.currentLayout = LayoutType.ORTHOGONAL;
-        setTitle("2D Orthogonal MPR");
+        // HOROS-2024.04.07 準拠: 文字列をローカライズ
+        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.layout.orthogonal"));
         contentPane.removeAll();
 
-        // 2D Orthogonal モード時は、標準的な断面(Axial/Sagittal/Coronal)にリセットする
-        this.vA = new double[] { 0, 0, 1 };
-        this.vS = new double[] { 1, 0, 0 };
-        this.vC = new double[] { 0, 1, 0 };
+        // HOROS-2024.04.07 準拠: シリーズに基づいた元のオリエンテーションを使用する。
+        // これを (0,0,1) 等に固定してしまうと、ガントリーが傾いている画像などで「ジャンプ」が発生する。
+        this.vS = new double[] { initialOrientation[0], initialOrientation[1], initialOrientation[2] };
+        this.vC = new double[] { initialOrientation[3], initialOrientation[4], initialOrientation[5] };
+        this.vA = new double[] { initialOrientation[6], initialOrientation[7], initialOrientation[8] };
 
         // 以前好評だった横3列のレイアウト (Axial | Coronal | Sagittal) を維持
         JSplitPane split2 = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, coronalView, sagittalView);
@@ -511,7 +638,7 @@ public class MPRController extends JFrame {
 
     private void setLayout3DMPR() {
         this.currentLayout = LayoutType.THREE_D_MPR;
-        setTitle("3D MPR (Horos Standard)");
+        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.layout.3d"));
         contentPane.removeAll();
 
         // HOROS-2024.04.07 準拠: スクショに基づいた 1+2 レイアウト
@@ -539,8 +666,9 @@ public class MPRController extends JFrame {
     }
 
     private void setLayoutCurvedMPR() {
+        this.currentLayout = LayoutType.ORTHOGONAL; // 一旦リセット
         this.currentLayout = LayoutType.CURVED_MPR;
-        setTitle("3D Curved MPR (Horos Standard)");
+        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.layout.curved"));
 
         // HOROS-2024.04.07 準拠: 新しく開始するときは曲線をクリアする
         clearCurvePoints();
@@ -610,52 +738,82 @@ public class MPRController extends JFrame {
         updateAllViews(true);
     }
 
+    public double[][] getSamplingBasis(MPRView.Direction dir) {
+        switch (dir) {
+            case AXIAL:
+                return axialView.getSamplingBasis();
+            case SAGITTAL:
+                return sagittalView.getSamplingBasis();
+            case CORONAL:
+                return coronalView.getSamplingBasis();
+            default:
+                return null;
+        }
+    }
+
     /**
-     * クロスヘア（注視点）の移動
-     * 2D Orthogonal MPR の場合、画像は固定したまま、クロスヘアのみを動かす。
-     * 3D MPR / Curved MPR の場合は画像もその位置に追従（パン）させる。
+     * 注視点（クロスヘア）の移動。
+     * 2D Orthogonal モードでは基本、画像は動かさずクロスヘアのみ移動。
+     * 同期パン設定などがある場合は挙動が変化する。
      */
     public void updatePosition_rel(MPRView.Direction source, double dx, double dy) {
         if (source == MPRView.Direction.THREE_D)
             return;
 
-        MPRView view = null;
-        switch (source) {
-            case AXIAL:
-                view = axialView;
-                break;
-            case SAGITTAL:
-                view = sagittalView;
-                break;
-            case CORONAL:
-                view = coronalView;
-                break;
-            default:
-                break;
-        }
-        if (view == null)
+        double[][] basis = getSamplingBasis(source);
+        if (basis == null)
             return;
 
-        double[][] basis = view.getSamplingBasis_forMovement();
         double[] vx = basis[1], vy = basis[2];
-
         double spX = getSpacing(source, 0);
         double spY = getSpacing(source, 1);
 
-        if (currentLayout == LayoutType.ORTHOGONAL) {
-            // 2D Orthogonal MPR: 画像は固定し、クロスヘア（注視点）をドラッグ方向に動かす
-            curX += (dx * spX) * vx[0] + (dy * spY) * vy[0];
-            curY += (dx * spX) * vx[1] + (dy * spY) * vy[1];
-            curZ += (dx * spX) * vx[2] + (dy * spY) * vy[2];
-        } else {
-            // 3D MPR / Curved MPR: 画像自体をドラッグ方向に動かす（パン操作）
-            // 画像を右に動かすには、サンプリング中心を「左（マイナス）」に移動させる必要がある
-            curX -= (dx * spX) * vx[0] + (dy * spY) * vy[0];
-            curY -= (dx * spX) * vx[1] + (dy * spY) * vy[1];
-            curZ -= (dx * spX) * vx[2] + (dy * spY) * vy[2];
+        double worldDx = (dx * spX);
+        double worldDy = (dy * spY);
+
+        // クロスヘア（注視点）を移動
+        curX += worldDx * vx[0] + worldDy * vy[0];
+        curY += worldDx * vx[1] + worldDy * vy[1];
+        curZ += worldDx * vx[2] + worldDy * vy[2];
+
+        // 3D/Curved MPR の場合は画像中心も追従させる（パン）
+        if (currentLayout != LayoutType.ORTHOGONAL) {
             volCX = curX;
             volCY = curY;
             volCZ = curZ;
+        }
+
+        updateAllViews(true);
+    }
+
+    /**
+     * 画像全体のパン（移動）
+     */
+    public void updatePan_rel(MPRView.Direction source, double dx, double dy) {
+        if (source == MPRView.Direction.THREE_D)
+            return;
+
+        double[][] basis = getSamplingBasis(source);
+        if (basis == null)
+            return;
+
+        double[] vx = basis[1], vy = basis[2];
+        double spX = getSpacing(source, 0);
+        double spY = getSpacing(source, 1);
+
+        // 画像を「右」に動かすには、サンプリング中心を「左（マイナス）」に移動させる
+        double worldDx = -(dx * spX);
+        double worldDy = -(dy * spY);
+
+        volCX += worldDx * vx[0] + worldDy * vy[0];
+        volCY += worldDx * vx[1] + worldDy * vy[1];
+        volCZ += worldDx * vx[2] + worldDy * vy[2];
+
+        // 2D Orthogonal 以外では注視点も一緒に動かす
+        if (currentLayout != LayoutType.ORTHOGONAL) {
+            curX = volCX;
+            curY = volCY;
+            curZ = volCZ;
         }
 
         updateAllViews(true);
@@ -689,46 +847,21 @@ public class MPRController extends JFrame {
     }
 
     /**
-     * 画像のパン操作（画像とクロスヘアを同時に移動）
+     * 注視点をボリュームの中心にリセットする
      */
-    public void updatePan_rel(MPRView.Direction source, double dx, double dy) {
-        if (source == MPRView.Direction.THREE_D)
-            return;
+    public void resetCrosshair() {
+        setFocusPosition(dimX / 2.0, dimY / 2.0, dimZ / 2.0);
+    }
 
-        MPRView view = null;
-        switch (source) {
-            case AXIAL:
-                view = axialView;
-                break;
-            case SAGITTAL:
-                view = sagittalView;
-                break;
-            case CORONAL:
-                view = coronalView;
-                break;
-            default:
-                break;
-        }
-        if (view == null)
-            return;
-
-        double[][] basis = view.getSamplingBasis_forMovement();
-        double[] vx = basis[1], vy = basis[2];
-
-        double spX = getSpacing(source, 0);
-        double spY = getSpacing(source, 1);
-
-        // HOROS-20240407 準拠: パン操作（画像全体の移動）
-        // マウスを右にドラッグした際に画像を右へ動かすため、サンプリング中心を「左（マイナス）」へずらす。
-        volCX -= (dx * spX) * vx[0] + (dy * spY) * vy[0];
-        volCY -= (dx * spX) * vx[1] + (dy * spY) * vy[1];
-        volCZ -= (dx * spX) * vx[2] + (dy * spY) * vy[2];
-
-        curX -= (dx * spX) * vx[0] + (dy * spY) * vy[0];
-        curY -= (dx * spX) * vx[1] + (dy * spY) * vy[1];
-        curZ -= (dx * spX) * vx[2] + (dy * spY) * vy[2];
-
-        updateAllViews();
+    /**
+     * オリエンテーションをシリーズの初期状態にリセットする
+     */
+    public void resetOrientation() {
+        System.arraycopy(initialOrientation, 0, orientation, 0, 9);
+        this.vS = new double[] { orientation[0], orientation[1], orientation[2] };
+        this.vC = new double[] { orientation[3], orientation[4], orientation[5] };
+        this.vA = new double[] { orientation[6], orientation[7], orientation[8] };
+        updateAllViews(true);
     }
 
     /**
@@ -835,8 +968,9 @@ public class MPRController extends JFrame {
     }
 
     private double getInterpolatedVoxelByIndex(double x, double y, double z) {
-        if (this.volume == null) return 0;
-        
+        if (this.volume == null)
+            return 0;
+
         int x0 = (int) Math.floor(x);
         int y0 = (int) Math.floor(y);
         int z0 = (int) Math.floor(z);
@@ -1237,6 +1371,16 @@ public class MPRController extends JFrame {
 
     public float getWindowWidth() {
         return windowWidth;
+    }
+
+    public void setWindowLevel(float level) {
+        this.windowLevel = level;
+        updateAllViews(true);
+    }
+
+    public void setWindowWidth(float width) {
+        this.windowWidth = width;
+        updateAllViews(true);
     }
 
     public float getRescaleSlope() {

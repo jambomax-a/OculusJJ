@@ -8,11 +8,22 @@ import java.util.stream.Stream;
 /**
  * DatabasePathManager - Handles directory structure for the DicomDatabase.
  * Ported from horos-20240407/Horos/Sources/DicomDatabase.h.
+ * ConfigManagerからデータベースフォルダパスを取得します。
  */
 public class DatabasePathManager {
     private final String baseDirPath;
     private final String dataBaseDirPath;
 
+    /**
+     * デフォルトのベースディレクトリパスでDatabasePathManagerを初期化します。
+     */
+    public DatabasePathManager() {
+        this(com.oculus.jj.config.ConfigManager.getDatabaseFolder());
+    }
+
+    /**
+     * 指定されたベースディレクトリパスでDatabasePathManagerを初期化します。
+     */
     public DatabasePathManager(String baseDirPath) {
         this.baseDirPath = baseDirPath;
         

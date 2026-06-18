@@ -546,6 +546,20 @@ public class DCMView extends JPanel {
                             // 最後の点を更新 (Measure, Oval, ROI, Arrow, Angle, Polygon等)
                             newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
                         }
+
+                        // HOROS-20240407準拠: 作成中のROIでも、楕円や矩形、ポリゴンならリアルタイムで統計計算を行う
+                        if (newRoi.getType() == ToolMode.tOval || newRoi.getType() == ToolMode.tROI ||
+                                newRoi.getType() == ToolMode.tCPolygon || newRoi.getType() == ToolMode.tPencil) {
+                            final com.oculus.jj.model.ROI roiToCompute = newRoi;
+                            final DicomPix currentPix = curDCM;
+                            if (currentPix != null) {
+                                new Thread(() -> {
+                                    currentPix.computeROIStatistics(roiToCompute);
+                                    javax.swing.SwingUtilities.invokeLater(() -> DCMView.this.repaint());
+                                }).start();
+                            }
+                        }
+
                         repaint();
                     }
                     return;
@@ -692,6 +706,12 @@ public class DCMView extends JPanel {
         addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
+                // HOROS-20240407準拠: 2Dビューワーがアクティブになった際にメニューをリセット
+                BrowserController browserController = BrowserController.currentBrowser();
+                if (browserController != null) {
+                    browserController.updateForViewType(MainMenuBar.ViewType.STANDARD_2D);
+                }
+
                 // クリックされたら常にフォーカスを要求する（スライダーなどから奪い返す）
                 requestFocusInWindow();
                 if (!isKeyView) {
@@ -1904,8 +1924,15 @@ public class DCMView extends JPanel {
     /**
      * 90度右回転
      */
-    public void rotate90() {
+    public void rotateRight() {
         setRotation(rotation + 90);
+    }
+
+    /**
+     * 90度左回転
+     */
+    public void rotateLeft() {
+        setRotation(rotation - 90);
     }
 
     public void drawROI(Graphics2D g2d) {
@@ -3223,6 +3250,40 @@ public class DCMView extends JPanel {
      * onSyncNotification - 同期通知を受信したときの処理
      * HOROS-20240407準拠: DCMView.m 6916-7265行目 (sync:)
      */
+    /**
+     * WLWW プリセットを適用する (HOROS-20240407準拠)
+     */
+    public void applyWLPreset(String presetName) {
+        if (curDCM == null)
+            return;
+
+        float wl = 0, ww = 0;
+        String name = presetName.toLowerCase();
+
+        // 標準的なプリセット値 (CT準拠)
+        if (name.contains("bone")) {
+            wl = 300;
+            ww = 1500;
+        } else if (name.contains("lung")) {
+            wl = -600;
+            ww = 1500;
+        } else if (name.contains("brain")) {
+            wl = 40;
+            ww = 80;
+        } else if (name.contains("soft") || name.contains("tissue")) {
+            wl = 40;
+            ww = 400;
+        } else {
+            // "Standard" or default
+            wl = curDCM.getDefaultWL();
+            ww = curDCM.getDefaultWW();
+        }
+
+        curDCM.setWindowLevelWidth(wl, ww);
+        repaint();
+        sendSyncMessageWLWW(wl, ww);
+    }
+
     public void onSyncNotification(String name, Object object, java.util.Map<String, Object> userInfo) {
         // HOROS-20240407準拠: DCMView.m 6918行目
         if (gDontListenToSyncMessage) {

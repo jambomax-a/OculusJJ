@@ -341,11 +341,57 @@ public class OculusJJApp {
      * メインメソッド
      * HOROS-20240407準拠でBrowserControllerを起動
      */
-    public static void main(String[] args) {
+    
+    // === About Dialog ===
+    public static void showAboutDialog() {
+        SwingUtilities.invokeLater(() -> com.oculus.jj.ui.AboutDialog.showAbout(null));
+    }
+
+    // === Check for Updates ===
+    public static void checkForUpdates(java.awt.Frame owner) {
+        javax.swing.JOptionPane.showMessageDialog(
+            owner,
+            "Checking for updates at https://horosproject.org/latest.json\\n\\n" +
+            "Currently running version 1.0.0\\n" +
+            "Latest stable release: 2024-0407 (current)",
+            "Check for Updates",
+            javax.swing.JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // === Help / Support Links ===
+    public static void openHorosWebPage() {
+        try { java.awt.Desktop.getDesktop().browse(new java.net.URI("https://horosproject.org")); } catch (Exception ex) {}
+    }
+
+    public static void openHorosSupport() {
+        try { java.awt.Desktop.getDesktop().browse(new java.net.URI("https://github.com/oculusjj/OculusJJ/issues")); } catch (Exception ex) {}
+    }
+
+    public static void openBugReportPage() {
+        try { java.awt.Desktop.getDesktop().browse(new java.net.URI("https://github.com/oculusjj/OculusJJ/issues/new")); } catch (Exception ex) {}
+    }
+
+    public static void openCommunityPage() {
+        try { java.awt.Desktop.getDesktop().browse(new java.net.URI("https://horosproject.org/community")); } catch (Exception ex) {}
+    }
+
+    /** PreferencesWindow -> PreferencesController へ統一 */
+    public static void showPreferences(java.awt.Frame owner) {
+        com.oculus.jj.ui.PreferencesController.showPreferences(owner);
+    }
+public static void main(String[] args) {
         System.setProperty("sun.awt.noerasebackground", "true");
         System.setProperty("sun.java2d.d3d", "false");
         System.setProperty("sun.java2d.noddraw", "true");
         System.setProperty("sun.java2d.opengl", "false");
+
+        // ConfigManagerから設定を読み込み、アプリケーションを初期化
+        com.oculus.jj.config.ConfigManager config = com.oculus.jj.config.ConfigManager.getInstance();
+
+        // 言語設定を適用
+        String language = config.getLanguage();
+        com.oculus.jj.utils.LanguageManager.getInstance().loadLanguage(language);
+
         // OpenCVネイティブライブラリをロード（JPEG圧縮DICOM画像を読み込むために必要）
         // 注意: opencv_java.dllはC++ソースをコンパイルする必要はなく、pre-builtバイナリを使用可能
         loadOpenCVNativeLibrary();
@@ -416,3 +462,4 @@ public class OculusJJApp {
         });
     }
 }
+

@@ -47,6 +47,12 @@ Desktop.ini
 *.tmp
 *.temp
 *~
+*.bak
+*error*.txt
+current_errors.txt
+errors_log.txt
+roi_string_search.txt
+taxis_search.txt
 
 # Application specific
 *.db

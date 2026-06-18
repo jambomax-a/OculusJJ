@@ -840,6 +840,14 @@ public class DicomPix {
         // // min, max, windowLevel, windowWidth, isInverse));
     }
 
+    public float getDefaultWL() {
+        return defaultWL;
+    }
+
+    public float getDefaultWW() {
+        return defaultWW;
+    }
+
     /**
      * Window Level/Widthを設定
      * HOROS-20240407: - (void)setWLWW:(float)wl :(float)ww

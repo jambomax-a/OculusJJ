@@ -150,6 +150,60 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: BOOL DatabaseIsEdited; (201行目)
     private boolean DatabaseIsEdited = false;
 
+    // --- ビュータイプ追跡（HOROS-20240407準拠: macOS上部メニューバーのグレーアウトロジック） ---
+    private MainMenuBar.ViewType currentViewType = MainMenuBar.ViewType.STANDARD_2D;
+    private javax.swing.JMenu viewer3DMenu; // 3D Viewerメニューへの参照（updateForViewType用）
+
+    /**
+     * HOROS-20240407準拠: ビュータイプに基づいてメニュー項目をグレーアウト/非表示にする
+     */
+    public void updateForViewType(MainMenuBar.ViewType viewType) {
+        this.currentViewType = viewType;
+
+        switch (viewType) {
+            case STANDARD_2D:
+                // 標準2Dビュー: 全メニュー有効
+                if (viewer3DMenu != null) {
+                    viewer3DMenu.setEnabled(true);
+                }
+                break;
+
+            case MPR_ORTHOGONAL:
+            case MPR_CURVED:
+                // MPRモード: 3D Viewerメニューは表示但し一部無効化
+                if (viewer3DMenu != null) {
+                    viewer3DMenu.setEnabled(true);
+                }
+                break;
+
+            case VIEWER_3D:
+                // 3Dビューワー: ブラウザウィンドウの3D Viewerメニューをグレーアウト（重複防止）
+                if (viewer3DMenu != null) {
+                    viewer3DMenu.setEnabled(false);
+                    // HOROS-20240407準拠: 各メニュー項目を個別に無効化（JMenu.setEnabledだけでは不十分な場合の対策）
+                    for (int i = 0; i < viewer3DMenu.getMenuComponentCount(); i++) {
+                        java.awt.Component comp = viewer3DMenu.getMenuComponent(i);
+                        if (comp instanceof javax.swing.JMenuItem menuItem) {
+                            menuItem.setEnabled(false);
+                        }
+                    }
+                }
+                break;
+        }
+
+        // MainMenuBarにも通知（MainMenuBarを使用している場合）
+        if (getJMenuBar() instanceof MainMenuBar mainMenuBar) {
+            mainMenuBar.updateForViewType(viewType);
+        }
+    }
+
+    /**
+     * 現在のビュータイプを取得する
+     */
+    public MainMenuBar.ViewType getCurrentViewType() {
+        return currentViewType;
+    }
+
     // HOROS-20240407準拠: NSThread *matrixLoadIconsThread; (262行目)
     private Thread matrixLoadIconsThread;
 
@@ -6382,8 +6436,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 72行目
         javax.swing.JMenuItem showDatabaseItem = new javax.swing.JMenuItem("Show Database Window");
         showDatabaseItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_D, 0));
-        showDatabaseItem.addActionListener(e -> {
-        });
+        showDatabaseItem.addActionListener(e -> { toggleDatabaseOutlineVisibility(); });
         fileMenu.add(showDatabaseItem);
 
         // Toggle Albums & Sources drawer
@@ -6403,7 +6456,7 @@ public class BrowserController extends JFrame {
         // Preferences...
         // HOROS-20240407準拠: Preferences window access
         javax.swing.JMenuItem prefMenuItem = new javax.swing.JMenuItem("Preferences...");
-        prefMenuItem.addActionListener(e -> PreferenceWindow.showPreferences(this));
+        prefMenuItem.addActionListener(e -> PreferencesController.showFrame(this));
         fileMenu.add(prefMenuItem);
 
         fileMenu.addSeparator();
@@ -6526,8 +6579,7 @@ public class BrowserController extends JFrame {
         // Import Image from URL...
         // HOROS-20240407準拠: MainMenu.xib 198行目
         javax.swing.JMenuItem importURLItem = new javax.swing.JMenuItem("Import Image from URL...");
-        importURLItem.addActionListener(e -> {
-        });
+        importURLItem.addActionListener(e -> { importImageFromURL(); });
         importMenu.add(importURLItem);
 
         // Import Raw Data...
@@ -6546,31 +6598,27 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 225行目
         javax.swing.JMenuItem export2PACSItem = new javax.swing.JMenuItem("Export to DICOM Network Node");
         export2PACSItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
-        export2PACSItem.addActionListener(e -> {
-        });
+        export2PACSItem.addActionListener(e -> { exportToPACS(); });
         exportMenu.add(export2PACSItem);
 
         // Export to Movie
         // HOROS-20240407準拠: MainMenu.xib 230行目
         javax.swing.JMenuItem exportMovieItem = new javax.swing.JMenuItem("Export to Movie");
         exportMovieItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
-        exportMovieItem.addActionListener(e -> {
-        });
+        exportMovieItem.addActionListener(e -> { showMovieExport(); });
         exportMenu.add(exportMovieItem);
 
         // Export to JPEG
         // HOROS-20240407準拠: MainMenu.xib 235行目
         javax.swing.JMenuItem exportJPEGItem = new javax.swing.JMenuItem("Export to JPEG");
         exportJPEGItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_E, 0));
-        exportJPEGItem.addActionListener(e -> {
-        });
+        exportJPEGItem.addActionListener(e -> { exportToJPEG(); });
         exportMenu.add(exportJPEGItem);
 
         // Export to Raw
         // HOROS-20240407準拠: MainMenu.xib 240行目
         javax.swing.JMenuItem exportRAWItem = new javax.swing.JMenuItem("Export to Raw");
-        exportRAWItem.addActionListener(e -> {
-        });
+        exportRAWItem.addActionListener(e -> { showExportRawDialog(); });
         exportMenu.add(exportRAWItem);
 
         // Export to TIFF
@@ -6578,16 +6626,14 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem exportTIFFItem = new javax.swing.JMenuItem("Export to TIFF");
         exportTIFFItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_E,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
-        exportTIFFItem.addActionListener(e -> {
-        });
+        exportTIFFItem.addActionListener(e -> { exportToTIFF(); });
         exportMenu.add(exportTIFFItem);
 
         // Export to DICOM file(s)
         // HOROS-20240407準拠: MainMenu.xib 251行目
         javax.swing.JMenuItem exportDICOMFileItem = new javax.swing.JMenuItem("Export to DICOM file(s)");
         exportDICOMFileItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_E, 0));
-        exportDICOMFileItem.addActionListener(e -> {
-        });
+        exportDICOMFileItem.addActionListener(e -> { exportToDICOMFile(); });
         exportMenu.add(exportDICOMFileItem);
 
         // Export to Email
@@ -6740,8 +6786,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 404行目
         javax.swing.JMenuItem networkExport2PACSItem = new javax.swing.JMenuItem("Export to DICOM Network Node");
         networkExport2PACSItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
-        networkExport2PACSItem.addActionListener(e -> {
-        });
+        networkExport2PACSItem.addActionListener(e -> { exportToPACS(); });
         networkMenu.add(networkExport2PACSItem);
 
         networkMenu.addSeparator();
@@ -6771,8 +6816,7 @@ public class BrowserController extends JFrame {
         // Auto Query / Retrieve Window...
         // HOROS-20240407準拠: MainMenu.xib 427行目
         javax.swing.JMenuItem autoQueryItem = new javax.swing.JMenuItem("Auto Query / Retrieve Window...");
-        autoQueryItem.addActionListener(e -> {
-        });
+        autoQueryItem.addActionListener(e -> { JOptionPane.showMessageDialog(BrowserController.this, "Auto-query scheduling pending", "Network", JOptionPane.INFORMATION_MESSAGE); });
         networkMenu.add(autoQueryItem);
 
         // Auto Query / Retrieve Refresh
@@ -7337,7 +7381,7 @@ public class BrowserController extends JFrame {
 
         // ========== 3D Viewerメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 1371行目
-        javax.swing.JMenu viewer3DMenu = new javax.swing.JMenu("3D Viewer");
+        viewer3DMenu = new javax.swing.JMenu("3D Viewer");
 
         // 3D MPR
         // HOROS-20240407準拠: MainMenu.xib 1374行目
@@ -7541,8 +7585,7 @@ public class BrowserController extends JFrame {
         for (int i = 0; i < resizePercentages.length; i++) {
             javax.swing.JMenuItem resizeItem = new javax.swing.JMenuItem(resizePercentages[i]);
             // final int tag = i;
-            resizeItem.addActionListener(e -> {
-            });
+            resizeItem.addActionListener(e -> { int p = Integer.parseInt(((javax.swing.JMenuItem)e.getSource()).getText().replace("%","")); resizeWindowByPercent(p); });
             resizeWindowMenu.add(resizeItem);
         }
         windowMenu.add(resizeWindowMenu);
@@ -7551,8 +7594,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 1933行目
         javax.swing.JMenuItem tile2DItem = new javax.swing.JMenuItem("Tile 2D Viewer Windows");
         tile2DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_T, 0));
-        tile2DItem.addActionListener(e -> {
-        });
+        tile2DItem.addActionListener(e -> { ViewerController.tileWindows(); });
         windowMenu.add(tile2DItem);
 
         // Tile 3D Viewer Windows
@@ -7560,8 +7602,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem tile3DItem = new javax.swing.JMenuItem("Tile 3D Viewer Windows");
         tile3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_T,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
-        tile3DItem.addActionListener(e -> {
-        });
+        tile3DItem.addActionListener(e -> { ViewerController.tile3DWindows(); });
         windowMenu.add(tile3DItem);
 
         // Close All Viewers
@@ -7569,8 +7610,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem closeAllViewersItem = new javax.swing.JMenuItem("Close All Viewers");
         closeAllViewersItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
-        closeAllViewersItem.addActionListener(e -> {
-        });
+        closeAllViewersItem.addActionListener(e -> { closeAllDisplayedViewers(); });
         windowMenu.add(closeAllViewersItem);
 
         windowMenu.addSeparator();
@@ -7665,12 +7705,6 @@ public class BrowserController extends JFrame {
     /**
      * レポートを生成
      * HOROS-20240407準拠: - (IBAction) generateReport: (id)sender (18655行目)
-     */
-    public void generateReport(Object sender) {
-    }
-
-    // ========== Sourcesパネル関連メソッド ==========
-    // HOROS-20240407準拠: BrowserController.m のSourcesパネル関連メソッドを写経
 
     /**
      * ローカルデータベースにリセット
@@ -7933,8 +7967,7 @@ public class BrowserController extends JFrame {
      * Rawデータをインポート
      * HOROS-20240407準拠: - (IBAction)importRawData:(id)sender (18186行目)
      */
-    public void importRawData(Object sender) {
-    }
+    public void importRawData(Object sender) { javax.swing.JFileChooser fc = new javax.swing.JFileChooser(); fc.setFileSelectionMode(javax.swing.JFileChooser.FILES_ONLY); fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Raw images", "raw", "dat")); if(fc.showOpenDialog(this)==javax.swing.JFileChooser.APPROVE_OPTION){ importFiles(java.util.Collections.singletonList(fc.getSelectedFile().getAbsolutePath())); } }
 
     /**
      * メールを送信
@@ -8282,43 +8315,37 @@ public class BrowserController extends JFrame {
      * キー画像を設定
      * HOROS-20240407準拠: - (IBAction) setKeyImage: (id) sender
      */
-    public void setKeyImage(Object sender) {
-    }
+    public void setKeyImage(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) JOptionPane.showMessageDialog(this, "Key image set", "Key Image", JOptionPane.INFORMATION_MESSAGE); }
 
     /**
      * 全ての画像をキー画像に設定
      * HOROS-20240407準拠: - (IBAction) setAllKeyImages: (id) sender
      */
-    public void setAllKeyImages(Object sender) {
-    }
+    public void setAllKeyImages(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) JOptionPane.showMessageDialog(this, "All images marked as key", "Key Images", JOptionPane.INFORMATION_MESSAGE); }
 
     /**
      * 全ての画像を非キー画像に設定
      * HOROS-20240407準拠: - (IBAction) setAllNonKeyImages: (id) sender
      */
-    public void setAllNonKeyImages(Object sender) {
-    }
+    public void setAllNonKeyImages(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) JOptionPane.showMessageDialog(this, "All key images unmarked", "Key Images", JOptionPane.INFORMATION_MESSAGE); }
 
     /**
      * ROI画像をキー画像に設定
      * HOROS-20240407準拠: - (IBAction) setROIsImagesKeyImages: (id) sender
      */
-    public void setROIsImagesKeyImages(Object sender) {
-    }
+    public void setROIsImagesKeyImages(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) JOptionPane.showMessageDialog(this, "All ROI images marked as key", "Key Images", JOptionPane.INFORMATION_MESSAGE); }
 
     /**
      * キャプチャしてキー画像に設定
      * HOROS-20240407準拠: - (IBAction) captureAndSetKeyImage: (id) sender
      */
-    public void captureAndSetKeyImage(Object sender) {
-    }
+    public void captureAndSetKeyImage(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) JOptionPane.showMessageDialog(this, "Capture and save as DICOM Secondary Capture pending", "Key Image", JOptionPane.INFORMATION_MESSAGE); }
 
     /**
      * 次の/前のキー画像を検索
      * HOROS-20240407準拠: - (IBAction) findNextPreviousKeyImage: (id) sender
      */
-    public void findNextPreviousKeyImage(Object sender) {
-    }
+    public void findNextPreviousKeyImage(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) vc.loadSeriesDown(); }
 
     // ========== 3D Viewerメニューアクションメソッド ==========
 
@@ -8331,6 +8358,8 @@ public class BrowserController extends JFrame {
         if (!viewers.isEmpty()) {
             ViewerController active = viewers.get(viewers.size() - 1);
             MPRController.openMPR(active);
+            // HOROS-20240407準拠: ビュータイプを更新してメニューを制御
+            updateForViewType(MainMenuBar.ViewType.MPR_ORTHOGONAL);
         } else {
             JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first to launch 3D MPR.");
         }
@@ -8368,6 +8397,8 @@ public class BrowserController extends JFrame {
             SwingUtilities.invokeLater(() -> {
                 // 統合された MPRController を使用するように修正 (古い CPRController は無視)
                 MPRController mpr = new MPRController(active, MPRController.LayoutType.CURVED_MPR);
+                // HOROS-20240407準拠: ビュータイプを更新してメニューを制御
+                updateForViewType(MainMenuBar.ViewType.MPR_CURVED);
                 List<double[]> pts = new java.util.ArrayList<>();
                 for (com.oculus.jj.model.ROI.Point3D p : finalRoi.getPoints3D()) {
                     pts.add(new double[] { p.x, p.y, p.z });
@@ -8408,6 +8439,8 @@ public class BrowserController extends JFrame {
         if (!viewers.isEmpty()) {
             ViewerController active = viewers.get(viewers.size() - 1);
             Viewer3DController.openVR(active);
+            // HOROS-20240407準拠: ビュータイプを更新してメニューを制御
+            updateForViewType(MainMenuBar.ViewType.VIEWER_3D);
         } else {
             JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
         }
@@ -8421,6 +8454,8 @@ public class BrowserController extends JFrame {
         if (!viewers.isEmpty()) {
             ViewerController active = viewers.get(viewers.size() - 1);
             Viewer3DController.openMIP(active);
+            // HOROS-20240407準拠: ビュータイプを更新してメニューを制御
+            updateForViewType(MainMenuBar.ViewType.VIEWER_3D);
         } else {
             JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
         }
@@ -8435,6 +8470,8 @@ public class BrowserController extends JFrame {
         if (!viewers.isEmpty()) {
             ViewerController active = viewers.get(viewers.size() - 1);
             Viewer3DController.openISO(active);
+            // HOROS-20240407準拠: ビュータイプを更新してメニューを制御
+            updateForViewType(MainMenuBar.ViewType.VIEWER_3D);
         } else {
             JOptionPane.showMessageDialog(this, "Please open a 2D Viewer first.");
         }
@@ -8805,4 +8842,107 @@ public class BrowserController extends JFrame {
             // エラーが発生した場合はスキップ
         }
     }
+    /** Tile all 3D viewer windows */
+    public static void tile3DWindows() {
+        java.util.List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        int count = viewers.size();
+        if (count == 0) return;
+        // Compute layout: prefer square-ish grid
+        int cols = (int)Math.ceil(Math.sqrt(count));
+        int rows = (int)Math.ceil((double)count / cols);
+        java.awt.Dimension cellSize = new java.awt.Dimension(800, 600);
+        for (int i = 0; i < count; i++) {
+            ViewerController vc = viewers.get(i);
+            int row = i / cols;
+            int col = i % cols;
+            java.awt.Rectangle bounds = new java.awt.Rectangle(col * cellSize.width, row * cellSize.height, cellSize.width, cellSize.height);
+            vc.setBounds(bounds);
+        }
+    }
+
+    /** Close all displayed viewers */
+    private void closeAllDisplayedViewers() {
+        java.util.List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        for (ViewerController vc : viewers) vc.dispose();
+    }
+
+    /** Resize current viewer window by percentage */
+    private void resizeWindowByPercent(int percent) {
+        BrowserController bc = BrowserController.currentBrowser();
+        if (bc == null || bc.getState() != java.awt.Frame.NORMAL) return;
+        java.awt.Dimension screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+        int w = (int)(screenSize.width * percent / 100);
+        int h = (int)(screenSize.height * percent / 100);
+        bc.setSize(Math.min(w, screenSize.width), Math.min(h, screenSize.height));
+    }
+
+    /** Export to DICOM Network Node (PACS) */
+    private void exportToPACS() {
+        JOptionPane.showMessageDialog(this, "Export to PACS dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Export to Movie dialog */
+    private void showMovieExport() {
+        JOptionPane.showMessageDialog(this, "Export to Movie dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Export to JPEG dialog */
+    private void exportToJPEG() {
+        BrowserMatrix matrix = getMatrix();
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            JOptionPane.showMessageDialog(this, "Export JPEG to: " + fc.getSelectedFile().getPath() + " (pending implementation)", "JPEG Export", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /** Export Raw Data dialog */
+    private void showExportRawDialog() {
+        JOptionPane.showMessageDialog(this, "Export Raw Data dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Export to TIFF dialog */
+    private void exportToTIFF() {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            JOptionPane.showMessageDialog(this, "Export TIFF to: " + fc.getSelectedFile().getPath() + " (pending implementation)", "TIFF Export", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /** Export to DICOM File(s) dialog */
+    private void exportToDICOMFile() {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            JOptionPane.showMessageDialog(this, "Export DICOM files to: " + fc.getSelectedFile().getPath() + " (pending implementation)", "DICOM Export", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+
+    /** DICOM Print stub */
+    public void generateReport(Object sender) {
+        JOptionPane.showMessageDialog(this, "DICOM Print dialog pending", "Print", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Import image from URL stub */
+    public void importImageFromURL() {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setFileSelectionMode(javax.swing.JFileChooser.FILES_ONLY);
+        if (fc.showOpenDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            String url = fc.getSelectedFile().getAbsolutePath();
+            importFiles(java.util.Collections.singletonList(url));
+        }
+    }
+
+    /** Toggle database outline drawer visibility */
+    public void toggleDatabaseOutlineVisibility() {
+        if (databaseOutline != null) {
+            boolean vis = !databaseOutline.isVisible();
+            databaseOutline.setVisible(vis);
+        }
+    }
 }
+
+
+

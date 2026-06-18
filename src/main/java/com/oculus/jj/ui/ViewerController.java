@@ -1451,4 +1451,22 @@ public class ViewerController extends JFrame {
         }
         return copy;
     }
+    /** Tile all 3D viewer windows in a grid layout */
+    public static void tile3DWindows() {
+        java.util.List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        int count = viewers.size();
+        if (count == 0) return;
+        // Use square-ish grid
+        int cols = (int)Math.ceil(Math.sqrt(count));
+        int rows = (int)Math.ceil((double)count / cols);
+        java.awt.Dimension cellSize = new java.awt.Dimension(800, 600);
+        for (int i = 0; i < count; i++) {
+            ViewerController vc = viewers.get(i);
+            int row = i / cols;
+            int col = i % cols;
+            java.awt.Rectangle bounds = new java.awt.Rectangle(col * cellSize.width, row * cellSize.height, cellSize.width, cellSize.height);
+            vc.setBounds(bounds);
+        }
+    }
 }
+

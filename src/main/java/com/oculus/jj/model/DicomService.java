@@ -219,4 +219,208 @@ public class DicomService {
             }
         }
     }
+
+    /**
+     * C-GET 実行（HOROS-20240407準拠: C-MOVEの代替）
+     */
+    public void getC(DicomNode remoteNode, Attributes keys)
+            throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
+        DicomNodeManager manager = DicomNodeManager.getInstance();
+        ae.setAETitle(manager.getLocalAET());
+
+        AAssociateRQ rq = new AAssociateRQ();
+        rq.setCalledAET(remoteNode.getAeTitle());
+        rq.addPresentationContext(
+                new PresentationContext(1, UID.StudyRootQueryRetrieveInformationModelGet, UID.ImplicitVRLittleEndian));
+
+        Association association = ae.connect(new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+        try {
+            DimseRSPHandler rspHandler = new DimseRSPHandler(association.nextMessageID()) {
+                @Override
+                public void onDimseRSP(Association as, Attributes cmd, Attributes data) {
+                    super.onDimseRSP(as, cmd, data);
+                    int status = cmd.getInt(Tag.Status, -1);
+                    if (Status.isPending(status)) {
+                        // 継続中
+                    } else if (status == Status.Success) {
+                        logger.info("C-GET retrieve successful");
+                    } else {
+                        logger.error("C-GET failed with status: 0x" + Integer.toHexString(status));
+                    }
+                }
+            };
+
+            association.cget(UID.StudyRootQueryRetrieveInformationModelGet, Priority.NORMAL, keys, null, rspHandler);
+            association.waitForOutstandingRSP();
+        } finally {
+            if (association.isReadyForDataTransfer()) {
+                association.release();
+            }
+        }
+    }
+
+    /**
+     * C-STORE SCP: 受信したDICOMデータをファイルとして保存する（非同期）
+     */
+    public void startCStoreSCP(int port, java.io.File saveDir) throws IOException, GeneralSecurityException {
+        conn.setPort(port);
+        
+        // DicomStoreSCPを登録（既存のコンストラクタを使用）
+        device.setDimseRQHandler(new DicomStoreSCP(saveDir.getAbsolutePath()));
+        device.bindConnections();
+        logger.info("C-STORE SCP started on port {} (saving to: {})", port, saveDir.getAbsolutePath());
+    }
+
+    /**
+     * WADO-RS: DICOM画像をHTTP GETで取得する（REST API）
+     */
+    public static byte[] getWadoRsImage(String baseUrl, String studyUID, String seriesUID, String sopInstanceUID)
+            throws IOException {
+        String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+        urlStr += "rs/studies/" + studyUID + "/series/" + seriesUID + "/instances/" + sopInstanceUID;
+
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL().openConnection();
+        conn.setRequestMethod("GET");
+        
+        // AETitleをContent-Typeに設定（WADO-RS仕様）
+        String aet = DicomNodeManager.getInstance().getLocalAET();
+        conn.setRequestProperty("Accept", "application/dicom");
+        
+        int responseCode = conn.getResponseCode();
+        if (responseCode != java.net.HttpURLConnection.HTTP_OK) {
+            throw new IOException("WADO-RS request failed with status: " + responseCode);
+        }
+
+        byte[] data = conn.getInputStream().readAllBytes();
+        conn.disconnect();
+        return data;
+    }
+
+    /**
+     * WADO-RS: DICOMメタデータをHTTP GETで取得する（JSON形式）
+     */
+    public static String getWadoRsMetadata(String baseUrl, String studyUID, String seriesUID, String sopInstanceUID)
+            throws IOException {
+        String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+        urlStr += "rs/studies/" + studyUID + "/series/" + seriesUID + "/instances/" + sopInstanceUID;
+
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL().openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Accept", "application/json");
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode != java.net.HttpURLConnection.HTTP_OK) {
+            throw new IOException("WADO-RS metadata request failed with status: " + responseCode);
+        }
+
+        String json = new String(conn.getInputStream().readAllBytes(), "UTF-8");
+        conn.disconnect();
+        return json;
+    }
+
+    /**
+     * STOW-RS: DICOM画像をHTTP POSTで送信する（REST API）
+     */
+    public static void postStowRsImage(String baseUrl, byte[] dicomData) throws IOException {
+        String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+        urlStr += "stow-rs/metadata";
+
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL().openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/dicom");
+
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            os.write(dicomData);
+            os.flush();
+        }
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode != java.net.HttpURLConnection.HTTP_OK && 
+            responseCode != java.net.HttpURLConnection.HTTP_CREATED) {
+            throw new IOException("STOW-RS POST failed with status: " + responseCode);
+        }
+        conn.disconnect();
+    }
+
+    /**
+     * WADO: 後方互換性のためのURL生成（既存コード用）
+     */
+    public static String getWadoUrl(String baseUrl, String studyUID, String seriesUID, String sopInstanceUID) {
+        String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+        urlStr += "wado?RequestType=WADO&StudyUID=" + studyUID
+                + "&SeriesUID=" + seriesUID
+                + "&SOPInstanceUID=" + sopInstanceUID
+                + "&contentType=application/dicom";
+        return urlStr;
+    }
+
+    /**
+     * SeriesレベルのC-FINDクエリキーを作成する
+     */
+    public static Attributes createSeriesQueryKeys(String studyInstanceUID) {
+        Attributes keys = new Attributes();
+        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "SERIES");
+        keys.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
+        return keys;
+    }
+
+    /**
+     * InstanceレベルのC-FINDクエリキーを作成する
+     */
+    public static Attributes createInstanceQueryKeys(String seriesInstanceUID) {
+        Attributes keys = new Attributes();
+        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "IMAGE");
+        keys.setString(Tag.SeriesInstanceUID, VR.UI, seriesInstanceUID);
+        return keys;
+    }
+
+    /**
+     * C-FINDでSeriesレベルの検索を行う
+     */
+    public List<Attributes> findSeries(DicomNode remoteNode, String studyInstanceUID)
+            throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
+        Attributes keys = createSeriesQueryKeys(studyInstanceUID);
+        return find(remoteNode, keys);
+    }
+
+    /**
+     * C-FINDでInstanceレベルの検索を行う
+     */
+    public List<Attributes> findInstances(DicomNode remoteNode, String seriesInstanceUID)
+            throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
+        Attributes keys = createInstanceQueryKeys(seriesInstanceUID);
+        return find(remoteNode, keys);
+    }
+
+    /**
+     * 利用可能なTransfer Syntaxの一覧を取得する
+     */
+    public static String[] getSupportedTransferSyntaxes() {
+        return new String[] {
+            UID.ImplicitVRLittleEndian,
+            UID.ExplicitVRLittleEndian,
+            UID.JPEGBaseline8Bit,
+            UID.JPEGLosslessSV1,
+            UID.JPEGLSLossless,
+            UID.JPEG2000Lossless,
+            UID.RLELossless
+        };
+    }
+
+    /**
+     * DICOM UIDを生成する（RFC 4122 UUID v4準拠）
+     */
+    public static String generateUID() {
+        // DICOM UIDプレフィックス: 1.2.840.113619.x.y.z
+        // ここでは簡易的にUUIDを使用
+        return "1.2.840.113619." + java.util.UUID.randomUUID().toString().replace("-", ".");
+    }
+
+    /**
+     * DICOMバージョン情報を取得する
+     */
+    public static String getDicomVersion() {
+        return "2025a"; // dcm4che3標準
+    }
 }

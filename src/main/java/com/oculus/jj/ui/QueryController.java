@@ -607,4 +607,15 @@ public class QueryController extends JFrame {
             return 18;
         }
     }
+
+    /** ダイアログとして表示 */
+    public void showQueryDialog(Frame owner) {
+        if (owner != null) setLocationRelativeTo(owner);
+        setSize(800, 600);
+        setLocationRelativeTo(owner);
+        setVisible(true);
+    }
 }
+
+
+
