@@ -32,7 +32,7 @@ public class DCMView extends JPanel {
     protected List<Object> dcmFilesList;
 
     // HOROS-20240407準拠: DCMView.h 174行目 - NSMutableArray *curRoiList;
-    protected List<com.oculus.jj.model.ROI> curRoiList;
+    public List<com.oculus.jj.model.ROI> curRoiList;
 
     // HOROS-20240407準拠: ROI作成中のオブジェクト
     protected com.oculus.jj.model.ROI newRoi;

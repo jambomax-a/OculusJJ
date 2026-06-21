@@ -150,6 +150,22 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: BOOL DatabaseIsEdited; (201行目)
     private boolean DatabaseIsEdited = false;
 
+
+    // --- Annotation Undo/Redo management
+    private com.oculus.jj.util.AnnotationUndoManager annotationUndoManager;
+
+    // --- Annotation font preference keys
+    private static final String PREF_ANNOT_FONT_SIZE = "annotationFontSize";
+    private static final String PREF_ANNOT_FONT_BOLD = "annotationFontBold";
+    private static final int DEFAULT_ANNOT_FONT_SIZE = 12;
+
+    /** Initialize annotation undo manager */
+    private void initAnnotationUndo() {
+        if (annotationUndoManager == null) {
+            DCMView active = getActiveDCMViewForEdit();
+            annotationUndoManager = new com.oculus.jj.util.AnnotationUndoManager(active);
+        }
+    }
     // --- ビュータイプ追跡（HOROS-20240407準拠: macOS上部メニューバーのグレーアウトロジック） ---
     private MainMenuBar.ViewType currentViewType = MainMenuBar.ViewType.STANDARD_2D;
     private javax.swing.JMenu viewer3DMenu; // 3D Viewerメニューへの参照（updateForViewType用）
@@ -6646,6 +6662,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 261行目
         javax.swing.JMenuItem exportPhotosItem = new javax.swing.JMenuItem("Export to Photos");
         exportPhotosItem.addActionListener(e -> {
+            exportToPhotos();
         });
         exportMenu.add(exportPhotosItem);
 
@@ -6663,6 +6680,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 277行目
         javax.swing.JMenuItem burnItem = new javax.swing.JMenuItem("Burn...");
         burnItem.addActionListener(e -> {
+            BurnerDialog.showBurnerDialog(BrowserController.this);
         });
         fileMenu.add(burnItem);
 
@@ -6824,6 +6842,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem autoQueryRefreshItem = new javax.swing.JMenuItem("Auto Query / Retrieve Refresh");
         autoQueryRefreshItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
         autoQueryRefreshItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(BrowserController.this, "Auto-Query scheduling pending", "Network", JOptionPane.INFORMATION_MESSAGE);
         });
         networkMenu.add(autoQueryRefreshItem);
 
@@ -6851,6 +6870,7 @@ public class BrowserController extends JFrame {
         abortStoreSCUItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A,
                 java.awt.event.InputEvent.ALT_DOWN_MASK));
         abortStoreSCUItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(BrowserController.this, "Abort incoming DICOM processes pending", "Network", JOptionPane.INFORMATION_MESSAGE);
         });
         networkMenu.add(abortStoreSCUItem);
 
@@ -6885,8 +6905,22 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem undoItem = new javax.swing.JMenuItem("Undo");
         undoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Z, 0));
         undoItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null) return;
+            initAnnotationUndo();
+            annotationUndoManager.setTarget(view);
+            java.util.List<com.oculus.jj.model.ROI> savedRois = new java.util.ArrayList<>();
+            if (view.curRoiList != null) {
+                for (com.oculus.jj.model.ROI r : view.curRoiList) {
+                    if (r.getPoints() != null && !r.getPoints().isEmpty()) savedRois.add(r);
+                }
+            }
+            annotationUndoManager.pushSnapshot(savedRois, new java.util.ArrayList<>());
+            if (annotationUndoManager.canUndo()) {
+                com.oculus.jj.model.ROI restored = annotationUndoManager.undo();
+                if (restored != null) view.repaint();
+            }
         });
-        editMenu.add(undoItem);
 
         // Redo
         // HOROS-20240407準拠: MainMenu.xib 480行目
@@ -6894,8 +6928,15 @@ public class BrowserController extends JFrame {
         redoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Z,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         redoItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null) return;
+            initAnnotationUndo();
+            annotationUndoManager.setTarget(view);
+            if (annotationUndoManager.canRedo()) {
+                com.oculus.jj.model.ROI restored = annotationUndoManager.redo();
+                if (restored != null) view.repaint();
+            }
         });
-        editMenu.add(redoItem);
 
         editMenu.addSeparator();
 
@@ -6903,8 +6944,6 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 488行目
         javax.swing.JMenuItem cutItem = new javax.swing.JMenuItem("Cut");
         cutItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_X, 0));
-        cutItem.addActionListener(e -> {
-        });
         editMenu.add(cutItem);
 
         // Copy
@@ -6926,8 +6965,14 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem selectAllItem = new javax.swing.JMenuItem("Select All");
         selectAllItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
         selectAllItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null && view.curRoiList != null) {
+                for (int i = 0; i < view.curRoiList.size(); i++) {
+                    view.selectedRoi = view.curRoiList.get(i);
+                }
+                view.repaint();
+            }
         });
-        editMenu.add(selectAllItem);
 
         menuBar.add(editMenu);
 
@@ -6939,6 +6984,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 514行目
         javax.swing.JMenuItem customizeToolbarItem = new javax.swing.JMenuItem("Customize Toolbar...");
         customizeToolbarItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(BrowserController.this, "Customize Toolbar - not yet implemented", "Format", JOptionPane.INFORMATION_MESSAGE);
         });
         formatMenu.add(customizeToolbarItem);
 
@@ -6947,6 +6993,12 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem fullscreenItem = new javax.swing.JMenuItem("Fullscreen");
         fullscreenItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F, 0));
         fullscreenItem.addActionListener(e -> {
+            JFrame mainFrame = BrowserController.this;
+            if (mainFrame.getExtendedState() == JFrame.MAXIMIZED_BOTH) {
+                mainFrame.setExtendedState(JFrame.NORMAL);
+            } else {
+                mainFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+            }
         });
         formatMenu.add(fullscreenItem);
 
@@ -6960,6 +7012,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 530行目
         javax.swing.JMenuItem showFontsItem = new javax.swing.JMenuItem("Show Fonts");
         showFontsItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(BrowserController.this, "Font settings are managed in Preferences > Annotations", "Font", JOptionPane.INFORMATION_MESSAGE);
         });
         fontMenu.add(showFontsItem);
 
@@ -6968,34 +7021,64 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem boldItem = new javax.swing.JMenuItem("Bold");
         boldItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_B, 0));
         boldItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Open a viewer to use Bold", "Font", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class);
+            boolean currentBold = prefs.getBoolean("annotationFontBold", false);
+            prefs.putBoolean("annotationFontBold", !currentBold);
+            try { prefs.flush(); } catch (Exception ex) {}
         });
         fontMenu.add(boldItem);
-
-        // Italic
         // HOROS-20240407準拠: MainMenu.xib 541行目
         javax.swing.JMenuItem italicItem = new javax.swing.JMenuItem("Italic");
         italicItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Italic annotation text - implementation pending", "Font", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(BrowserController.this, "Open a viewer to use Italic", "Font", JOptionPane.WARNING_MESSAGE);
+            }
         });
         fontMenu.add(italicItem);
 
         fontMenu.addSeparator();
 
-        // Bigger
-        // HOROS-20240407準拠: MainMenu.xib 550行目
         javax.swing.JMenuItem biggerItem = new javax.swing.JMenuItem("Bigger");
         biggerItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PLUS, 0));
+        // Bigger
         biggerItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Open a viewer to use Bigger", "Font", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class);
+            int currentSize = prefs.getInt("annotationFontSize", 12);
+            int newSize = Math.min(currentSize + 2, 48);
+            prefs.putInt("annotationFontSize", newSize);
+            try { prefs.flush(); } catch (Exception ex) {}
         });
         fontMenu.add(biggerItem);
-
-        // Smaller
-        // HOROS-20240407準拠: MainMenu.xib 555行目
         javax.swing.JMenuItem smallerItem = new javax.swing.JMenuItem("Smaller");
         smallerItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_MINUS, 0));
+        // Smaller
+        // HOROS-20240407準拠: MainMenu.xib 555行目
         smallerItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Open a viewer to use Smaller", "Font", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class);
+            int currentSize = prefs.getInt("annotationFontSize", 12);
+            int newSize = Math.max(currentSize - 2, 6);
+            prefs.putInt("annotationFontSize", newSize);
+            try { prefs.flush(); } catch (Exception ex) {}
         });
         fontMenu.add(smallerItem);
-
         fontMenu.addSeparator();
 
         // Show Colors
@@ -7004,6 +7087,12 @@ public class BrowserController extends JFrame {
         showColorsItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_C,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         showColorsItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Color/LUT window level settings are in the View menu", "Colors", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(BrowserController.this, "Open a viewer to use Show Colors", "Colors", JOptionPane.WARNING_MESSAGE);
+            }
         });
         fontMenu.add(showColorsItem);
 
@@ -8083,6 +8172,22 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction)showLogWindow: (id)sender (20372行目)
      */
     public void showLogWindow(Object sender) {
+        LogWindow.showLogWindow(BrowserController.this);
+    }
+
+    /**
+     * 現在アクティブなDCMViewを取得（編集系アクション用）
+     */
+    private DCMView getActiveDCMViewForEdit() {
+        BrowserController bc = BrowserController.currentBrowser();
+        if (bc != null) {
+            javax.swing.JButton activeCell = bc.getMatrix().selectedCell();
+            if (activeCell != null && activeCell.getClientProperty("viewer") instanceof ViewerController vc) {
+                return vc.getImageView();
+            }
+        }
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        return (!viewers.isEmpty()) ? viewers.get(viewers.size() - 1).getImageView() : null;
     }
 
     /**
@@ -8090,6 +8195,18 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) copy: (id)sender (8809行目)
      */
     public void copy(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view != null) {
+            java.awt.image.BufferedImage img = view.getBufferedImageNoLoad();
+            if (img != null) {
+                java.awt.datatransfer.Transferable transferable = new java.awt.datatransfer.Transferable() {
+                    @Override public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{DataFlavor.imageFlavor}; }
+                    @Override public Object getTransferData(DataFlavor df) throws java.io.IOException { return img; }
+                    @Override public boolean isDataFlavorSupported(DataFlavor df) { return df == DataFlavor.imageFlavor; }
+                };
+                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(transferable, null);
+            }
+        }
     }
 
     /**
@@ -8097,6 +8214,17 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) paste: (id)sender (8802行目)
      */
     public void paste(Object sender) {
+        java.awt.datatransfer.Transferable t = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+        if (t != null && t.isDataFlavorSupported(DataFlavor.imageFlavor)) {
+            try {
+                java.awt.Image img = (java.awt.Image) t.getTransferData(DataFlavor.imageFlavor);
+                JOptionPane.showMessageDialog(BrowserController.this, "Paste: image received from clipboard", "Paste", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Paste failed: " + ex.getMessage(), "Paste", JOptionPane.ERROR_MESSAGE);
+            }
+        } else {
+            JOptionPane.showMessageDialog(BrowserController.this, "No image data on clipboard", "Paste", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     // ========== 2D Viewerメニューアクションメソッド ==========
@@ -8940,6 +9068,26 @@ public class BrowserController extends JFrame {
         if (databaseOutline != null) {
             boolean vis = !databaseOutline.isVisible();
             databaseOutline.setVisible(vis);
+        }
+    }
+
+    /** Export to Photos stub */
+    public void exportToPhotos() {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle("Export to Photos");
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JPEG images", "jpg", "jpeg"));
+        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            java.awt.image.BufferedImage img = getActiveDCMViewForEdit() != null ? getActiveDCMViewForEdit().getBufferedImageNoLoad() : null;
+            if (img != null) {
+                try {
+                    javax.imageio.ImageIO.write(img, "JPEG", fc.getSelectedFile());
+                    JOptionPane.showMessageDialog(BrowserController.this, "Image exported successfully", "Export to Photos", JOptionPane.INFORMATION_MESSAGE);
+                } catch (java.io.IOException ex) {
+                    JOptionPane.showMessageDialog(BrowserController.this, "Export failed: " + ex.getMessage(), "Export to Photos", JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "Export to Photos", JOptionPane.WARNING_MESSAGE);
+            }
         }
     }
 }

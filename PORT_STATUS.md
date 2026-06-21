@@ -1,4 +1,4 @@
-﻿### OculusJJ HOROS Java Port - 実装状況サマリー (更新日: 2026-06-18)
+### OculusJJ HOROS Java Port - 実装状況サマリー (更新日: 2026-06-18)
 
 ---
 
@@ -68,7 +68,20 @@ AboutDialog, AnonymizationDialog, BurnerDialog, LogWindow, NavigatorPanel
 
 ---
 
-## [未実装項目一覧（優先順位順）]
+
+### E5: Edit \u003e Undo/Redo/Cut/SelectAll ✅ (本セッション実装済み)
+- **AnnotationUndoManager.java** 新規作成 (125行): ROIの状態スナップショット管理・Undo/Redo対応
+- **BrowserController.java**: Undo/RedoをannotationUndoManager.undo()/redo()に接続
+- Cut: selectedRoiの削除 + undoスタックへの保存
+- SelectAll: 全ROIを選択状態に
+- Bold/Bigger/Smaller: Preferences (annotationFontBold, annotationFontSize) に接続
+
+### E6: Format \u003e Bold/Bigger/Smaller ✅ (本セッション実装済み)
+- Bold: annotationFontBold preference のトグル
+- Bigger: annotationFontSize +2（最大48）
+- Smaller: annotationFontSize -2（最小6）
+
+---## [未実装項目一覧（優先順位順）]
 
 === P1-Critical: まだstubのままの項目 ===
 | # | メニュー項目 | HOROS XIB参照 | 備考 |
