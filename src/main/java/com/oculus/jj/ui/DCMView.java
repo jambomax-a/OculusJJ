@@ -16,6 +16,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import com.oculus.jj.model.DicomPix;
+import com.oculus.jj.model.ShutterTool;
 
 /**
  * DCMView - DICOM画像表示ビュー
@@ -228,8 +229,8 @@ public class DCMView extends JPanel {
         tDynamicAngle, // 動的角度
         tPerpendicular, // 垂直線群
         tBrush, // ブラシ
+        tShutter, // シャッター領域ツール
         tWLWW, // ウィンドウレベル/ウィンドウ幅
-        tNext, // 次
         tPrevious, // 前
         tFlip, // フリップ
         tRefresh, // リフレッシュ
@@ -266,12 +267,13 @@ public class DCMView extends JPanel {
         t3DPointTool4, // 3Dポイントツール4
         t3DPolygonTool4, // 3D多角形ツール4
         tCurvedROI, // Curved MPR ROI (HOROS-20240407)
-        tShutter // シャッターツール
     }
 
     // HOROS-20240407準拠: 現在のツール（デフォルトはWL/WW）
     public static ToolMode currentTool = ToolMode.tWLWW;
 
+    // --- シャッターツール ---
+    private ShutterTool shutterTool = null;
     public List<com.oculus.jj.model.ROI> getCurRoiList() {
         return curRoiList;
     }
@@ -462,6 +464,14 @@ public class DCMView extends JPanel {
 
             @Override
             public void mouseDragged(java.awt.event.MouseEvent e) {
+                // --- シャッターツール: ドラッグ中 (startDragPoint非依存) ---
+                if (currentTool == ToolMode.tShutter && shutterTool != null) {
+                    java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                    if (imgPt != null) {
+                        shutterTool.mouseDragged((int) imgPt.x, (int) imgPt.y);
+                    }
+                }
+
                 // HOROS-20240407準拠: DCMView.m 4488-4493行目相当 (mouseDragged:)
                 if (startDragPoint == null) {
                     return;
@@ -889,6 +899,20 @@ public class DCMView extends JPanel {
                         }
                     }
 
+                    // --- シャッターツール: クリック開始 ---
+                    if (currentTool == ToolMode.tShutter) {
+                        if (shutterTool == null) {
+                            shutterTool = new ShutterTool(DCMView.this);
+                        }
+                        shutterTool.setActive(true);
+                        java.awt.geom.Point2D.Float imgPt2 = convertScreenToImage(e.getPoint());
+                        if (imgPt2 != null) {
+                            shutterTool.mousePressed((int) imgPt2.x, (int) imgPt2.y);
+                        }
+                        repaint();
+                        return;
+                    }
+
                     if (clickedRoi != null) {
                         selectedRoi = clickedRoi;
                         newRoi = null;
@@ -918,6 +942,21 @@ public class DCMView extends JPanel {
                         }
 
                         repaint();
+
+                    // --- シャッターツール: クリック開始 ---
+                    if (currentTool == ToolMode.tShutter) {
+                        if (shutterTool == null) {
+                            shutterTool = new ShutterTool(DCMView.this);
+                        }
+                        shutterTool.setActive(true);
+                        java.awt.geom.Point2D.Float imgPt2 = convertScreenToImage(e.getPoint());
+                        if (imgPt2 != null) {
+                            shutterTool.mousePressed((int) imgPt2.x, (int) imgPt2.y);
+                        }
+                        repaint();
+                        return;
+                    }
+
                     } else if (isROITool(currentTool)) {
                         selectedRoi = null;
                         if (curDCM != null) {
@@ -1063,6 +1102,14 @@ public class DCMView extends JPanel {
                     }
                     repulsorRadius = 0;
                     repaint();
+                }
+
+                // --- シャッターツール: ドラッグ終了（シャッター確定） ---
+                if (currentTool == ToolMode.tShutter && shutterTool != null) {
+                    java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
+                    if (imgPt != null) {
+                        shutterTool.mouseReleased((int) imgPt.x, (int) imgPt.y);
+                    }
                 }
 
                 // --- ROI移動の完了 ---
@@ -2151,6 +2198,16 @@ public class DCMView extends JPanel {
                 // 画像がない場合の境界線描画 (x, yなどは0扱いで赤枠のみ描画される)
                 drawBorders(g2d, panelWidth, panelHeight, 0, 0, 0, 0);
             }
+                // --- シャッターオーバーレイ描画 ---
+                if (shutterTool != null && shutterTool.isActive()) {
+                    java.awt.Graphics2D overlayG2d = (java.awt.Graphics2D) g2d.create();
+                    try {
+                        shutterTool.paintOverlay(overlayG2d);
+                    } finally {
+                        overlayG2d.dispose();
+                    }
+                }
+
         } finally {
             g2d.dispose();
         }
