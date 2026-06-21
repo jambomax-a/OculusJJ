@@ -265,7 +265,8 @@ public class DCMView extends JPanel {
         tRepulsorTool4, // リパルサーツール4
         t3DPointTool4, // 3Dポイントツール4
         t3DPolygonTool4, // 3D多角形ツール4
-        tCurvedROI // Curved MPR ROI (HOROS-20240407)
+        tCurvedROI, // Curved MPR ROI (HOROS-20240407)
+        tShutter // シャッターツール
     }
 
     // HOROS-20240407準拠: 現在のツール（デフォルトはWL/WW）

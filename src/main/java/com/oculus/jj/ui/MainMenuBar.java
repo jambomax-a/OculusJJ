@@ -80,7 +80,8 @@ public class MainMenuBar extends JMenuBar {
 
         viewMenu = new JMenu(viewLabel);
         viewMenu.add(makeItem("Zoom", e -> setTool(DCMView.ToolMode.tZoom)));
-        viewMenu.add(makeItem("Pan", e -> setTool(DCMView.ToolMode.tTranslate)));
+        viewMenu.addSeparator();
+        viewMenu.add(makeItem("Shutter", e -> setTool(DCMView.ToolMode.tShutter)));
         viewMenu.addSeparator();
         viewMenu.add(makeItem("Window Level/Width", e -> setTool(DCMView.ToolMode.tWLWW)));
 

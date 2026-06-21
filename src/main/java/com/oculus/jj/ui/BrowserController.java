@@ -6621,7 +6621,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 230行目
         javax.swing.JMenuItem exportMovieItem = new javax.swing.JMenuItem("Export to Movie");
         exportMovieItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
-        exportMovieItem.addActionListener(e -> { showMovieExport(); });
+        exportMovieItem.addActionListener(e -> { MoviePlaybackPanel.showMoviePanel(BrowserController.this, getActiveDCMViewForEdit()); });
         exportMenu.add(exportMovieItem);
 
         // Export to JPEG
@@ -6893,6 +6893,12 @@ public class BrowserController extends JFrame {
             PreferencesController.getInstance().setVisible(true);
         });
         networkMenu.add(preferencesItem);
+        // PACS Query Settings
+        javax.swing.JMenuItem pacsQuerySettingsItem = new javax.swing.JMenuItem("PACS Query Settings...");
+        pacsQuerySettingsItem.addActionListener(e -> { com.oculus.jj.ui.PACSQuerySettingsDialog.showPACSQuerySettingsDialog(BrowserController.this); });
+        networkMenu.add(pacsQuerySettingsItem);
+
+        networkMenu.addSeparator();
 
         menuBar.add(networkMenu);
 
