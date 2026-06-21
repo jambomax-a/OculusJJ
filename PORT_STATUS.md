@@ -107,12 +107,12 @@ AboutDialog, AnonymizationDialog, BurnerDialog, LogWindow, NavigatorPanel
 | 画像操作 | Subtraction operations, convolution, resample | 低 |
 | 画像操作 | ~~Shutter tool~~ ✅実装済み, Full-screen mode | 中 |
 | アノテーション | Annotation style/color/font UI | 低(Preferences済み) |
-| Movie | 再生速度スライダー、Play/Stop、位置スライダー | 中 |
+| Movie | ~~再生速度スライダー、Play/Stop、位置スライダー~~ ✅実装済み |
 | Fusion | Blending slider/mode, mergeFusedImages | 中 |
 | Key Image | captureAndSetKeyImage → DICOM SC出力 | 中 |
 | Print | 12-bit display, Print slider | 低 |
 | PACS | ~~Query Settings ダイアログ~~ ✅実装済み | - |
-| Database | Smart Album rule engine | 中 |
+| Database | ~~Smart Album rule engine~~ ✅実装済み | - |
 | Report | PDF生成・DICOM SR変換 | 中 |
 
 === P4: GPU/Optimization (今後の計画) ===

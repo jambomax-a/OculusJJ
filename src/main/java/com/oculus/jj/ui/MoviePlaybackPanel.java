@@ -141,12 +141,7 @@ public class MoviePlaybackPanel extends JPanel {
 
     public void addMovieListener(MovieListener l) { this.listener = l; }
 
-    public static void showMoviePanel(Frame owner, DCMView view) {
-        MoviePlaybackPanel panel = new MoviePlaybackPanel();
-        JDialog dlg = new JDialog(owner, "Movie Playback", Dialog.ModalityType.MODELESS);
-        dlg.add(panel);
-        dlg.pack();
-        dlg.setLocationRelativeTo(owner);
-        dlg.setVisible(true);
+    public static JDialog showMoviePanel(Frame owner, DCMView view) {
+        return MoviePlayer.createAndShow((javax.swing.JFrame)owner, view);
     }
 }
