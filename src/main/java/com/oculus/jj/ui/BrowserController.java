@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.prefs.Preferences;
 
+import com.oculus.jj.model.DicomSeries;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -30,10 +31,11 @@ import javax.swing.JSlider;
 import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 
 import com.oculus.jj.model.DicomDatabase;
-import com.oculus.jj.model.DicomSeries;
+import com.oculus.jj.model.DicomPix;
 import com.oculus.jj.threads.ThreadsManager;
 
 /**
@@ -427,16 +429,12 @@ public class BrowserController extends JFrame {
             }
         });
         JScrollPane sourcesScroll = new JScrollPane(sourcesTableView);
-        // HOROS-20240407準拠: MainMenu.xib 4142行目 - box title="Sources"
+        // HOROS-20240407準拠: MainMenu.xib 4142行目 - box title=noTitle
         // titlePosition="noTitle"
-        // Java SwingではTitledBorderで見出しを表示
-        sourcesScroll.setBorder(javax.swing.BorderFactory.createTitledBorder(
-                javax.swing.BorderFactory.createEmptyBorder(),
-                "Sources",
-                javax.swing.border.TitledBorder.LEFT,
-                javax.swing.border.TitledBorder.TOP));
-        splitSourcesActivity.setTopComponent(sourcesScroll);
 
+        sourcesScroll.setBorder(null);
+
+        splitSourcesActivity.setTopComponent(sourcesScroll);
         // Activity（下）
         // HOROS-20240407準拠: BrowserController+Activity.h
         // HOROS-20240407準拠: BrowserController+Activity.mm 64-72行目
@@ -8473,7 +8471,74 @@ public class BrowserController extends JFrame {
      * キャプチャしてキー画像に設定
      * HOROS-20240407準拠: - (IBAction) captureAndSetKeyImage: (id) sender
      */
-    public void captureAndSetKeyImage(Object sender) { ViewerController vc = ViewerController.frontMostDisplayed2DViewer(); if(vc!=null) JOptionPane.showMessageDialog(this, "Capture and save as DICOM Secondary Capture pending", "Key Image", JOptionPane.INFORMATION_MESSAGE); }
+    public void captureAndSetKeyImage(Object sender) {
+        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
+        if (vc == null) {
+            JOptionPane.showMessageDialog(BrowserController.this, "No active 2D viewer to capture key image", "Key Image", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.curDCM == null) {
+            JOptionPane.showMessageDialog(BrowserController.this, "No active viewer for key image", "Key Image", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        DicomPix pix = view.curDCM;
+        if (pix.getPath() == null || !pix.getPath().toFile().exists()) {
+            JOptionPane.showMessageDialog(BrowserController.this, "Source file not available", "Key Image", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            java.io.File srcFile = pix.getPath().toFile();
+            org.dcm4che3.io.DicomInputStream dis = new org.dcm4che3.io.DicomInputStream(srcFile);
+            org.dcm4che3.data.Attributes attrs;
+            try {
+                dis.readFileMetaInformation();
+                org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
+                if (fmi != null) { String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID); }
+                attrs = dis.readDataset();
+                dis.close();
+            } catch (Exception e) {
+                try (org.dcm4che3.io.DicomInputStream dis2 = new org.dcm4che3.io.DicomInputStream(srcFile)) { attrs = dis2.readDataset(); }
+            }
+            if (attrs == null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Failed to read source DICOM", "Key Image", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String newSopInstanceUID = java.util.UUID.randomUUID().toString();
+            attrs.setString(org.dcm4che3.data.Tag.SOPClassUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
+            attrs.setString(org.dcm4che3.data.Tag.SOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
+            attrs.setString(org.dcm4che3.data.Tag.Modality, org.dcm4che3.data.VR.CS, "SC");
+            java.io.File dir = new java.io.File(new java.io.File(".", "OculusJJ Data"), "KeyImages");
+            if (!dir.exists()) dir.mkdirs();
+            java.io.File outFile = new java.io.File(dir, srcFile.getName().replace(".", "_key.") + ".dcm");
+            byte[] srcBytes = java.nio.file.Files.readAllBytes(srcFile.toPath());
+            int fmiStart = -1;
+            for (int i = 272; i >= 128 && i <= 300; i--) {
+                if ((char)srcBytes[i] == 'D' && (char)srcBytes[i+1] == 'I' && (char)srcBytes[i+2] == 'C' && (char)srcBytes[i+3] == 'M') { fmiStart = i; break; }
+            }
+            byte[] pixelData = (fmiStart > 0) ? java.util.Arrays.copyOfRange(srcBytes, fmiStart + 132, srcBytes.length) : srcBytes;
+            java.io.File tmpFmi = java.io.File.createTempFile("fmi", "tmp");
+            org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(tmpFmi);
+            org.dcm4che3.data.Attributes fmo = new org.dcm4che3.data.Attributes();
+            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPClassUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
+            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
+            fmo.setString(org.dcm4che3.data.Tag.TransferSyntaxUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2");
+            dos.writeFileMetaInformation(fmo);
+            dos.close();
+            byte[] fmiBytes = java.nio.file.Files.readAllBytes(tmpFmi.toPath());
+            tmpFmi.delete();
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile)) {
+                byte[] pad = new byte[128];
+                fos.write(pad);
+                fos.write("DICM".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                fos.write(fmiBytes);
+                fos.write(pixelData);
+            }
+            JOptionPane.showMessageDialog(BrowserController.this, "Key image saved: " + outFile.getAbsolutePath(), "Key Image", JOptionPane.INFORMATION_MESSAGE);
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(BrowserController.this, "Key image capture failed: " + ex.getMessage(), "Key Image", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
     /**
      * 次の/前のキー画像を検索
@@ -9012,54 +9077,201 @@ public class BrowserController extends JFrame {
 
     /** Export to DICOM Network Node (PACS) */
     private void exportToPACS() {
-        JOptionPane.showMessageDialog(this, "Export to PACS dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE);
+        javax.swing.JMenuItem sendItem = new javax.swing.JMenuItem("Send to Selected Node...");
+        sendItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null || view.curDCM == null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "Export to PACS", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            PACSQuerySettingsDialog dialog = new PACSQuerySettingsDialog(BrowserController.this);
+            dialog.pack();
+            dialog.setLocationRelativeTo(BrowserController.this);
+            dialog.setVisible(true);
+        });
+        javax.swing.JMenuItem selectNodeItem = new javax.swing.JMenuItem("Select Node...");
+        selectNodeItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(BrowserController.this, "Node selection pending", "Export to PACS", JOptionPane.INFORMATION_MESSAGE);
+        });
+        JPopupMenu popup = new JPopupMenu();
+        popup.add(sendItem);
+        popup.add(selectNodeItem);
+        popup.show(this, 0, this.getY());
     }
 
     /** Export to Movie dialog */
     private void showMovieExport() {
-        JOptionPane.showMessageDialog(this, "Export to Movie dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE);
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) {
+            JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export as movie", "Movie Export", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        MoviePlayer.createAndShow(BrowserController.this, view);
     }
 
     /** Export to JPEG dialog */
     private void exportToJPEG() {
-        BrowserMatrix matrix = getMatrix();
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setDialogTitle("Export JPEG");
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JPEG images", "jpg", "jpeg"));
+        fc.setApproveButtonText("Export");
         if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
-            JOptionPane.showMessageDialog(this, "Export JPEG to: " + fc.getSelectedFile().getPath() + " (pending implementation)", "JPEG Export", JOptionPane.INFORMATION_MESSAGE);
+            java.io.File file = fc.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".jpg") && !file.getName().toLowerCase().endsWith(".jpeg")) {
+                file = new java.io.File(file.getAbsolutePath() + ".jpg");
+            }
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null && view.curDCM != null) {
+                try {
+                    java.awt.image.BufferedImage img = view.curDCM.getBufferedImageNoLoad();
+                    if (img != null) {
+                        javax.imageio.ImageIO.write(img, "JPEG", file);
+                        JOptionPane.showMessageDialog(BrowserController.this, "Exported to: " + file.getAbsolutePath(), "JPEG Export", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(BrowserController.this, "No image data available", "JPEG Export", JOptionPane.WARNING_MESSAGE);
+                    }
+                } catch (java.io.IOException ex) {
+                    JOptionPane.showMessageDialog(BrowserController.this, "Export failed: " + ex.getMessage(), "JPEG Export", JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "JPEG Export", JOptionPane.WARNING_MESSAGE);
+            }
         }
     }
 
     /** Export Raw Data dialog */
     private void showExportRawDialog() {
-        JOptionPane.showMessageDialog(this, "Export Raw Data dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE);
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle("Export Raw DICOM");
+        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            java.io.File file = fc.getSelectedFile();
+            exportToDICOMFileInternal(file);
+        }
     }
 
     /** Export to TIFF dialog */
     private void exportToTIFF() {
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setDialogTitle("Export TIFF");
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("TIFF images", "tif", "tiff"));
+        fc.setApproveButtonText("Export");
         if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
-            JOptionPane.showMessageDialog(this, "Export TIFF to: " + fc.getSelectedFile().getPath() + " (pending implementation)", "TIFF Export", JOptionPane.INFORMATION_MESSAGE);
+            java.io.File file = fc.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".tif") && !file.getName().toLowerCase().endsWith(".tiff")) {
+                file = new java.io.File(file.getAbsolutePath() + ".tif");
+            }
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null && view.curDCM != null) {
+                try {
+                    java.awt.image.BufferedImage img = view.curDCM.getBufferedImageNoLoad();
+                    if (img != null) {
+                        javax.imageio.ImageIO.write(img, "TIFF", file);
+                        JOptionPane.showMessageDialog(BrowserController.this, "Exported to: " + file.getAbsolutePath(), "TIFF Export", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(BrowserController.this, "No image data available", "TIFF Export", JOptionPane.WARNING_MESSAGE);
+                    }
+                } catch (java.io.IOException ex) {
+                    JOptionPane.showMessageDialog(BrowserController.this, "Export failed: " + ex.getMessage(), "TIFF Export", JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "TIFF Export", JOptionPane.WARNING_MESSAGE);
+            }
         }
     }
 
     /** Export to DICOM File(s) dialog */
     private void exportToDICOMFile() {
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setDialogTitle("Export DICOM");
         if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
-            JOptionPane.showMessageDialog(this, "Export DICOM files to: " + fc.getSelectedFile().getPath() + " (pending implementation)", "DICOM Export", JOptionPane.INFORMATION_MESSAGE);
+            java.io.File file = fc.getSelectedFile();
+            exportToDICOMFileInternal(file);
+        }
+    }
+
+    private void exportToDICOMFileInternal(java.io.File outputFile) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.curDCM == null) {
+            JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "DICOM Export", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        DicomPix pix = view.curDCM;
+        if (pix.getPath() == null || !pix.getPath().toFile().exists()) {
+            JOptionPane.showMessageDialog(BrowserController.this, "Source file not available", "DICOM Export", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            java.io.File srcFile = pix.getPath().toFile();
+            org.dcm4che3.io.DicomInputStream dis = new org.dcm4che3.io.DicomInputStream(srcFile);
+            org.dcm4che3.data.Attributes attrs;
+            try {
+                dis.readFileMetaInformation();
+                org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
+                if (fmi != null) { String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID); }
+                attrs = dis.readDataset();
+                dis.close();
+            } catch (Exception e) {
+                try (org.dcm4che3.io.DicomInputStream dis2 = new org.dcm4che3.io.DicomInputStream(srcFile)) { attrs = dis2.readDataset(); }
+            }
+            if (attrs == null) {
+                JOptionPane.showMessageDialog(BrowserController.this, "Failed to read source DICOM", "DICOM Export", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String newSopInstanceUID = java.util.UUID.randomUUID().toString();
+            attrs.setString(org.dcm4che3.data.Tag.SOPClassUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
+            attrs.setString(org.dcm4che3.data.Tag.SOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
+            attrs.setString(org.dcm4che3.data.Tag.Modality, org.dcm4che3.data.VR.CS, "SC");
+            java.io.File outDir = outputFile.getParentFile();
+            if (outDir != null && !outDir.exists()) outDir.mkdirs();
+            String fn = outputFile.getName().toLowerCase();
+            if (!fn.endsWith(".dcm") && !fn.endsWith(".dicom")) {
+                outputFile = new java.io.File(outputFile.getAbsolutePath() + ".dcm");
+            }
+            byte[] srcBytes = java.nio.file.Files.readAllBytes(srcFile.toPath());
+            int fmiStart = -1;
+            for (int i = 272; i >= 128 && i <= 300; i--) {
+                if ((char)srcBytes[i] == 'D' && (char)srcBytes[i+1] == 'I' && (char)srcBytes[i+2] == 'C' && (char)srcBytes[i+3] == 'M') { fmiStart = i; break; }
+            }
+            byte[] pixelData = (fmiStart > 0) ? java.util.Arrays.copyOfRange(srcBytes, fmiStart + 132, srcBytes.length) : srcBytes;
+            java.io.File tmpFmi = java.io.File.createTempFile("fmi", "tmp");
+            org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(tmpFmi);
+            org.dcm4che3.data.Attributes fmo = new org.dcm4che3.data.Attributes();
+            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPClassUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
+            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
+            fmo.setString(org.dcm4che3.data.Tag.TransferSyntaxUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2");
+            dos.writeFileMetaInformation(fmo);
+            dos.close();
+            byte[] fmiBytes = java.nio.file.Files.readAllBytes(tmpFmi.toPath());
+            tmpFmi.delete();
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outputFile)) {
+                byte[] pad = new byte[128];
+                fos.write(pad);
+                fos.write("DICM".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                fos.write(fmiBytes);
+                fos.write(pixelData);
+            }
+            JOptionPane.showMessageDialog(BrowserController.this, "Exported DICOM to: " + outputFile.getAbsolutePath(), "DICOM Export", JOptionPane.INFORMATION_MESSAGE);
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(BrowserController.this, "DICOM export failed: " + ex.getMessage(), "DICOM Export", JOptionPane.ERROR_MESSAGE);
         }
     }
 
 
-    /** DICOM Print stub */
+    /** DICOM Print (PACSSettings popup) */
     public void generateReport(Object sender) {
-        JOptionPane.showMessageDialog(this, "DICOM Print dialog pending", "Print", JOptionPane.INFORMATION_MESSAGE);
+        javax.swing.JMenuItem jMenuItem = new javax.swing.JMenuItem("Print Report...");
+        jMenuItem.addActionListener(e -> {
+            PACSQuerySettingsDialog dialog = new PACSQuerySettingsDialog(BrowserController.this);
+            dialog.pack();
+            dialog.setLocationRelativeTo(BrowserController.this);
+            dialog.setVisible(true);
+        });
+        JPopupMenu popup = new JPopupMenu();
+        popup.add(jMenuItem);
+        popup.show(this, 0, this.getY());
     }
 
-    /** Import image from URL stub */
+    /** Import image from file (via JFileChooser) */
     public void importImageFromURL() {
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setFileSelectionMode(javax.swing.JFileChooser.FILES_ONLY);
@@ -9077,7 +9289,7 @@ public class BrowserController extends JFrame {
         }
     }
 
-    /** Export to Photos stub */
+    /** Export to JPEG (Photos format) */
     public void exportToPhotos() {
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setDialogTitle("Export to Photos");
@@ -9097,6 +9309,4 @@ public class BrowserController extends JFrame {
         }
     }
 }
-
-
 

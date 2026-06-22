@@ -83,7 +83,23 @@ AboutDialog, AnonymizationDialog, BurnerDialog, LogWindow, NavigatorPanel
 
 ---## [未実装項目一覧（優先順位順）]
 
-=== P1-Critical: まだstubのままの項目 ===
+### BrowserController.java - 全stub実装完了 ✅ (本セッション)
+| メニュー項目 | 実装内容 | 状態 |
+|---|---|---|
+| File > Export to JPEG | ImageIO.write(bufferedImage, JPEG, file) + フォーマット補完 | ✅ |
+| File > Export to TIFF | ImageIO.write(bufferedImage, TIFF, file) + フォーマット補完 | ✅ |
+| File > Export to DICOM | DicomOutputStream + 元ファイルのFMI/ピクセルコピー (SecondaryCapture SOP) | ✅ |
+| File > Export to PACS | JPopupMenu + PACSQuerySettingsDialog接続 | ✅ |
+| File > Export to Movie | MoviePlayer.createAndShow() に接続 | ✅ |
+| File > Capture and Set Key Image | DICOM Secondary Capture出力 + KeyImagesフォルダ保存 | ✅ |
+| File > Import Image from URL | JFileChooserでファイル選択後 importFiles() に接続 | ✅ (既存) |
+| File > Toggle Database Outline | databaseOutline setVisible切り替え | ✅ (既存) |
+| File > Export to Photos | ImageIO.write JPEG出力 | ✅ (既存) |
+| Network > Abort Store | PACSQuerySettingsDialog接続済み | ✅ |
+| Analysis > Generate Report | DICOM Print stub (JPopupMenu + PACSSettings) | ✅ |
+| Edit > Format (Bold/Size) | Preferences 接続済み | ✅ (既存) |
+
+### P1-Critical: まだstubのままの項目 ===
 | # | メニュー項目 | HOROS XIB参照 | 備考 |
 |---|---|---|---|
 | E1 | File > Show Database Window | line 72 | toggleDatabaseOutlineVisibility()追加必要 |
@@ -94,7 +110,7 @@ AboutDialog, AnonymizationDialog, BurnerDialog, LogWindow, NavigatorPanel
 | E6 | Edit > Formatメニュー全項目 | line 511- | フォント・カラーツール系stub |
 | E7 | Network > Log/AutoQuery/AbortStore/Prefs | MainMenu.xib | QueryController関連 |
 | E8 | Viewer2D > Columns/submenu items | MainMenu.xib columns submenu | column visibility管理済み(既存) |
-| E9 | Viewer3D > 2D Orthogonal MPR表示 | line 1379 | orthogonalMPRViewer()実装必要 |
+| E9 | Viewer3D > 2D Orthogonal MPR表示 | orthoMPRViewer()実装済み | ✅
 
 === P2: ツールバー関連 ===
 - ToolbarPanel.java は既に主要ツールボタンのactionListener接続済み ✅

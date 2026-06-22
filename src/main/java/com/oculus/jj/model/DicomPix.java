@@ -112,6 +112,23 @@ public class DicomPix {
     // HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
     // Modality (0008,0060) - モダリティ（CT, MR, CR, USなど）
     private String modality = null;
+    /** raw short data を直接設定（内部使用） */
+    public void setShortImageData(short[] data) {
+        this.rawShortData = data;
+        if (data != null) {
+            width = (int)Math.round(Math.sqrt((double)data.length));
+            height = data.length / Math.max(1, width);
+            // Recalculate window level for the new data
+            computeBestFit();
+        }
+    }
+    // ── Fusion Overlay Fields (PET/CT融合用) ──
+    private DicomPix fusionOverlayPix = null;       // 重ね合わせる前景画像（PET/SPECT）
+    private double fusionWeight = 0.5;              // ブレンド重み 0.0~1.0
+    private FusionImageProcessor.FusionMode fusionMode = FusionImageProcessor.FusionMode.COLOR;
+    private transient BufferedImage fusedOverlayImage = null;  // 計算済みの融合画像
+    private boolean isFusing = false;               // 融合計算中のフラグ
+
 
     // HOROS-20240407準拠 - inverseVal
     private boolean isInverse = false;
@@ -1478,4 +1495,88 @@ public class DicomPix {
             kill8bitsImage();
         }
     }
+
+    // ── Fusion API ──
+
+    /**
+     * 融合オーバーレイを適用（または削除）。
+     * 
+     * @param overlay   前景画像 (PET/SPECT)。null を渡すと融合を解除。
+     * @param weight    ブレンド重み 0.0~1.0
+     * @param mode      融合モード
+     */
+    public void setFusionOverlay(DicomPix overlay, double weight, FusionImageProcessor.FusionMode mode) {
+        if (overlay == null) {
+            this.fusionOverlayPix = null;
+            this.fusedOverlayImage = null;
+            return;
+        }
+        this.fusionOverlayPix = overlay;
+        this.fusionWeight = Math.max(0.0, Math.min(1.0, weight));
+        this.fusionMode = mode;
+        // 融合画像を再生成
+        computeFusedImage();
+    }
+
+    /**
+     * 融合結果のBufferedImageを取得（初回は計算）。
+     */
+    public BufferedImage getFusedOverlay() {
+        if (fusionOverlayPix == null) {
+            return null;
+        }
+        if (fusedOverlayImage == null || isFusing) {
+            computeFusedImage();
+        }
+        return fusedOverlayImage;
+    }
+
+    /**
+     * 現在の融合重みを取得。
+     */
+    public double getFusionWeight() {
+        return fusionWeight;
+    }
+
+    /**
+     * 融合重みを設定し、画像を再生成。
+     */
+    public void setFusionWeight(double weight) {
+        this.fusionWeight = Math.max(0.0, Math.min(1.0, weight));
+        computeFusedImage();
+    }
+
+    /**
+     * 融合モードを取得・設定。
+     */
+    public FusionImageProcessor.FusionMode getFusionMode() { return fusionMode; }
+    public void setFusionMode(FusionImageProcessor.FusionMode mode) {
+        this.fusionMode = mode;
+        computeFusedImage();
+    }
+
+    /**
+     * 融合を解除。
+     */
+    public void clearFusion() {
+        fusionOverlayPix = null;
+        fusedOverlayImage = null;
+    }
+
+    /**
+     * 内部：融合画像を計算（スレッドセーフ）。
+     */
+    private synchronized void computeFusedImage() {
+        if (fusionOverlayPix == null || isFusing) return;
+        isFusing = true;
+        try {
+            fusedOverlayImage = FusionImageProcessor.fuse(
+                this, fusionOverlayPix, fusionWeight, fusionMode);
+        } finally {
+            isFusing = false;
+        }
+    }
+
+    /** 融合状態を取得 */
+    public boolean hasFusion() { return fusionOverlayPix != null; }
 }

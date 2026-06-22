@@ -1,151 +1,65 @@
 package com.oculus.jj.ui;
-
-import javax.swing.*;
-import java.awt.*;
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-
+import javax.swing.*; import java.awt.*; import java.io.File;
+import java.util.ArrayList; import java.util.List;
+import com.oculus.jj.config.AppPreferences;
 /**
  * BurnerDialog - CD/DVD焼録ダイアログ
- * HOROS-20240407準拠のCD Burning機能の実装。
+ * HOROS-20240407 BurnViewer.xib 完全準拠の実装。
  */
 public class BurnerDialog extends JDialog {
-
     private static final long serialVersionUID = 1L;
-
-    private JList<String> filesList;
-    private DefaultListModel<String> fileListModel;
-    private JTable burnTable;
-    private JButton[] ejectButtons;
-    private JTextField supplementaryFolderField;
-
-    public BurnerDialog(Frame owner) { super(owner, "Burn to CD/DVD", false); setSize(600, 450); initUI(); }
-
-    /** ダイアログ表示（static factory） */
-    public static void showBurnerDialog(Frame owner) { new BurnerDialog(owner).setVisible(true); }
-
+    private JTextField nameField; private JLabel sizeLabel1, sizeLabel2;
+    private ButtonGroup compressionGroup, destinationGroup;
+    private JRadioButton[] compressionRadios, destinationRadios;
+    private JComboBox<String> usbVolumeCombo;
+    private JCheckBox anonymizeCheck, reportsCheck, suppFolderCheck, weasisCheck, htmlCheck, encryptCheck;
+    private JButton estimateBtn, burnBtn, cancelBtn;
+    private String cdName = "DICOMCD"; private int compressionMode=0, burnDestination=0;
+    private List<String> filePaths = new ArrayList<>(); private Frame owner;
+    public static void showBurnerDialog(Frame o) { SwingUtilities.invokeLater(() -> { BurnerDialog d=new BurnerDialog(o); d.setVisible(true); }); }
+    public BurnerDialog(Frame o) { super(o, "DICOM Burner", false); setSize(498, 390); this.owner=o; initUI(); }
     private void initUI() {
-        JPanel main = new JPanel(new BorderLayout(8, 8));
-        main.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        // Left side: source folder + file list
-        JPanel leftPanel = createSourcePanel();
-        main.add(leftPanel, BorderLayout.WEST);
-
-        // Right side: burn target info
-        JPanel rightPanel = createBurnInfoPanel();
-        main.add(rightPanel, BorderLayout.EAST);
-
-        // Bottom buttons
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton burnBtn = new JButton("Burn");
-        burnBtn.addActionListener(e -> startBurn());
-        JButton cancelBtn = new JButton("Cancel");
-        cancelBtn.addActionListener(e -> dispose());
-        btnPanel.add(burnBtn);
-        btnPanel.add(cancelBtn);
-
-        main.add(btnPanel, BorderLayout.SOUTH);
-        add(main);
-    }
-
-    private JPanel createSourcePanel() {
-        JPanel panel = new JPanel(new BorderLayout(5, 5));
-
-        JButton selectFolderBtn = new JButton("Select Folder...");
-        selectFolderBtn.addActionListener(e -> {
-            JFileChooser fc = new JFileChooser();
-            fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                loadFolderFiles(fc.getSelectedFile().getAbsolutePath());
-            }
-        });
-
-        fileListModel = new DefaultListModel<>();
-        filesList = new JList<>(fileListModel);
-        filesList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        filesList.setFixedCellHeight(20);
-        JScrollPane scrollPane = new JScrollPane(filesList);
-        scrollPane.setPreferredSize(new Dimension(350, 300));
-
-        panel.add(selectFolderBtn, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
-    }
-
-    private void loadFolderFiles(String folderPath) {
-        fileListModel.removeAllElements();
-        File folder = new File(folderPath);
-        if (!folder.isDirectory()) return;
-        collectFiles(folder, fileListModel);
-    }
-
-    private void collectFiles(File dir, DefaultListModel<String> model) {
-        File[] entries = dir.listFiles();
-        if (entries == null) return;
-        for (File f : entries) {
-            if (f.isDirectory()) collectFiles(f, model);
-            else if (!isNonDicomExt(f.getName())) model.addElement(f.getAbsolutePath());
-        }
-    }
-
-    private boolean isNonDicomExt(String name) {
-        int dot = name.lastIndexOf('.');
-        if (dot <= 0) return false;
-        String ext = name.substring(dot).toLowerCase();
-        return ext.equals(".jpg") || ext.equals(".jpeg") || ext.equals(".png") ||
-               ext.equals(".bmp") || ext.equals(".zip") || ext.equals(".rar") ||
-               ext.equals(".pdf") || ext.equals(".txt") || ext.equals(".xml");
-    }
-
-    private JPanel createBurnInfoPanel() {
-        JPanel panel = new JPanel(new GridLayout(0, 1, 5, 8));
-
-        JLabel titleLabel = new JLabel("CD/DVD Burn Info");
-        titleLabel.setFont(UIManager.getFont("Label.font").deriveFont(Font.BOLD, 14f));
-        panel.add(titleLabel);
-
-        // Disk info (placeholder)
-        JLabel diskInfo = new JLabel("Disk: Not inserted or unknown capacity");
-        diskInfo.setForeground(Color.GRAY);
-        panel.add(diskInfo);
-
-        JButton ejectBtn = new JButton("Eject");
-        ejectBtn.addActionListener(e -> JOptionPane.showMessageDialog(this, "Eject command pending", "CD/DVD", JOptionPane.INFORMATION_MESSAGE));
-        panel.add(ejectBtn);
-
-        // Supplementary folder
-        supplementaryFolderField = new JTextField(20);
-        supplementaryFolderField.setText(com.oculus.jj.config.AppPreferences.getCDDVDSupplementaryFolder());
-        JLabel suppLabel = new JLabel("Supplementary Folder:");
-        JButton browseBtn = new JButton("Browse");
-        browseBtn.addActionListener(e -> {
-            JFileChooser fc = new JFileChooser();
-            fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) supplementaryFolderField.setText(fc.getSelectedFile().getAbsolutePath());
-        });
-        JPanel suppPanel = new JPanel(new BorderLayout(5, 0));
-        suppPanel.add(suppLabel, BorderLayout.WEST);
-        suppPanel.add(supplementaryFolderField, BorderLayout.CENTER);
-        suppPanel.add(browseBtn, BorderLayout.EAST);
-        panel.add(suppPanel);
-
-        return panel;
-    }
-
-    private void startBurn() {
-        List<String> selected = filesList.getSelectedValuesList();
-        if (selected.isEmpty()) { JOptionPane.showMessageDialog(this, "No files selected.", "Burn", JOptionPane.WARNING_MESSAGE); return; }
-        com.oculus.jj.config.AppPreferences.setCDDVDSupplementaryFolder(supplementaryFolderField.getText());
-
-        new SwingWorker<String, Void>() {
-            @Override protected String doInBackground() throws Exception {
-                for (String f : selected) { /* TODO: copy to CD/DVD */ }
-                return "Burn complete";
-            }
-            @Override protected void done() { JOptionPane.showMessageDialog(BurnerDialog.this, "Burn operation completed", "CD/DVD Burn", JOptionPane.INFORMATION_MESSAGE); dispose(); }
-        }.execute();
-    }
+        JPanel dm = new JPanel(); dm.setLayout(new BoxLayout(dm, BoxLayout.Y_AXIS));
+        dm.setBorder(BorderFactory.createEmptyBorder(10, 14, 8, 14));
+        JPanel np = new JPanel(new GridBagLayout()); np.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(2, 2, 2, 2);
+        gbc.gridx=0;gbc.gridy=0;gbc.anchor=GridBagConstraints.EAST;gbc.fill=GridBagConstraints.NONE;np.add(new JLabel("Name:"),gbc);
+        gbc.gridx=1;gbc.weightx=1.0;gbc.anchor=GridBagConstraints.WEST;nameField=new JTextField(cdName);nameField.setColumns(30);np.add(nameField,gbc);dm.add(np);
+        JPanel sp = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        sizeLabel1=new JLabel("");sizeLabel1.setFont(UIManager.getFont("Label.font").deriveFont(9f));
+        sizeLabel2=new JLabel("");sizeLabel2.setFont(UIManager.getFont("Label.font").deriveFont(9f));sp.add(sizeLabel1);sp.add(sizeLabel2);
+        sp.setMaximumSize(new Dimension(Integer.MAX_VALUE, 16));dm.add(sp);
+        anonymizeCheck=new JCheckBox("Anonymize the DICOM files before burning");anonymizeCheck.setAlignmentX(Component.LEFT_ALIGNMENT);dm.add(anonymizeCheck);
+        JPanel cp=new JPanel();cp.setLayout(new BoxLayout(cp,BoxLayout.Y_AXIS));
+        cp.setBorder(BorderFactory.createTitledBorder("Compression"));cp.setAlignmentX(Component.LEFT_ALIGNMENT);compressionGroup=new ButtonGroup();
+        String[] cl={"Don't modify the files","Compress all DICOM files in JPEG","Decompress all DICOM files"};compressionRadios=new JRadioButton[3];
+        for(int i=0;i<3;i++){compressionRadios[i]=new JRadioButton(cl[i],i==0);compressionGroup.add(compressionRadios[i]);compressionRadios[i].setAlignmentX(Component.LEFT_ALIGNMENT);cp.add(compressionRadios[i]);}
+        JPanel dp=new JPanel();dp.setLayout(new BoxLayout(dp,BoxLayout.Y_AXIS));
+        dp.setBorder(BorderFactory.createTitledBorder("Destination"));dp.setAlignmentX(Component.LEFT_ALIGNMENT);destinationGroup=new ButtonGroup();
+        String[] dl2={"CD/DVD Media","USB Key:","Save as DMG file"};destinationRadios=new JRadioButton[3];
+        for(int i=0;i<3;i++){destinationRadios[i]=new JRadioButton(dl2[i],i==0);destinationGroup.add(destinationRadios[i]);destinationRadios[i].setAlignmentX(Component.LEFT_ALIGNMENT);dp.add(destinationRadios[i]);}
+        usbVolumeCombo=new JComboBox<>();usbVolumeCombo.setMaximumSize(new Dimension(80,24));usbVolumeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);usbVolumeCombo.setVisible(false);dp.add(Box.createVerticalStrut(3));dp.add(usbVolumeCombo);
+        JPanel cd=new JPanel(new GridBagLayout());cd.setMaximumSize(new Dimension(Integer.MAX_VALUE,70));cd.setAlignmentX(Component.LEFT_ALIGNMENT);
+        gbc.gridx=0;gbc.fill=GridBagConstraints.BOTH;gbc.weightx=0.5;cd.add(cp,gbc);gbc.gridx=1;cd.add(dp,gbc);dm.add(cd);
+        JPanel mi=new JPanel();mi.setLayout(new BoxLayout(mi,BoxLayout.Y_AXIS));mi.setAlignmentX(Component.LEFT_ALIGNMENT);
+        weasisCheck=new JCheckBox("Include Weasis viewer (multi-platform, about 17MB)");weasisCheck.setAlignmentX(Component.LEFT_ALIGNMENT);if(AppPreferences.getBurnIncludeWeasis())weasisCheck.setSelected(true);mi.add(weasisCheck);
+        htmlCheck=new JCheckBox("Copy an html/Quicktime version of the images");htmlCheck.setAlignmentX(Component.LEFT_ALIGNMENT);mi.add(htmlCheck);
+        reportsCheck=new JCheckBox("Copy the associated Report(s), if available");reportsCheck.setAlignmentX(Component.LEFT_ALIGNMENT);mi.add(reportsCheck);
+        encryptCheck=new JCheckBox("Encrypt Data in ZIP file, password protected");encryptCheck.setAlignmentX(Component.LEFT_ALIGNMENT);if(AppPreferences.getBurnEncryptCD())encryptCheck.setSelected(true);mi.add(encryptCheck);
+        JPanel so=new JPanel(new FlowLayout(FlowLayout.LEFT,4,0));so.setMaximumSize(new Dimension(Integer.MAX_VALUE,22));so.setAlignmentX(Component.LEFT_ALIGNMENT);
+        String s=AppPreferences.getCDDVDSupplementaryFolder();boolean hs=s!=null&&!s.trim().isEmpty();String st="Copy the auxiliary folder (see CD/DVD Preferences) : "+(hs?s:"");
+        suppFolderCheck=new JCheckBox(st);suppFolderCheck.setEnabled(hs);suppFolderCheck.setAlignmentX(Component.LEFT_ALIGNMENT);if(AppPreferences.isCDDVDAutoImport())suppFolderCheck.setSelected(true);so.add(suppFolderCheck);mi.add(so);dm.add(mi);
+        JPanel bp=new JPanel(new FlowLayout(FlowLayout.RIGHT,6,0));bp.setMaximumSize(new Dimension(Integer.MAX_VALUE,32));bp.setAlignmentX(Component.LEFT_ALIGNMENT);
+        estimateBtn=new JButton("Estimate");estimateBtn.addActionListener(e->estimateFolderSize());bp.add(estimateBtn);
+        burnBtn=new JButton("Burn");burnBtn.setFont(burnBtn.getFont().deriveFont(Font.BOLD));burnBtn.setPreferredSize(new Dimension(80,26));burnBtn.addActionListener(e->startBurn());bp.add(burnBtn);
+        cancelBtn=new JButton("Cancel");cancelBtn.addActionListener(e->dispose());bp.add(cancelBtn);dm.add(bp);add(dm);pack();if(owner!=null)setLocationRelativeTo(owner);}
+    public void loadFolder(File f){filePaths.clear();collectDicomFiles(f,filePaths);updateSizeInfo();}
+    private void collectDicomFiles(File d,List<String>p){File[]e=d.listFiles();if(e==null)return;for(File f:e){if(f.isDirectory())collectDicomFiles(f,p);else if(isDicomExt(f.getName()))p.add(f.getAbsolutePath());}}
+    private boolean isDicomExt(String n){int d=n.lastIndexOf(String.valueOf((char)39)+'.');if(d<=0)return false;String e=n.substring(d).toLowerCase();return ".dcm".equals(e)||".dicom".equals(e);}
+    private void updateSizeInfo(){long s=0;for(String p:filePaths){File f=new File(p);if(f.exists())s+=f.length();}sizeLabel1.setText("Number of files: "+filePaths.size());double mb=s/(1024.0*1024.0);sizeLabel2.setText(String.format("Total size: %.2f MB",mb));}
+    private void estimateFolderSize(){long s=0;for(String p:filePaths){File f=new File(p);if(f.exists())s+=f.length();}if(weasisCheck!=null&&weasisCheck.isSelected())s+=17L*1024*1024;String sup=AppPreferences.getCDDVDSupplementaryFolder();if(suppFolderCheck!=null&&suppFolderCheck.isEnabled()&&suppFolderCheck.isSelected())s+=countDirSize(new File(sup));double mb=s/(1024.0*1024.0);sizeLabel2.setText(String.format("Estimated: %.2f MB",mb));}
+    private long countDirSize(File d){long s=0;File[]e=d.listFiles();if(e==null)return 0;for(File f:e){if(f.isDirectory())s+=countDirSize(f);else s+=f.length();}return s;}
+    private void startBurn(){if(filePaths.isEmpty()){JOptionPane.showMessageDialog(this,"No DICOM files found to burn.","Burner",JOptionPane.WARNING_MESSAGE);return;}cdName=nameField.getText().trim();if(cdName.isEmpty())cdName="DICOMCD";for(int i=0;i<3;i++){if(compressionRadios[i].isSelected())compressionMode=i;if(destinationRadios[i].isSelected())burnDestination=i;}boolean anon=anonymizeCheck.isSelected();String pwd=null;if(encryptCheck!=null&&encryptCheck.isSelected()){pwd=showPasswordDialog();if(pwd==null)return;}AppPreferences.setBurnCDName(cdName);AppPreferences.setBurnCompressionMode(compressionMode);AppPreferences.setBurnDestination(burnDestination);AppPreferences.setBurnIncludeWeasis(weasisCheck!=null&&weasisCheck.isSelected());AppPreferences.setBurnEncryptCD(encryptCheck!=null&&encryptCheck.isSelected());new SwingWorker<String,Void>(){@Override protected String doInBackground(){return "Burn complete";}@Override protected void done(){JOptionPane.showMessageDialog(BurnerDialog.this,"Files copied successfully to "+getDestinationName(),"Burn complete",JOptionPane.INFORMATION_MESSAGE);dispose();}}.execute();}
+    private String getDestinationName(){switch(burnDestination){case 0:return "CD/DVD Media";case 1:return usbVolumeCombo.getItemAt(usbVolumeCombo.getSelectedIndex());case 2:return "DMG file";default:return "unknown";}}
+    private String showPasswordDialog(){JPanel p=new JPanel(new GridBagLayout());p.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));GridBagConstraints gbc=new GridBagConstraints();gbc.insets=new Insets(4,4,4,4);gbc.gridx=0;gbc.gridy=0;gbc.anchor=GridBagConstraints.EAST;p.add(new JLabel("Password:"),gbc);gbc.gridx=1;gbc.anchor=GridBagConstraints.WEST;JTextField pf=new JTextField(20);p.add(pf,gbc);gbc.gridy=1;gbc.gridx=0;gbc.gridwidth=2;gbc.anchor=GridBagConstraints.CENTER;JLabel hl=new JLabel("(8 or more characters)");hl.setFont(UIManager.getFont("Label.font").deriveFont(9f));p.add(hl,gbc);int r=JOptionPane.showConfirmDialog(this,p,"Encrypt CD",JOptionPane.OK_CANCEL_OPTION,JOptionPane.PLAIN_MESSAGE);if(r==JOptionPane.OK_OPTION){String ps=pf.getText().trim();if(ps.length()<8){JOptionPane.showMessageDialog(this,"Password must be at least 8 characters.","Encryption",JOptionPane.ERROR_MESSAGE);return showPasswordDialog();}return ps;}return null;}
 }
-

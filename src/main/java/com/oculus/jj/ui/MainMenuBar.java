@@ -101,6 +101,9 @@ public class MainMenuBar extends JMenuBar {
         orientationMenu.add(makeItem("Coronal", e -> setOrientation("Coronal")));
         orientationMenu.add(makeItem("Sagittal", e -> setOrientation("Sagittal")));
         viewMenu.add(orientationMenu);
+        // Orthogonal MPR - 3D volume直交断面表示
+        JMenuItem mprItem = makeItem("Orthogonal MPR", e -> openOrthogonalMPR());
+        viewMenu.add(mprItem);
 
         advancedMenu = new JMenu("Advanced");
         mip3dItem = makeItem("3D MIP", e -> open3DMIP());
@@ -195,6 +198,8 @@ public class MainMenuBar extends JMenuBar {
     private void open3DVR() { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) Viewer3DController.openVR(v.getController()); }
     private void openCPR()  { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) CPRController.openCurved(v.getController()); }
 
+    private void openOrthogonalMPR() { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) MPRController.openOrthogonal(v.getController()); }
+
     public void tileImages(String layout) { String[] parts = layout.split("x");
         if (parts.length == 2) { int rows = Integer.parseInt(parts[0]); int cols = Integer.parseInt(parts[1]); BrowserController bc = BrowserController.currentBrowser(); if (bc != null) bc.getMatrix().renewRows(rows, cols); } }
 
@@ -236,7 +241,3 @@ public class MainMenuBar extends JMenuBar {
 
     public ViewType getCurrentViewType() { return currentViewType; }
 }
-
-
-
-

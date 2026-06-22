@@ -32,6 +32,12 @@ public class AppPreferences {
     public static final String KEY_CDDVD_AUTO_IMPORT = "cddvd.autoImportFromInsertedDiscs";
     public static final String KEY_CDDVD_PREFER_STD_JPEG = "cddvd.preferStdJPEG";
     public static final String KEY_CDDVD_SUPPLEMENTARY_FOLDER = "cddvd.supplementaryFolder";
+    // === Burn preference keys ===
+    public static final String KEY_BURN_CD_NAME = "burn.cdName";
+    public static final String KEY_BURN_COMPRESSION_MODE = "burn.compressionMode";
+    public static final String KEY_BURN_DESTINATION = "burn.destination";
+    public static final String KEY_BURN_INCLUDE_WEASIS = "burn.includeWeasis";
+    public static final String KEY_BURN_ENCRYPT_CD = "burn.encryptCD";
 
     // === Hanging Protocol preference keys ===
     public static final String KEY_HANGING_MODALITY = "hanging.defaultModality";
@@ -56,6 +62,9 @@ public class AppPreferences {
     public static final String KEY_PET_CLUT_BW_INVERSE = "pet.clutBwInverse";
     public static final String KEY_PET_DEFAULT_TRANSFER_FUNC = "pet.defaultTransferFunction";
     public static final String KEY_PET_APPLY_TO_NM = "pet.applyToNMModality";
+    // === Fusion (PET/CT) preferences ===
+    public static final String KEY_FUSION_MODE = "fusion.mode";
+    public static final String KEY_FUSION_WEIGHT = "fusion.weight";
 
     // === Annotations preference keys ===
     public static final String KEY_ANNOTATION_STYLE = "annotations.defaultStyle";
@@ -93,6 +102,19 @@ public class AppPreferences {
     private static final int DEFAULT_ROI_COLOR = Color.YELLOW.getRGB();
 
     /** デフォルトのDICOMフォルダパス */
+    // --- Fusion preferences ---
+    public static com.oculus.jj.model.FusionImageProcessor.FusionMode getFusionMode() {
+        String modeStr = prefs.get(KEY_FUSION_MODE, "COLOR");
+        try { return com.oculus.jj.model.FusionImageProcessor.FusionMode.valueOf(modeStr); }
+        catch (IllegalArgumentException e) { return com.oculus.jj.model.FusionImageProcessor.FusionMode.COLOR; }
+    }
+    public static void setFusionMode(com.oculus.jj.model.FusionImageProcessor.FusionMode mode) {
+        prefs.put(KEY_FUSION_MODE, mode.name());
+    }
+
+    public static double getFusionWeight() { return prefs.getDouble(KEY_FUSION_WEIGHT, 0.5); }
+    public static void setFusionWeight(double weight) { prefs.putDouble(KEY_FUSION_WEIGHT, weight); }
+
     public static String getDefaultDicomFolder() { return ConfigManager.DEFAULT_DICOM_FOLDER; }
 
     /** デフォルトのデータベースフォルダパス */
@@ -144,6 +166,22 @@ public class AppPreferences {
 
     public static String getCDDVDSupplementaryFolder() { return prefs.get(KEY_CDDVD_SUPPLEMENTARY_FOLDER, ""); }
     public static void setCDDVDSupplementaryFolder(String folder) { prefs.put(KEY_CDDVD_SUPPLEMENTARY_FOLDER, folder); }
+
+    // --- Burn ---
+    public static String getBurnCDName() { return prefs.get(KEY_BURN_CD_NAME, "DICOMCD"); }
+    public static void setBurnCDName(String name) { prefs.put(KEY_BURN_CD_NAME, name); }
+    
+    public static int getBurnCompressionMode() { return prefs.getInt(KEY_BURN_COMPRESSION_MODE, 0); } // 0=no change
+    public static void setBurnCompressionMode(int mode) { prefs.putInt(KEY_BURN_COMPRESSION_MODE, mode); }
+    
+    public static int getBurnDestination() { return prefs.getInt(KEY_BURN_DESTINATION, 0); } // 0=CD/DVD media
+    public static void setBurnDestination(int dest) { prefs.putInt(KEY_BURN_DESTINATION, dest); }
+    
+    public static boolean getBurnIncludeWeasis() { return prefs.getBoolean(KEY_BURN_INCLUDE_WEASIS, false); }
+    public static void setBurnIncludeWeasis(boolean include) { prefs.putBoolean(KEY_BURN_INCLUDE_WEASIS, include); }
+    
+    public static boolean getBurnEncryptCD() { return prefs.getBoolean(KEY_BURN_ENCRYPT_CD, false); }
+    public static void setBurnEncryptCD(boolean encrypt) { prefs.putBoolean(KEY_BURN_ENCRYPT_CD, encrypt); }
 
     // --- Hanging Protocols ---
     public static int getHangingModalityIndex() { return prefs.getInt(KEY_HANGING_MODALITY, 1); } // CT
