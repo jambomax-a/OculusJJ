@@ -39,8 +39,9 @@ public class BurnerDialog extends JDialog {
         String[] dl2={"CD/DVD Media","USB Key:","Save as DMG file"};destinationRadios=new JRadioButton[3];
         for(int i=0;i<3;i++){destinationRadios[i]=new JRadioButton(dl2[i],i==0);destinationGroup.add(destinationRadios[i]);destinationRadios[i].setAlignmentX(Component.LEFT_ALIGNMENT);dp.add(destinationRadios[i]);}
         usbVolumeCombo=new JComboBox<>();usbVolumeCombo.setMaximumSize(new Dimension(80,24));usbVolumeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);usbVolumeCombo.setVisible(false);dp.add(Box.createVerticalStrut(3));dp.add(usbVolumeCombo);
-        JPanel cd=new JPanel(new GridBagLayout());cd.setMaximumSize(new Dimension(Integer.MAX_VALUE,70));cd.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel cd=new JPanel(new GridBagLayout());cd.setAlignmentX(Component.LEFT_ALIGNMENT);
         gbc.gridx=0;gbc.fill=GridBagConstraints.BOTH;gbc.weightx=0.5;cd.add(cp,gbc);gbc.gridx=1;cd.add(dp,gbc);dm.add(cd);
+        dm.add(Box.createVerticalStrut(5));
         JPanel mi=new JPanel();mi.setLayout(new BoxLayout(mi,BoxLayout.Y_AXIS));mi.setAlignmentX(Component.LEFT_ALIGNMENT);
         weasisCheck=new JCheckBox("Include Weasis viewer (multi-platform, about 17MB)");weasisCheck.setAlignmentX(Component.LEFT_ALIGNMENT);if(AppPreferences.getBurnIncludeWeasis())weasisCheck.setSelected(true);mi.add(weasisCheck);
         htmlCheck=new JCheckBox("Copy an html/Quicktime version of the images");htmlCheck.setAlignmentX(Component.LEFT_ALIGNMENT);mi.add(htmlCheck);

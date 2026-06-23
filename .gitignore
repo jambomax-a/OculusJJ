@@ -48,6 +48,14 @@ Desktop.ini
 *.temp
 *~
 *.bak
+AGENTS.md
+build_attempt*.txt
+build_error*.txt
+current_errors.txt
+errors_log.txt
+output_compile.txt
+roi_string_search.txt
+taxis_search.txt
 *error*.txt
 current_errors.txt
 errors_log.txt
