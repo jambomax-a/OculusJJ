@@ -6440,11 +6440,14 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: MainMenu.xib 69-397行目（Fileメニュー）
      */
     private void initializeMenuBar() {
+        String langCode = com.oculus.jj.config.AppPreferences.getAppLanguage().equals("ja") ? "ja" : "en";
+        java.util.Locale locale = new java.util.Locale(langCode);
+        MenuResourceLoader.initialize(locale);
         javax.swing.JMenuBar menuBar = new javax.swing.JMenuBar();
 
         // ========== Fileメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 69行目 <menuItem title="File" id="848">
-        javax.swing.JMenu fileMenu = new javax.swing.JMenu("File");
+        javax.swing.JMenu fileMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.file"));
 
         // Show Database Window
         // HOROS-20240407準拠: MainMenu.xib 72行目
@@ -6461,7 +6464,7 @@ public class BrowserController extends JFrame {
 
         // Toggle History drawer
         // HOROS-20240407準拠: MainMenu.xib 83行目
-        javax.swing.JMenuItem comparativeToggleItem = new javax.swing.JMenuItem("Toggle History drawer");
+        javax.swing.JMenuItem comparativeToggleItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.history"));
         comparativeToggleItem.addActionListener(e -> comparativeToggle(null));
         fileMenu.add(comparativeToggleItem);
 
@@ -6469,7 +6472,7 @@ public class BrowserController extends JFrame {
 
         // Preferences...
         // HOROS-20240407準拠: Preferences window access
-        javax.swing.JMenuItem prefMenuItem = new javax.swing.JMenuItem("Preferences...");
+        javax.swing.JMenuItem prefMenuItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.file.preferences"));
         prefMenuItem.addActionListener(e -> PreferencesController.showFrame(this));
         fileMenu.add(prefMenuItem);
 
@@ -6491,7 +6494,7 @@ public class BrowserController extends JFrame {
 
         // Albums サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 105行目
-        javax.swing.JMenu albumsMenu = new javax.swing.JMenu("Albums");
+        javax.swing.JMenu albumsMenu = new javax.swing.JMenu(MenuResourceLoader.getString("file.albums"));
 
         // Add an album...
         // HOROS-20240407準拠: MainMenu.xib 109行目
@@ -6545,7 +6548,7 @@ public class BrowserController extends JFrame {
 
         // Report サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 153行目
-        javax.swing.JMenu reportMenu = new javax.swing.JMenu("Report");
+        javax.swing.JMenu reportMenu = new javax.swing.JMenu(MenuResourceLoader.getString("file.report"));
 
         // Open report
         // HOROS-20240407準拠: MainMenu.xib 156行目
@@ -6581,24 +6584,24 @@ public class BrowserController extends JFrame {
 
         // Import サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 185行目
-        javax.swing.JMenu importMenu = new javax.swing.JMenu("Import");
+        javax.swing.JMenu importMenu = new javax.swing.JMenu(MenuResourceLoader.getString("file.import"));
 
         // Import Files...
         // HOROS-20240407準拠: MainMenu.xib 188行目
-        javax.swing.JMenuItem importFilesItem = new javax.swing.JMenuItem("Import Files...");
+        javax.swing.JMenuItem importFilesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.import_files"));
         importFilesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_O, 0));
         importFilesItem.addActionListener(e -> importFilesFromDialog());
         importMenu.add(importFilesItem);
 
         // Import Image from URL...
         // HOROS-20240407準拠: MainMenu.xib 198行目
-        javax.swing.JMenuItem importURLItem = new javax.swing.JMenuItem("Import Image from URL...");
+        javax.swing.JMenuItem importURLItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.import_image_url"));
         importURLItem.addActionListener(e -> { importImageFromURL(); });
         importMenu.add(importURLItem);
 
         // Import Raw Data...
         // HOROS-20240407準拠: MainMenu.xib 209行目
-        javax.swing.JMenuItem importRawDataItem = new javax.swing.JMenuItem("Import Raw Data...");
+        javax.swing.JMenuItem importRawDataItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.import_raw_data"));
         importRawDataItem.addActionListener(e -> importRawData(null));
         importMenu.add(importRawDataItem);
 
@@ -6606,18 +6609,18 @@ public class BrowserController extends JFrame {
 
         // Export サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 222行目
-        javax.swing.JMenu exportMenu = new javax.swing.JMenu("Export");
+        javax.swing.JMenu exportMenu = new javax.swing.JMenu(MenuResourceLoader.getString("file.export"));
 
         // Export to DICOM Network Node
         // HOROS-20240407準拠: MainMenu.xib 225行目
-        javax.swing.JMenuItem export2PACSItem = new javax.swing.JMenuItem("Export to DICOM Network Node");
+        javax.swing.JMenuItem export2PACSItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.export_pacs"));
         export2PACSItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
         export2PACSItem.addActionListener(e -> { exportToPACS(); });
         exportMenu.add(export2PACSItem);
 
         // Export to Movie
         // HOROS-20240407準拠: MainMenu.xib 230行目
-        javax.swing.JMenuItem exportMovieItem = new javax.swing.JMenuItem("Export to Movie");
+        javax.swing.JMenuItem exportMovieItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.export_movie"));
         exportMovieItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
         exportMovieItem.addActionListener(e -> { MoviePlaybackPanel.showMoviePanel(BrowserController.this, getActiveDCMViewForEdit()); });
         exportMenu.add(exportMovieItem);
@@ -6676,7 +6679,7 @@ public class BrowserController extends JFrame {
 
         // Burn...
         // HOROS-20240407準拠: MainMenu.xib 277行目
-        javax.swing.JMenuItem burnItem = new javax.swing.JMenuItem("Burn...");
+        javax.swing.JMenuItem burnItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.burn"));
         burnItem.addActionListener(e -> {
             BurnerDialog.showBurnerDialog(BrowserController.this);
         });
@@ -6690,13 +6693,13 @@ public class BrowserController extends JFrame {
 
         // Copy Linked Files to Database Folder
         // HOROS-20240407準拠: MainMenu.xib 287行目
-        javax.swing.JMenuItem copyToDBFolderItem = new javax.swing.JMenuItem("Copy Linked Files to Database Folder");
+        javax.swing.JMenuItem copyToDBFolderItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.copy_to_db_folder"));
         copyToDBFolderItem.addActionListener(e -> copyToDBFolder(null));
         fileMenu.add(copyToDBFolderItem);
 
         // Search
         // HOROS-20240407準拠: MainMenu.xib 292行目
-        javax.swing.JMenuItem searchItem = new javax.swing.JMenuItem("Search");
+        javax.swing.JMenuItem searchItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.search"));
         searchItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK));
         searchItem.addActionListener(e -> searchField(null));
@@ -6704,19 +6707,19 @@ public class BrowserController extends JFrame {
 
         // Merge Selected Studies
         // HOROS-20240407準拠: MainMenu.xib 298行目
-        javax.swing.JMenuItem mergeStudiesItem = new javax.swing.JMenuItem("Merge Selected Studies");
+        javax.swing.JMenuItem mergeStudiesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.merge_studies"));
         mergeStudiesItem.addActionListener(e -> mergeStudies(null));
         fileMenu.add(mergeStudiesItem);
 
         // Delete Selected Exam
         // HOROS-20240407準拠: MainMenu.xib 303行目
-        javax.swing.JMenuItem deleteExamItem = new javax.swing.JMenuItem("Delete Selected Exam");
+        javax.swing.JMenuItem deleteExamItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.delete_exam"));
         deleteExamItem.addActionListener(e -> delItem(null));
         fileMenu.add(deleteExamItem);
 
         // Meta-Data...
         // HOROS-20240407準拠: MainMenu.xib 308行目
-        javax.swing.JMenuItem metaDataItem = new javax.swing.JMenuItem("Meta-Data...");
+        javax.swing.JMenuItem metaDataItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.meta_data"));
         metaDataItem.addActionListener(e -> viewXML(null));
         fileMenu.add(metaDataItem);
 
@@ -6724,13 +6727,13 @@ public class BrowserController extends JFrame {
 
         // Compress selected DICOM files
         // HOROS-20240407準拠: MainMenu.xib 316行目
-        javax.swing.JMenuItem compressFilesItem = new javax.swing.JMenuItem("Compress selected DICOM files");
+        javax.swing.JMenuItem compressFilesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.compress"));
         compressFilesItem.addActionListener(e -> compressSelectedFiles(null));
         fileMenu.add(compressFilesItem);
 
         // Decompress selected DICOM files
         // HOROS-20240407準拠: MainMenu.xib 321行目
-        javax.swing.JMenuItem decompressFilesItem = new javax.swing.JMenuItem("Decompress selected DICOM files");
+        javax.swing.JMenuItem decompressFilesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.decompress"));
         decompressFilesItem.addActionListener(e -> decompressSelectedFiles(null));
         fileMenu.add(decompressFilesItem);
 
@@ -6738,20 +6741,20 @@ public class BrowserController extends JFrame {
 
         // Rebuild Entire Database...
         // HOROS-20240407準拠: MainMenu.xib 329行目
-        javax.swing.JMenuItem rebuildDatabaseItem = new javax.swing.JMenuItem("Rebuild Entire Database...");
+        javax.swing.JMenuItem rebuildDatabaseItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.rebuild_db"));
         rebuildDatabaseItem.addActionListener(e -> ReBuildDatabaseSheet(null));
         fileMenu.add(rebuildDatabaseItem);
 
         // Rebuild SQL Index File...
         // HOROS-20240407準拠: MainMenu.xib 347行目
-        javax.swing.JMenuItem rebuildSQLItem = new javax.swing.JMenuItem("Rebuild SQL Index File...");
+        javax.swing.JMenuItem rebuildSQLItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.rebuild_sql"));
         rebuildSQLItem.addActionListener(e -> {
         });
         fileMenu.add(rebuildSQLItem);
 
         // Rebuild Selected Thumbnails
         // HOROS-20240407準拠: MainMenu.xib 365行目
-        javax.swing.JMenuItem rebuildThumbnailsItem = new javax.swing.JMenuItem("Rebuild Selected Thumbnails");
+        javax.swing.JMenuItem rebuildThumbnailsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.rebuild_thumbnails"));
         rebuildThumbnailsItem.addActionListener(e -> rebuildThumbnails(null));
         fileMenu.add(rebuildThumbnailsItem);
 
@@ -6759,7 +6762,7 @@ public class BrowserController extends JFrame {
 
         // Close Window
         // HOROS-20240407準拠: MainMenu.xib 373行目
-        javax.swing.JMenuItem closeWindowItem = new javax.swing.JMenuItem("Close Window");
+        javax.swing.JMenuItem closeWindowItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.close_window"));
         closeWindowItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W, 0));
         closeWindowItem.addActionListener(e -> dispose());
         fileMenu.add(closeWindowItem);
@@ -6768,7 +6771,7 @@ public class BrowserController extends JFrame {
 
         // Page Setup...
         // HOROS-20240407準拠: MainMenu.xib 381行目
-        javax.swing.JMenuItem pageSetupItem = new javax.swing.JMenuItem("Page Setup...");
+        javax.swing.JMenuItem pageSetupItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.file.page_setup"));
         pageSetupItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         pageSetupItem.addActionListener(e -> {
@@ -6777,7 +6780,7 @@ public class BrowserController extends JFrame {
 
         // Print...
         // HOROS-20240407準拠: MainMenu.xib 386行目
-        javax.swing.JMenuItem printItem = new javax.swing.JMenuItem("Print...");
+        javax.swing.JMenuItem printItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.file.print"));
         printItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P, 0));
         printItem.addActionListener(e -> {
         });
@@ -6785,7 +6788,7 @@ public class BrowserController extends JFrame {
 
         // DICOM Print...
         // HOROS-20240407準拠: MainMenu.xib 391行目
-        javax.swing.JMenuItem dicomPrintItem = new javax.swing.JMenuItem("DICOM Print...");
+        javax.swing.JMenuItem dicomPrintItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.file.dicom_print"));
         dicomPrintItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK));
         dicomPrintItem.addActionListener(e -> {
@@ -6796,11 +6799,11 @@ public class BrowserController extends JFrame {
 
         // ========== Networkメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 400行目
-        javax.swing.JMenu networkMenu = new javax.swing.JMenu("Network");
+        javax.swing.JMenu networkMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.network"));
 
         // Export to DICOM Network Node
         // HOROS-20240407準拠: MainMenu.xib 404行目
-        javax.swing.JMenuItem networkExport2PACSItem = new javax.swing.JMenuItem("Export to DICOM Network Node");
+        javax.swing.JMenuItem networkExport2PACSItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.export_pacs"));
         networkExport2PACSItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, 0));
         networkExport2PACSItem.addActionListener(e -> { exportToPACS(); });
         networkMenu.add(networkExport2PACSItem);
@@ -6809,7 +6812,7 @@ public class BrowserController extends JFrame {
 
         // Query / Retrieve Window...
         // HOROS-20240407準拠: MainMenu.xib 412行目
-        javax.swing.JMenuItem queryDICOMItem = new javax.swing.JMenuItem("Query / Retrieve Window...");
+        javax.swing.JMenuItem queryDICOMItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.query_retrieve"));
         queryDICOMItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK));
         queryDICOMItem.addActionListener(e -> {
@@ -6831,13 +6834,13 @@ public class BrowserController extends JFrame {
 
         // Auto Query / Retrieve Window...
         // HOROS-20240407準拠: MainMenu.xib 427行目
-        javax.swing.JMenuItem autoQueryItem = new javax.swing.JMenuItem("Auto Query / Retrieve Window...");
+        javax.swing.JMenuItem autoQueryItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.auto_query"));
         autoQueryItem.addActionListener(e -> { JOptionPane.showMessageDialog(BrowserController.this, "Auto-query scheduling pending", "Network", JOptionPane.INFORMATION_MESSAGE); });
         networkMenu.add(autoQueryItem);
 
         // Auto Query / Retrieve Refresh
         // HOROS-20240407準拠: MainMenu.xib 433行目
-        javax.swing.JMenuItem autoQueryRefreshItem = new javax.swing.JMenuItem("Auto Query / Retrieve Refresh");
+        javax.swing.JMenuItem autoQueryRefreshItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.auto_query_refresh"));
         autoQueryRefreshItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
         autoQueryRefreshItem.addActionListener(e -> {
             JOptionPane.showMessageDialog(BrowserController.this, "Auto-Query scheduling pending", "Network", JOptionPane.INFORMATION_MESSAGE);
@@ -6848,13 +6851,13 @@ public class BrowserController extends JFrame {
 
         // Retrieve selected PACS On-Demand studies
         // HOROS-20240407準拠: MainMenu.xib 441行目
-        javax.swing.JMenuItem retrievePODItem = new javax.swing.JMenuItem("Retrieve selected PACS On-Demand studies");
+        javax.swing.JMenuItem retrievePODItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.retrieve_pod"));
         retrievePODItem.addActionListener(e -> retrieveSelectedPODStudies(null));
         networkMenu.add(retrievePODItem);
 
         // Refresh PACS On-Demand results
         // HOROS-20240407準拠: MainMenu.xib 447行目
-        javax.swing.JMenuItem refreshPODItem = new javax.swing.JMenuItem("Refresh PACS On-Demand results");
+        javax.swing.JMenuItem refreshPODItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.refresh_pod"));
         refreshPODItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Y, 0));
         refreshPODItem.addActionListener(e -> refreshPACSOnDemandResults(null));
         networkMenu.add(refreshPODItem);
@@ -6876,7 +6879,7 @@ public class BrowserController extends JFrame {
 
         // Network Logs
         // HOROS-20240407準拠: MainMenu.xib 464行目
-        javax.swing.JMenuItem networkLogsItem = new javax.swing.JMenuItem("Network Logs");
+        javax.swing.JMenuItem networkLogsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.network.logs"));
         networkLogsItem.addActionListener(e -> showLogWindow(null));
         networkMenu.add(networkLogsItem);
 
@@ -6884,7 +6887,7 @@ public class BrowserController extends JFrame {
 
         // Preferences...
         // HOROS-20240407準拠: AppController.m (showPreferencePanel)
-        javax.swing.JMenuItem preferencesItem = new javax.swing.JMenuItem("Preferences...");
+        javax.swing.JMenuItem preferencesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.file.preferences"));
         preferencesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_COMMA,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK));
         preferencesItem.addActionListener(e -> {
@@ -6892,7 +6895,7 @@ public class BrowserController extends JFrame {
         });
         networkMenu.add(preferencesItem);
         // PACS Query Settings
-        javax.swing.JMenuItem pacsQuerySettingsItem = new javax.swing.JMenuItem("PACS Query Settings...");
+        javax.swing.JMenuItem pacsQuerySettingsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.pacs_settings"));
         pacsQuerySettingsItem.addActionListener(e -> { com.oculus.jj.ui.PACSQuerySettingsDialog.showPACSQuerySettingsDialog(BrowserController.this); });
         networkMenu.add(pacsQuerySettingsItem);
 
@@ -6902,11 +6905,11 @@ public class BrowserController extends JFrame {
 
         // ========== Editメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 472行目
-        javax.swing.JMenu editMenu = new javax.swing.JMenu("Edit");
+        javax.swing.JMenu editMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.edit"));
 
         // Undo
         // HOROS-20240407準拠: MainMenu.xib 475行目
-        javax.swing.JMenuItem undoItem = new javax.swing.JMenuItem("Undo");
+        javax.swing.JMenuItem undoItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.edit.undo"));
         undoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Z, 0));
         undoItem.addActionListener(e -> {
             DCMView view = getActiveDCMViewForEdit();
@@ -6928,7 +6931,7 @@ public class BrowserController extends JFrame {
 
         // Redo
         // HOROS-20240407準拠: MainMenu.xib 480行目
-        javax.swing.JMenuItem redoItem = new javax.swing.JMenuItem("Redo");
+        javax.swing.JMenuItem redoItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.edit.redo"));
         redoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_Z,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         redoItem.addActionListener(e -> {
@@ -6946,27 +6949,27 @@ public class BrowserController extends JFrame {
 
         // Cut
         // HOROS-20240407準拠: MainMenu.xib 488行目
-        javax.swing.JMenuItem cutItem = new javax.swing.JMenuItem("Cut");
+        javax.swing.JMenuItem cutItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.edit.cut"));
         cutItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_X, 0));
         editMenu.add(cutItem);
 
         // Copy
         // HOROS-20240407準拠: MainMenu.xib 493行目
-        javax.swing.JMenuItem copyItem = new javax.swing.JMenuItem("Copy");
+        javax.swing.JMenuItem copyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.edit.copy"));
         copyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_C, 0));
         copyItem.addActionListener(e -> copy(null));
         editMenu.add(copyItem);
 
         // Paste
         // HOROS-20240407準拠: MainMenu.xib 498行目
-        javax.swing.JMenuItem pasteItem = new javax.swing.JMenuItem("Paste");
+        javax.swing.JMenuItem pasteItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.edit.paste"));
         pasteItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_V, 0));
         pasteItem.addActionListener(e -> paste(null));
         editMenu.add(pasteItem);
 
         // Select All
         // HOROS-20240407準拠: MainMenu.xib 503行目
-        javax.swing.JMenuItem selectAllItem = new javax.swing.JMenuItem("Select All");
+        javax.swing.JMenuItem selectAllItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.edit.select_all"));
         selectAllItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
         selectAllItem.addActionListener(e -> {
             DCMView view = getActiveDCMViewForEdit();
@@ -6982,11 +6985,11 @@ public class BrowserController extends JFrame {
 
         // ========== Formatメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 511行目
-        javax.swing.JMenu formatMenu = new javax.swing.JMenu("Format");
+        javax.swing.JMenu formatMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.format"));
 
         // Customize Toolbar...
         // HOROS-20240407準拠: MainMenu.xib 514行目
-        javax.swing.JMenuItem customizeToolbarItem = new javax.swing.JMenuItem("Customize Toolbar...");
+        javax.swing.JMenuItem customizeToolbarItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.format.customize_toolbar"));
         customizeToolbarItem.addActionListener(e -> {
             JOptionPane.showMessageDialog(BrowserController.this, "Customize Toolbar - not yet implemented", "Format", JOptionPane.INFORMATION_MESSAGE);
         });
@@ -7010,7 +7013,7 @@ public class BrowserController extends JFrame {
 
         // Font サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 527行目
-        javax.swing.JMenu fontMenu = new javax.swing.JMenu("Font");
+        javax.swing.JMenu fontMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.font"));
 
         // Show Fonts
         // HOROS-20240407準拠: MainMenu.xib 530行目
@@ -7022,7 +7025,7 @@ public class BrowserController extends JFrame {
 
         // Bold
         // HOROS-20240407準拠: MainMenu.xib 536行目
-        javax.swing.JMenuItem boldItem = new javax.swing.JMenuItem("Bold");
+        javax.swing.JMenuItem boldItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.font.bold"));
         boldItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_B, 0));
         boldItem.addActionListener(e -> {
             DCMView view = getActiveDCMViewForEdit();
@@ -7037,7 +7040,7 @@ public class BrowserController extends JFrame {
         });
         fontMenu.add(boldItem);
         // HOROS-20240407準拠: MainMenu.xib 541行目
-        javax.swing.JMenuItem italicItem = new javax.swing.JMenuItem("Italic");
+        javax.swing.JMenuItem italicItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.font.italic"));
         italicItem.addActionListener(e -> {
             DCMView view = getActiveDCMViewForEdit();
             if (view != null) {
@@ -7050,7 +7053,7 @@ public class BrowserController extends JFrame {
 
         fontMenu.addSeparator();
 
-        javax.swing.JMenuItem biggerItem = new javax.swing.JMenuItem("Bigger");
+        javax.swing.JMenuItem biggerItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.font.bigger"));
         biggerItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PLUS, 0));
         // Bigger
         biggerItem.addActionListener(e -> {
@@ -7066,7 +7069,7 @@ public class BrowserController extends JFrame {
             try { prefs.flush(); } catch (Exception ex) {}
         });
         fontMenu.add(biggerItem);
-        javax.swing.JMenuItem smallerItem = new javax.swing.JMenuItem("Smaller");
+        javax.swing.JMenuItem smallerItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.font.smaller"));
         smallerItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_MINUS, 0));
         // Smaller
         // HOROS-20240407準拠: MainMenu.xib 555行目
@@ -7087,7 +7090,7 @@ public class BrowserController extends JFrame {
 
         // Show Colors
         // HOROS-20240407準拠: MainMenu.xib 563行目
-        javax.swing.JMenuItem showColorsItem = new javax.swing.JMenuItem("Show Colors");
+        javax.swing.JMenuItem showColorsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.show_colors"));
         showColorsItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_C,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         showColorsItem.addActionListener(e -> {
@@ -7106,29 +7109,29 @@ public class BrowserController extends JFrame {
 
         // ========== 2D Viewerメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 574行目
-        javax.swing.JMenu viewer2DMenu = new javax.swing.JMenu("2D Viewer");
+        javax.swing.JMenu viewer2DMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.viewer_2d"));
 
         // Next Series
         // HOROS-20240407準拠: MainMenu.xib 577行目
-        javax.swing.JMenuItem nextSeriesItem = new javax.swing.JMenuItem("Next Series");
+        javax.swing.JMenuItem nextSeriesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.next_series"));
         nextSeriesItem.addActionListener(e -> loadSerie(null));
         viewer2DMenu.add(nextSeriesItem);
 
         // Previous Series
         // HOROS-20240407準拠: MainMenu.xib 582行目
-        javax.swing.JMenuItem previousSeriesItem = new javax.swing.JMenuItem("Previous Series");
+        javax.swing.JMenuItem previousSeriesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.previous_series"));
         previousSeriesItem.addActionListener(e -> loadSerie(null));
         viewer2DMenu.add(previousSeriesItem);
 
         // Next Patient
         // HOROS-20240407準拠: MainMenu.xib 587行目
-        javax.swing.JMenuItem nextPatientItem = new javax.swing.JMenuItem("Next Patient");
+        javax.swing.JMenuItem nextPatientItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.next_patient"));
         nextPatientItem.addActionListener(e -> loadPatient(null));
         viewer2DMenu.add(nextPatientItem);
 
         // Previous Patient
         // HOROS-20240407準拠: MainMenu.xib 593行目
-        javax.swing.JMenuItem previousPatientItem = new javax.swing.JMenuItem("Previous Patient");
+        javax.swing.JMenuItem previousPatientItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.previous_patient"));
         previousPatientItem.addActionListener(e -> loadPatient(null));
         viewer2DMenu.add(previousPatientItem);
 
@@ -7136,39 +7139,39 @@ public class BrowserController extends JFrame {
 
         // Convert between BW / RGB サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 607行目
-        javax.swing.JMenu convertBWRGBMenu = new javax.swing.JMenu("Convert between BW / RGB");
+        javax.swing.JMenu convertBWRGBMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.color.convert_bw_rgb"));
 
-        javax.swing.JMenuItem redToBWItem = new javax.swing.JMenuItem("Red ->BW");
+        javax.swing.JMenuItem redToBWItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.red_to_bw"));
         redToBWItem.addActionListener(e -> ConvertToBWMenu(null));
         convertBWRGBMenu.add(redToBWItem);
 
-        javax.swing.JMenuItem greenToBWItem = new javax.swing.JMenuItem("Green ->BW");
+        javax.swing.JMenuItem greenToBWItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.green_to_bw"));
         greenToBWItem.addActionListener(e -> ConvertToBWMenu(null));
         convertBWRGBMenu.add(greenToBWItem);
 
-        javax.swing.JMenuItem blueToBWItem = new javax.swing.JMenuItem("Blue ->BW");
+        javax.swing.JMenuItem blueToBWItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.blue_to_bw"));
         blueToBWItem.addActionListener(e -> ConvertToBWMenu(null));
         convertBWRGBMenu.add(blueToBWItem);
 
-        javax.swing.JMenuItem rgbToBWItem = new javax.swing.JMenuItem("RGB ->BW");
+        javax.swing.JMenuItem rgbToBWItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.rgb_to_bw"));
         rgbToBWItem.addActionListener(e -> ConvertToBWMenu(null));
         convertBWRGBMenu.add(rgbToBWItem);
 
         convertBWRGBMenu.addSeparator();
 
-        javax.swing.JMenuItem bwToRedItem = new javax.swing.JMenuItem("BW -> Red");
+        javax.swing.JMenuItem bwToRedItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.bw_to_red"));
         bwToRedItem.addActionListener(e -> ConvertToRGBMenu(null));
         convertBWRGBMenu.add(bwToRedItem);
 
-        javax.swing.JMenuItem bwToGreenItem = new javax.swing.JMenuItem("BW -> Green");
+        javax.swing.JMenuItem bwToGreenItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.bw_to_green"));
         bwToGreenItem.addActionListener(e -> ConvertToRGBMenu(null));
         convertBWRGBMenu.add(bwToGreenItem);
 
-        javax.swing.JMenuItem bwToBlueItem = new javax.swing.JMenuItem("BW -> Blue");
+        javax.swing.JMenuItem bwToBlueItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.bw_to_blue"));
         bwToBlueItem.addActionListener(e -> ConvertToRGBMenu(null));
         convertBWRGBMenu.add(bwToBlueItem);
 
-        javax.swing.JMenuItem bwToRGBItem = new javax.swing.JMenuItem("BW -> RGB");
+        javax.swing.JMenuItem bwToRGBItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.color.bw_to_rgb"));
         bwToRGBItem.addActionListener(e -> ConvertToRGBMenu(null));
         convertBWRGBMenu.add(bwToRGBItem);
 
@@ -7178,14 +7181,14 @@ public class BrowserController extends JFrame {
 
         // Reset Image View
         // HOROS-20240407準拠: MainMenu.xib 659行目
-        javax.swing.JMenuItem resetImageViewItem = new javax.swing.JMenuItem("Reset Image View");
+        javax.swing.JMenuItem resetImageViewItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.reset_view"));
         resetImageViewItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, 0));
         resetImageViewItem.addActionListener(e -> resetImage(null));
         viewer2DMenu.add(resetImageViewItem);
 
         // Revert series
         // HOROS-20240407準拠: MainMenu.xib 664行目
-        javax.swing.JMenuItem revertSeriesItem = new javax.swing.JMenuItem("Revert series");
+        javax.swing.JMenuItem revertSeriesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.revert"));
         revertSeriesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         revertSeriesItem.addActionListener(e -> revertSeries(null));
@@ -7193,17 +7196,17 @@ public class BrowserController extends JFrame {
 
         // Scale サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 669行目
-        javax.swing.JMenu scaleMenu = new javax.swing.JMenu("Scale");
+        javax.swing.JMenu scaleMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.scale"));
 
-        javax.swing.JMenuItem noRescaleItem = new javax.swing.JMenuItem("No Rescale Size (100%)");
+        javax.swing.JMenuItem noRescaleItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.scale.no_rescale"));
         noRescaleItem.addActionListener(e -> actualSize(null));
         scaleMenu.add(noRescaleItem);
 
-        javax.swing.JMenuItem actualSizeItem = new javax.swing.JMenuItem("Actual Size");
+        javax.swing.JMenuItem actualSizeItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.view.actual_size"));
         actualSizeItem.addActionListener(e -> realSize(null));
         scaleMenu.add(actualSizeItem);
 
-        javax.swing.JMenuItem scaleToFitItem = new javax.swing.JMenuItem("Scale To Fit");
+        javax.swing.JMenuItem scaleToFitItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.scale.scale_to_fit"));
         scaleToFitItem.addActionListener(e -> scaleToFit(null));
         scaleMenu.add(scaleToFitItem);
 
@@ -7211,23 +7214,23 @@ public class BrowserController extends JFrame {
 
         // Sort By サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 694行目
-        javax.swing.JMenu sortByMenu = new javax.swing.JMenu("Sort By");
+        javax.swing.JMenu sortByMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.sort_by"));
 
-        javax.swing.JMenuItem instanceAscItem = new javax.swing.JMenuItem("Instance Number - Ascending");
+        javax.swing.JMenuItem instanceAscItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sort_by.instance_asc"));
         instanceAscItem.addActionListener(e -> sortSeriesByValue(null));
         sortByMenu.add(instanceAscItem);
 
-        javax.swing.JMenuItem instanceDescItem = new javax.swing.JMenuItem("Instance Number - Descending");
+        javax.swing.JMenuItem instanceDescItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sort_by.instance_desc"));
         instanceDescItem.addActionListener(e -> sortSeriesByValue(null));
         sortByMenu.add(instanceDescItem);
 
         sortByMenu.addSeparator();
 
-        javax.swing.JMenuItem sliceLocAscItem = new javax.swing.JMenuItem("Slice Location - Ascending");
+        javax.swing.JMenuItem sliceLocAscItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sort_by.slice_loc_asc"));
         sliceLocAscItem.addActionListener(e -> sortSeriesByValue(null));
         sortByMenu.add(sliceLocAscItem);
 
-        javax.swing.JMenuItem sliceLocDescItem = new javax.swing.JMenuItem("Slice Location - Descending");
+        javax.swing.JMenuItem sliceLocDescItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sort_by.slice_loc_desc"));
         sliceLocDescItem.addActionListener(e -> sortSeriesByValue(null));
         sortByMenu.add(sliceLocDescItem);
 
@@ -7235,27 +7238,27 @@ public class BrowserController extends JFrame {
 
         // Orientation サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 726行目
-        javax.swing.JMenu orientationMenu = new javax.swing.JMenu("Orientation");
+        javax.swing.JMenu orientationMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.orientation"));
 
-        javax.swing.JMenuItem flipHorizontalItem = new javax.swing.JMenuItem("Flip Image Horizontal");
+        javax.swing.JMenuItem flipHorizontalItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.flip_h"));
         flipHorizontalItem.addActionListener(e -> flipHorizontal(null));
         orientationMenu.add(flipHorizontalItem);
 
-        javax.swing.JMenuItem flipVerticalItem = new javax.swing.JMenuItem("Flip Image Vertical");
+        javax.swing.JMenuItem flipVerticalItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.flip_v"));
         flipVerticalItem.addActionListener(e -> flipVertical(null));
         orientationMenu.add(flipVerticalItem);
 
         orientationMenu.addSeparator();
 
-        javax.swing.JMenuItem rotate0Item = new javax.swing.JMenuItem("Rotation 0 Degrees");
+        javax.swing.JMenuItem rotate0Item = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.rotate0"));
         rotate0Item.addActionListener(e -> rotate0(null));
         orientationMenu.add(rotate0Item);
 
-        javax.swing.JMenuItem rotate90Item = new javax.swing.JMenuItem("Rotation 90 Degrees");
+        javax.swing.JMenuItem rotate90Item = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.rotate90"));
         rotate90Item.addActionListener(e -> rotate90(null));
         orientationMenu.add(rotate90Item);
 
-        javax.swing.JMenuItem rotate180Item = new javax.swing.JMenuItem("Rotation 180 Degrees");
+        javax.swing.JMenuItem rotate180Item = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.rotate180"));
         rotate180Item.addActionListener(e -> rotate180(null));
         orientationMenu.add(rotate180Item);
 
@@ -7263,25 +7266,25 @@ public class BrowserController extends JFrame {
 
         // Calibrate Resolution
         // HOROS-20240407準拠: MainMenu.xib 760行目
-        javax.swing.JMenuItem calibrateItem = new javax.swing.JMenuItem("Calibrate Resolution");
+        javax.swing.JMenuItem calibrateItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.calibrate"));
         calibrateItem.addActionListener(e -> calibrate(null));
         viewer2DMenu.add(calibrateItem);
 
         // 3D Position Panel
         // HOROS-20240407準拠: MainMenu.xib 765行目
-        javax.swing.JMenuItem threeDPanelItem = new javax.swing.JMenuItem("3D Position Panel");
+        javax.swing.JMenuItem threeDPanelItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.three_d_panel"));
         threeDPanelItem.addActionListener(e -> threeDPanel(null));
         viewer2DMenu.add(threeDPanelItem);
 
         // Navigator Panel
         // HOROS-20240407準拠: MainMenu.xib 770行目
-        javax.swing.JMenuItem navigatorItem = new javax.swing.JMenuItem("Navigator Panel");
+        javax.swing.JMenuItem navigatorItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.navigator"));
         navigatorItem.addActionListener(e -> navigator(null));
         viewer2DMenu.add(navigatorItem);
 
         // Flip Series
         // HOROS-20240407準拠: MainMenu.xib 775行目
-        javax.swing.JMenuItem flipSeriesItem = new javax.swing.JMenuItem("Flip Series");
+        javax.swing.JMenuItem flipSeriesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.flip_series"));
         flipSeriesItem.addActionListener(e -> flipDataSeries(null));
         viewer2DMenu.add(flipSeriesItem);
 
@@ -7302,7 +7305,7 @@ public class BrowserController extends JFrame {
 
         // DICOM Meta-Data
         // HOROS-20240407準拠: MainMenu.xib 795行目
-        javax.swing.JMenuItem dicomMetaDataItem = new javax.swing.JMenuItem("DICOM Meta-Data");
+        javax.swing.JMenuItem dicomMetaDataItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.meta_data"));
         dicomMetaDataItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_I,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         dicomMetaDataItem.addActionListener(e -> viewXML(null));
@@ -7310,20 +7313,20 @@ public class BrowserController extends JFrame {
 
         // Convert from/to SUV
         // HOROS-20240407準拠: MainMenu.xib 801行目
-        javax.swing.JMenuItem convertSUVItem = new javax.swing.JMenuItem("Convert from/to SUV");
+        javax.swing.JMenuItem convertSUVItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.convert_suv"));
         convertSUVItem.addActionListener(e -> displaySUV(null));
         viewer2DMenu.add(convertSUVItem);
 
         // Fuse/De-Fuse PET/SPECT - CT
         // HOROS-20240407準拠: MainMenu.xib 807行目
-        javax.swing.JMenuItem fuseItem = new javax.swing.JMenuItem("Fuse/De-Fuse PET/SPECT - CT");
+        javax.swing.JMenuItem fuseItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.fuse"));
         fuseItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F, 0));
         fuseItem.addActionListener(e -> blendWindows(null));
         viewer2DMenu.add(fuseItem);
 
         // Flatten Fused Image
         // HOROS-20240407準拠: MainMenu.xib 812行目
-        javax.swing.JMenuItem flattenFusedItem = new javax.swing.JMenuItem("Flatten Fused Image");
+        javax.swing.JMenuItem flattenFusedItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.flatten"));
         flattenFusedItem.addActionListener(e -> mergeFusedImages(null));
         viewer2DMenu.add(flattenFusedItem);
 
@@ -7349,7 +7352,7 @@ public class BrowserController extends JFrame {
 
         // Propagate Settings in Current Series
         // HOROS-20240407準拠: MainMenu.xib 838行目
-        javax.swing.JMenuItem propagateInSeriesItem = new javax.swing.JMenuItem("Propagate Settings in Current Series");
+        javax.swing.JMenuItem propagateInSeriesItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_2d.propagate"));
         propagateInSeriesItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_G,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         propagateInSeriesItem.addActionListener(e -> switchCopySettingsInSeries(null));
@@ -7357,16 +7360,16 @@ public class BrowserController extends JFrame {
 
         // Sync Series (Same Study) サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 853行目
-        javax.swing.JMenu syncSeriesMenu = new javax.swing.JMenu("Sync Series (Same Study)");
+        javax.swing.JMenu syncSeriesMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.sync_series"));
 
-        javax.swing.JMenuItem syncOffItem = new javax.swing.JMenuItem("Off");
+        javax.swing.JMenuItem syncOffItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sync.off"));
         syncOffItem.addActionListener(e -> {
             DCMView.syncro = DCMView.syncroOFF;
             NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
         });
         syncSeriesMenu.add(syncOffItem);
 
-        javax.swing.JMenuItem syncSlicePosItem = new javax.swing.JMenuItem("Slice Position - Absolute");
+        javax.swing.JMenuItem syncSlicePosItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sync.slice_pos_abs"));
         syncSlicePosItem.addActionListener(e -> {
             DCMView.syncro = DCMView.syncroLOC;
             NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
@@ -7375,14 +7378,14 @@ public class BrowserController extends JFrame {
 
         syncSeriesMenu.addSeparator();
 
-        javax.swing.JMenuItem syncSliceIDAbsItem = new javax.swing.JMenuItem("Slice ID - Absolute");
+        javax.swing.JMenuItem syncSliceIDAbsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sync.slice_id_abs"));
         syncSliceIDAbsItem.addActionListener(e -> {
             DCMView.syncro = DCMView.syncroABS;
             NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
         });
         syncSeriesMenu.add(syncSliceIDAbsItem);
 
-        javax.swing.JMenuItem syncSliceIDRatioItem = new javax.swing.JMenuItem("Slice ID - Absolute Ratio");
+        javax.swing.JMenuItem syncSliceIDRatioItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.sync.slice_id_ratio"));
         syncSliceIDRatioItem.addActionListener(e -> {
             DCMView.syncro = DCMView.syncroRatio;
             NotificationCenter.defaultCenter().postNotification(NotificationCenter.OsirixUpdateViewNotification, null);
@@ -7415,14 +7418,14 @@ public class BrowserController extends JFrame {
 
         // Key Image
         // HOROS-20240407準拠: MainMenu.xib 907行目
-        javax.swing.JMenuItem keyImageItem = new javax.swing.JMenuItem("Key Image");
+        javax.swing.JMenuItem keyImageItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.key_image"));
         keyImageItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, 0));
         keyImageItem.addActionListener(e -> setKeyImage(null));
         viewer2DMenu.add(keyImageItem);
 
         // Mark All Images as Key Images
         // HOROS-20240407準拠: MainMenu.xib 912行目
-        javax.swing.JMenuItem markAllKeyItem = new javax.swing.JMenuItem("Mark All Images as Key Images");
+        javax.swing.JMenuItem markAllKeyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.mark_all_key"));
         markAllKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.ALT_DOWN_MASK));
         markAllKeyItem.addActionListener(e -> setAllKeyImages(null));
@@ -7430,7 +7433,7 @@ public class BrowserController extends JFrame {
 
         // Unmark All Images as Key Images
         // HOROS-20240407準拠: MainMenu.xib 918行目
-        javax.swing.JMenuItem unmarkAllKeyItem = new javax.swing.JMenuItem("Unmark All Images as Key Images");
+        javax.swing.JMenuItem unmarkAllKeyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.unmark_all_key"));
         unmarkAllKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         unmarkAllKeyItem.addActionListener(e -> setAllNonKeyImages(null));
@@ -7438,13 +7441,13 @@ public class BrowserController extends JFrame {
 
         // Mark All ROIs Images as Key Images
         // HOROS-20240407準拠: MainMenu.xib 924行目
-        javax.swing.JMenuItem markROIsKeyItem = new javax.swing.JMenuItem("Mark All ROIs Images as Key Images");
+        javax.swing.JMenuItem markROIsKeyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.mark_rois_key"));
         markROIsKeyItem.addActionListener(e -> setROIsImagesKeyImages(null));
         viewer2DMenu.add(markROIsKeyItem);
 
         // Save as DICOM SC and mark as Key Image
         // HOROS-20240407準拠: MainMenu.xib 930行目
-        javax.swing.JMenuItem saveDICOMSCItem = new javax.swing.JMenuItem("Save as DICOM SC and mark as Key Image");
+        javax.swing.JMenuItem saveDICOMSCItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.save_dicom_sc"));
         saveDICOMSCItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.ALT_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         saveDICOMSCItem.addActionListener(e -> captureAndSetKeyImage(null));
@@ -7452,7 +7455,7 @@ public class BrowserController extends JFrame {
 
         // Find Next Key Image
         // HOROS-20240407準拠: MainMenu.xib 936行目
-        javax.swing.JMenuItem findNextKeyItem = new javax.swing.JMenuItem("Find Next Key Image");
+        javax.swing.JMenuItem findNextKeyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.find_next_key"));
         findNextKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK));
         findNextKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
@@ -7460,7 +7463,7 @@ public class BrowserController extends JFrame {
 
         // Find Previous Key Image
         // HOROS-20240407準拠: MainMenu.xib 942行目
-        javax.swing.JMenuItem findPrevKeyItem = new javax.swing.JMenuItem("Find Previous Key Image");
+        javax.swing.JMenuItem findPrevKeyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.find_prev_key"));
         findPrevKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         findPrevKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
@@ -7474,17 +7477,17 @@ public class BrowserController extends JFrame {
 
         // ========== 3D Viewerメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 1371行目
-        viewer3DMenu = new javax.swing.JMenu("3D Viewer");
+        viewer3DMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.viewer_3d"));
 
         // 3D MPR
         // HOROS-20240407準拠: MainMenu.xib 1374行目
-        javax.swing.JMenuItem mprViewerItem = new javax.swing.JMenuItem("3D MPR");
+        javax.swing.JMenuItem mprViewerItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_3d.mpr"));
         mprViewerItem.addActionListener(e -> mprViewer(null));
         viewer3DMenu.add(mprViewerItem);
 
         // 3D Curved-MPR
         // HOROS-20240407準拠: MainMenu.xib 1379行目
-        javax.swing.JMenuItem cprViewerItem = new javax.swing.JMenuItem("3D Curved-MPR");
+        javax.swing.JMenuItem cprViewerItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_3d.curved_mpr"));
         cprViewerItem.addActionListener(e -> cprViewer(null));
         viewer3DMenu.add(cprViewerItem);
 
@@ -7500,14 +7503,14 @@ public class BrowserController extends JFrame {
 
         // 2D Orthogonal MPR
         // HOROS-20240407準拠: MainMenu.xib 1384行目
-        javax.swing.JMenuItem orthogonalMPRItem = new javax.swing.JMenuItem("2D Orthogonal MPR");
+        javax.swing.JMenuItem orthogonalMPRItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_3d.orthogonal_mpr"));
         orthogonalMPRItem.addActionListener(e -> orthogonalMPRViewer(null));
         viewer3DMenu.add(orthogonalMPRItem);
 
         viewer3DMenu.addSeparator();
 
         // HOROS-20240407準拠: 3D Surface Rendering (MainMenu.xib 1402行目)
-        javax.swing.JMenuItem surfaceRenderingItem = new javax.swing.JMenuItem("3D Surface Rendering");
+        javax.swing.JMenuItem surfaceRenderingItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_3d.surface_rendering"));
         surfaceRenderingItem.addActionListener(e -> SRViewer(null));
         viewer3DMenu.add(surfaceRenderingItem);
 
@@ -7515,14 +7518,14 @@ public class BrowserController extends JFrame {
 
         // Reset to Initial View
         // HOROS-20240407準拠: MainMenu.xib 1415行目
-        javax.swing.JMenuItem reset3DItem = new javax.swing.JMenuItem("Reset to Initial View");
+        javax.swing.JMenuItem reset3DItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_3d.reset_view"));
         reset3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R, 0));
         reset3DItem.addActionListener(e -> resetImage(null));
         viewer3DMenu.add(reset3DItem);
 
         // Revert Series
         // HOROS-20240407準拠: MainMenu.xib 1420行目
-        javax.swing.JMenuItem revert3DItem = new javax.swing.JMenuItem("Revert Series");
+        javax.swing.JMenuItem revert3DItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.viewer_3d.revert_series"));
         revert3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_R,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         revert3DItem.addActionListener(e -> revertSeries(null));
@@ -7534,11 +7537,11 @@ public class BrowserController extends JFrame {
 
         // ========== ROIメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 1532行目
-        javax.swing.JMenu roiMenu = new javax.swing.JMenu("ROI");
+        javax.swing.JMenu roiMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.tools.roi"));
 
         // Import ROI(s)...
         // HOROS-20240407準拠: MainMenu.xib 1535行目
-        javax.swing.JMenuItem importROIItem = new javax.swing.JMenuItem("Import ROI(s)...");
+        javax.swing.JMenuItem importROIItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.import"));
         importROIItem.addActionListener(e -> roiLoadFromFiles(null));
         roiMenu.add(importROIItem);
 
@@ -7546,13 +7549,13 @@ public class BrowserController extends JFrame {
 
         // Save Selected ROI(s)...
         // HOROS-20240407準拠: MainMenu.xib 1543行目
-        javax.swing.JMenuItem saveSelectedROIItem = new javax.swing.JMenuItem("Save Selected ROI(s)...");
+        javax.swing.JMenuItem saveSelectedROIItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.save_selected"));
         saveSelectedROIItem.addActionListener(e -> roiSaveSelected(null));
         roiMenu.add(saveSelectedROIItem);
 
         // Save All ROIs of this Series...
         // HOROS-20240407準拠: MainMenu.xib 1548行目
-        javax.swing.JMenuItem saveSeriesROIItem = new javax.swing.JMenuItem("Save All ROIs of this Series...");
+        javax.swing.JMenuItem saveSeriesROIItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.save_all"));
         saveSeriesROIItem.addActionListener(e -> roiSaveSeries(null));
         roiMenu.add(saveSeriesROIItem);
 
@@ -7560,7 +7563,7 @@ public class BrowserController extends JFrame {
 
         // Delete All ROIs in this Series
         // HOROS-20240407準拠: MainMenu.xib 1556行目
-        javax.swing.JMenuItem deleteAllROIItem = new javax.swing.JMenuItem("Delete All ROIs in this Series");
+        javax.swing.JMenuItem deleteAllROIItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.delete_all"));
         deleteAllROIItem.addActionListener(e -> roiDeleteAll(null));
         roiMenu.add(deleteAllROIItem);
 
@@ -7575,13 +7578,13 @@ public class BrowserController extends JFrame {
 
         // Select All ROIs in this Series
         // HOROS-20240407準拠: MainMenu.xib 1573行目
-        javax.swing.JMenuItem selectAllROIItem = new javax.swing.JMenuItem("Select All ROIs in this Series");
+        javax.swing.JMenuItem selectAllROIItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.select_all"));
         selectAllROIItem.addActionListener(e -> roiSelectDeselectAll(null));
         roiMenu.add(selectAllROIItem);
 
         // Deselect All ROIs in this Series
         // HOROS-20240407準拠: MainMenu.xib 1578行目
-        javax.swing.JMenuItem deselectAllROIItem = new javax.swing.JMenuItem("Deselect All ROIs in this Series");
+        javax.swing.JMenuItem deselectAllROIItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.deselect_all"));
         deselectAllROIItem.addActionListener(e -> roiSelectDeselectAll(null));
         roiMenu.add(deselectAllROIItem);
 
@@ -7589,26 +7592,26 @@ public class BrowserController extends JFrame {
 
         // ROI Manager...
         // HOROS-20240407準拠: MainMenu.xib 1586行目
-        javax.swing.JMenuItem roiManagerItem = new javax.swing.JMenuItem("ROI Manager...");
+        javax.swing.JMenuItem roiManagerItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.manager"));
         roiManagerItem.addActionListener(e -> roiGetManager(null));
         roiMenu.add(roiManagerItem);
 
         // ROI Info...
         // HOROS-20240407準拠: MainMenu.xib 1591行目
-        javax.swing.JMenuItem roiInfoItem = new javax.swing.JMenuItem("ROI Info...");
+        javax.swing.JMenuItem roiInfoItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.info"));
         roiInfoItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_I, 0));
         roiInfoItem.addActionListener(e -> roiGetInfo(null));
         roiMenu.add(roiInfoItem);
 
         // ROI Rename...
         // HOROS-20240407準拠: MainMenu.xib 1596行目
-        javax.swing.JMenuItem roiRenameItem = new javax.swing.JMenuItem("ROI Rename...");
+        javax.swing.JMenuItem roiRenameItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.rename"));
         roiRenameItem.addActionListener(e -> roiRename(null));
         roiMenu.add(roiRenameItem);
 
         // Set Default ROI Name...
         // HOROS-20240407準拠: MainMenu.xib 1601行目
-        javax.swing.JMenuItem roiDefaultsItem = new javax.swing.JMenuItem("Set Default ROI Name...");
+        javax.swing.JMenuItem roiDefaultsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.roi.defaults"));
         roiDefaultsItem.addActionListener(e -> roiDefaults(null));
         roiMenu.add(roiDefaultsItem);
 
@@ -7652,9 +7655,9 @@ public class BrowserController extends JFrame {
 
         // ========== Recent Studiesメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 1879行目
-        javax.swing.JMenu recentStudiesMenu = new javax.swing.JMenu("Recent Studies");
+        javax.swing.JMenu recentStudiesMenu = new javax.swing.JMenu(MenuResourceLoader.getString("recent.studies"));
         // 注: Recent Studiesメニューは動的に更新されるため、初期状態では空
-        javax.swing.JMenuItem emptyItem = new javax.swing.JMenuItem("Empty");
+        javax.swing.JMenuItem emptyItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("recent.empty"));
         emptyItem.setEnabled(false);
         recentStudiesMenu.add(emptyItem);
 
@@ -7662,18 +7665,18 @@ public class BrowserController extends JFrame {
 
         // ========== Windowメニュー ==========
         // HOROS-20240407準拠: MainMenu.xib 1889行目
-        javax.swing.JMenu windowMenu = new javax.swing.JMenu("Window");
+        javax.swing.JMenu windowMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.window"));
 
         // Minimize
         // HOROS-20240407準拠: MainMenu.xib 1892行目
-        javax.swing.JMenuItem minimizeItem = new javax.swing.JMenuItem("Minimize");
+        javax.swing.JMenuItem minimizeItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.window.minimize"));
         minimizeItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_M, 0));
         minimizeItem.addActionListener(e -> setState(java.awt.Frame.ICONIFIED));
         windowMenu.add(minimizeItem);
 
         // Resize Window サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 1897行目
-        javax.swing.JMenu resizeWindowMenu = new javax.swing.JMenu("Resize Window");
+        javax.swing.JMenu resizeWindowMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.window.resize"));
         String[] resizePercentages = { "25%", "50%", "100%", "200%", "300%", "iPod Video" };
         for (int i = 0; i < resizePercentages.length; i++) {
             javax.swing.JMenuItem resizeItem = new javax.swing.JMenuItem(resizePercentages[i]);
@@ -7685,14 +7688,14 @@ public class BrowserController extends JFrame {
 
         // Tile 2D Viewer Windows
         // HOROS-20240407準拠: MainMenu.xib 1933行目
-        javax.swing.JMenuItem tile2DItem = new javax.swing.JMenuItem("Tile 2D Viewer Windows");
+        javax.swing.JMenuItem tile2DItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.window.tile_2d"));
         tile2DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_T, 0));
         tile2DItem.addActionListener(e -> { ViewerController.tileWindows(); });
         windowMenu.add(tile2DItem);
 
         // Tile 3D Viewer Windows
         // HOROS-20240407準拠: MainMenu.xib 1938行目
-        javax.swing.JMenuItem tile3DItem = new javax.swing.JMenuItem("Tile 3D Viewer Windows");
+        javax.swing.JMenuItem tile3DItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.window.tile_3d"));
         tile3DItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_T,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         tile3DItem.addActionListener(e -> { ViewerController.tile3DWindows(); });
@@ -7700,7 +7703,7 @@ public class BrowserController extends JFrame {
 
         // Close All Viewers
         // HOROS-20240407準拠: MainMenu.xib 1943行目
-        javax.swing.JMenuItem closeAllViewersItem = new javax.swing.JMenuItem("Close All Viewers");
+        javax.swing.JMenuItem closeAllViewersItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.window.close_all_viewers"));
         closeAllViewersItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         closeAllViewersItem.addActionListener(e -> { closeAllDisplayedViewers(); });
@@ -7711,15 +7714,15 @@ public class BrowserController extends JFrame {
         menuBar.add(windowMenu);
 
         // ========== Helpメニュー ==========
-        javax.swing.JMenu helpMenu = new javax.swing.JMenu("Help");
+        javax.swing.JMenu helpMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu.help"));
 
-        javax.swing.JMenuItem shortcutsItem = new javax.swing.JMenuItem("Shortcuts & Mouse Controls...");
+        javax.swing.JMenuItem shortcutsItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu.help.shortcuts"));
         shortcutsItem.addActionListener(e -> showShortcutsDialog());
         helpMenu.add(shortcutsItem);
 
         helpMenu.addSeparator();
 
-        javax.swing.JMenuItem aboutItem = new javax.swing.JMenuItem("About OculusJJ");
+        javax.swing.JMenuItem aboutItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.about"));
         aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(this,
                 "OculusJJ - Advanced DICOM Viewer\nVersion 1.0\nBased on Horos-20240407 Architecture"));
         helpMenu.add(aboutItem);
@@ -9077,7 +9080,7 @@ public class BrowserController extends JFrame {
 
     /** Export to DICOM Network Node (PACS) */
     private void exportToPACS() {
-        javax.swing.JMenuItem sendItem = new javax.swing.JMenuItem("Send to Selected Node...");
+        javax.swing.JMenuItem sendItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.send_to_node"));
         sendItem.addActionListener(e -> {
             DCMView view = getActiveDCMViewForEdit();
             if (view == null || view.curDCM == null) {
@@ -9089,7 +9092,7 @@ public class BrowserController extends JFrame {
             dialog.setLocationRelativeTo(BrowserController.this);
             dialog.setVisible(true);
         });
-        javax.swing.JMenuItem selectNodeItem = new javax.swing.JMenuItem("Select Node...");
+        javax.swing.JMenuItem selectNodeItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.select_node"));
         selectNodeItem.addActionListener(e -> {
             JOptionPane.showMessageDialog(BrowserController.this, "Node selection pending", "Export to PACS", JOptionPane.INFORMATION_MESSAGE);
         });
@@ -9259,7 +9262,7 @@ public class BrowserController extends JFrame {
 
     /** DICOM Print (PACSSettings popup) */
     public void generateReport(Object sender) {
-        javax.swing.JMenuItem jMenuItem = new javax.swing.JMenuItem("Print Report...");
+        javax.swing.JMenuItem jMenuItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file.print_report"));
         jMenuItem.addActionListener(e -> {
             PACSQuerySettingsDialog dialog = new PACSQuerySettingsDialog(BrowserController.this);
             dialog.pack();
