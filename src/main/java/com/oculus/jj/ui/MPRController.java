@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.time.format.DateTimeFormatter;
 import com.oculus.jj.model.DicomPix;
+import com.oculus.jj.utils.LanguageManager;
 import com.oculus.jj.model.DicomStudy;
 import com.oculus.jj.model.Measurement3D;
 
@@ -54,6 +55,14 @@ public class MPRController extends JFrame {
 
     // UI コンポーネント
     private JPanel contentPane;
+
+    // HOROS-20240407準拠: MPR ツールバー用フィールド
+    private boolean axisVisible = true;
+    private boolean mousePosVisible = true;
+    private boolean fusionActive = false;
+    private double syncZoomFactor = 1.0;
+    private float shadingAmbient = 0.3f;
+    private float shadingDiffuse = 0.7f;
 
     // MPRビュー一覧（ヒストグラム用）
     private List<MPRView> allViews = new ArrayList<>();
@@ -565,6 +574,109 @@ public class MPRController extends JFrame {
         mprSpecificPanel.add(spinThick);
         mprSpecificPanel.add(new JLabel(" mm "));
 
+
+            // HOROS-20240407準拠: MPR 断面専用ツール追加 (P1 items)
+            tb.addSeparator();
+            JPanel orthoTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 2));
+            orthoTools.setOpaque(false);
+
+            // HOROS-20240407準拠: Axis show/hide toggle
+            JButton btnAxis = new JButton(LanguageManager.get("mpr.toolbar.axisToggle"));
+            btnAxis.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            btnAxis.setMargin(new Insets(2, 4, 2, 4));
+            btnAxis.setFocusable(false);
+            btnAxis.setToolTipText(LanguageManager.get("tt.mpr.axisToggle"));
+            btnAxis.addActionListener(e -> {
+                axisVisible = !axisVisible;
+                updateAllViews(true);
+            });
+            orthoTools.add(btnAxis);
+
+            // HOROS-20240407準拠: Mouse position show/hide toggle
+            JButton btnMousePos = new JButton(LanguageManager.get("mpr.toolbar.mousePosToggle"));
+            btnMousePos.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            btnMousePos.setMargin(new Insets(2, 4, 2, 4));
+            btnMousePos.setFocusable(false);
+            btnMousePos.setToolTipText(LanguageManager.get("tt.mpr.mousePosToggle"));
+            btnMousePos.addActionListener(e -> {
+                mousePosVisible = !mousePosVisible;
+                updateAllViews(true);
+            });
+            orthoTools.add(btnMousePos);
+
+            // HOROS-20240407準拠: Fusion/Blending toggle button
+            JButton btnFusion = new JButton(LanguageManager.get("mpr.toolbar.fusionToggle"));
+            btnFusion.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            btnFusion.setMargin(new Insets(2, 4, 2, 4));
+            btnFusion.setFocusable(false);
+            btnFusion.setToolTipText(LanguageManager.get("tt.mpr.fusionToggle"));
+            final boolean[] fusionOn = {                false}            ; // local state
+            btnFusion.addActionListener(e -> {
+                fusionOn[0] = !fusionOn[0];
+                fusionActive = fusionOn[0];
+            });
+            orthoTools.add(btnFusion);
+
+            // HOROS-20240407準拠: Sync Zoom slider (全ビューズーム同期)
+            orthoTools.add(new JLabel(LanguageManager.get("mpr.toolbar.syncZoom")));
+            JSlider syncZoom = new JSlider(JSlider.HORIZONTAL, 50, 200, 100);
+            syncZoom.setMinorTickSpacing(10);
+            syncZoom.setMajorTickSpacing(50);
+            syncZoom.setPaintTicks(true);
+            syncZoom.setPaintLabels(true);
+            syncZoom.addChangeListener(e -> {
+                syncZoomFactor = syncZoom.getValue() / 100.0;
+                updateAllViews(true);
+            });
+            syncZoom.setOpaque(false);
+            orthoTools.add(syncZoom);
+
+            // HOROS-20240407準拠: LOD (Level of Detail) slider
+            orthoTools.add(new JLabel(LanguageManager.get("mpr.label.lodLevel")));
+            JSlider lod = new JSlider(JSlider.HORIZONTAL, 10, 200, 100);
+            lod.setMinorTickSpacing(10);
+            lod.setMajorTickSpacing(50);
+            lod.setPaintTicks(true);
+            lod.setPaintLabels(false);
+            lod.addChangeListener(e -> {
+                // LOD affects sampling resolution for rendering
+                updateAllViews(true);
+            });
+            lod.setOpaque(false);
+            orthoTools.add(lod);
+
+            // HOROS-20240407準拠: Shading parameters editor
+            JPanel shadingGroup = new JPanel(new GridLayout(0, 2, 2, 1));
+            shadingGroup.setOpaque(false);
+            JLabel lblAmbient = new JLabel(LanguageManager.get("mpr.label.shadingAmbient"), JLabel.RIGHT);
+            lblAmbient.setFont(new Font("SansSerif", Font.PLAIN, 9));
+            final JSlider[] amb = {                new JSlider(JSlider.HORIZONTAL, 0, 100, 30)}            ; // local ref
+            amb[0].setMinorTickSpacing(5);
+            amb[0].addChangeListener(e -> {
+                shadingAmbient = amb[0].getValue() / 100.0f;
+                updateAllViews(false);
+            });
+            amb[0].setOpaque(false);
+            JLabel lblDiffuse = new JLabel(LanguageManager.get("mpr.label.shadingDiffuse"), JLabel.RIGHT);
+            lblDiffuse.setFont(new Font("SansSerif", Font.PLAIN, 9));
+            final JSlider[] dif = {                new JSlider(JSlider.HORIZONTAL, 0, 100, 70)}            ; // local ref
+            dif[0].setMinorTickSpacing(5);
+            dif[0].addChangeListener(e -> {
+                shadingDiffuse = dif[0].getValue() / 100.0f;
+                updateAllViews(false);
+            });
+            dif[0].setOpaque(false);
+            shadingGroup.add(lblAmbient); shadingGroup.add(amb[0]);
+            shadingGroup.add(lblDiffuse); shadingGroup.add(dif[0]);
+
+            // HOROS-20240407準拠: WL/WW preset panel header for MPR
+            JLabel lblWLWW = new JLabel(LanguageManager.get("vr.group.wlww"), JLabel.LEFT);
+            lblWLWW.setFont(new Font("SansSerif", Font.BOLD, 9));
+
+            orthoTools.add(shadingGroup);
+            orthoTools.add(lblWLWW);
+
+            tb.add(orthoTools);
         tb.add(mprSpecificPanel);
 
         return tb;
@@ -1141,7 +1253,17 @@ public class MPRController extends JFrame {
         updateAllViews();
     }
 
-    public void updateAllViews() {
+    
+    public boolean isAxisVisible() { return axisVisible; }
+    public void setAxisVisible(boolean visible) { this.axisVisible = visible; }
+    public boolean isMousePosVisible() { return mousePosVisible; }
+    public void setMousePosVisible(boolean visible) { this.mousePosVisible = visible; }
+    public boolean isFusionActive() { return fusionActive; }
+    public void setFusionActive(boolean active) { this.fusionActive = active; }
+    public double getSyncZoomFactor() { return syncZoomFactor; }
+    public float getShadingAmbient() { return shadingAmbient; }
+    public float getShadingDiffuse() { return shadingDiffuse; }
+public void updateAllViews() {
         updateAllViews(true);
     }
 

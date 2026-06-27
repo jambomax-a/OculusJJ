@@ -12,7 +12,7 @@ import java.util.ResourceBundle;
 public class LanguageManager {
     private static LanguageManager instance;
     private Properties properties;
-    private String currentLocale = "ja"; // Default to Japanese
+    private String currentLocale = "en"; // Default to English
 
     private static final String DEFAULT_INTERNAL_PATH = "/i18n/";
     // Path where an external Langage folder might be located (e.g., in the execution directory)

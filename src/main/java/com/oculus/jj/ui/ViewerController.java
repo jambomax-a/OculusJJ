@@ -274,6 +274,21 @@ public class ViewerController extends JFrame {
         return imageView;
     }
 
+    /**
+     * 現在表示中のDicomImageを取得します。
+     */
+    public DicomImage getCurrentImage() {
+        synchronized (fileList) {
+            if (!fileList.isEmpty() && !fileList.get(0).isEmpty()) {
+                int index = (imageView != null) ? imageView.getCurImage() : currentImageIndex;
+                if (index >= 0 && index < fileList.get(0).size()) {
+                    return fileList.get(0).get(index);
+                }
+            }
+        }
+        return null;
+    }
+
     public List<List<DicomPix>> getPixList() {
         return pixList;
     }
@@ -1451,22 +1466,24 @@ public class ViewerController extends JFrame {
         }
         return copy;
     }
+
     /** Tile all 3D viewer windows in a grid layout */
     public static void tile3DWindows() {
         java.util.List<ViewerController> viewers = ViewerController.getDisplayedViewers();
         int count = viewers.size();
-        if (count == 0) return;
+        if (count == 0)
+            return;
         // Use square-ish grid
-        int cols = (int)Math.ceil(Math.sqrt(count));
-        int rows = (int)Math.ceil((double)count / cols);
+        int cols = (int) Math.ceil(Math.sqrt(count));
+        int rows = (int) Math.ceil((double) count / cols);
         java.awt.Dimension cellSize = new java.awt.Dimension(800, 600);
         for (int i = 0; i < count; i++) {
             ViewerController vc = viewers.get(i);
             int row = i / cols;
             int col = i % cols;
-            java.awt.Rectangle bounds = new java.awt.Rectangle(col * cellSize.width, row * cellSize.height, cellSize.width, cellSize.height);
+            java.awt.Rectangle bounds = new java.awt.Rectangle(col * cellSize.width, row * cellSize.height,
+                    cellSize.width, cellSize.height);
             vc.setBounds(bounds);
         }
     }
 }
-

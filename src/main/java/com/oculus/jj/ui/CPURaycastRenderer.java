@@ -58,6 +58,13 @@ public class CPURaycastRenderer {
         voxScaleZ = (maxPhys > 0) ? physZ / maxPhys : 1.0f;
     }
 
+    /** Set voxel scales directly from GPU renderer. Bypasses spacing recalculation to prevent drift. */
+    public void setVoxScalesDirect(float sx, float sy, float sz) {
+        voxScaleX = sx;
+        voxScaleY = sy;
+        voxScaleZ = sz;
+    }
+
     public synchronized void setVolumeData(short[] vol, int w, int h, int d) {
         if (this.volume == vol && this.dimX == w && this.dimY == h && this.dimZ == d) {
             return;
@@ -168,7 +175,9 @@ public class CPURaycastRenderer {
 
         int[] pixels = new int[width * height];
         float aspect = (float) width / height;
-        float fovFactor = (float) Math.tan(Math.toRadians(22.5));
+        // HOROS-20240407準拠: GPUと同一の正射影スケールを使用 (size = 0.5f / zoom)
+        // 透視投影では 45度 FOV (tan(22.5deg)) を使用
+        float projScale = isPerspective ? (float) Math.tan(Math.toRadians(22.5)) : 0.5f;
 
         float camZVal = 1.2f / zoom;
         float[] rot = multiplyMatrix(rotateMatrix(rotateY, 0, 1, 0), rotateMatrix(rotateX, 1, 0, 0));
@@ -187,8 +196,10 @@ public class CPURaycastRenderer {
 
         java.util.stream.IntStream.range(0, height).parallel().forEach(py -> {
             for (int px = 0; px < width; px++) {
-                float ndcX = (2.0f * px / width - 1.0f) * aspect * fovFactor / zoom;
-                float ndcY = (1.0f - 2.0f * py / height) * fovFactor / zoom;
+                // GPU orthographicと同一のNDC計算: size = 0.5f/zoom
+                // 透視投影では fovFactor * aspect, 正射影では projScale * aspect
+                float ndcX = (2.0f * px / width - 1.0f) * aspect * projScale / zoom;
+                float ndcY = (1.0f - 2.0f * py / height) * projScale / zoom;
                 
                 float rayStartX, rayStartY, rayStartZ;
                 float[] rayDir = new float[3];
@@ -208,28 +219,21 @@ public class CPURaycastRenderer {
                     rayStartY = camStartY;
                     rayStartZ = camStartZ;
                 } else {
-                    float vx_view = ndcX - offsetX;
-                    float vy_view = ndcY - offsetY;
-                    float vz_view = camZVal - offsetZ;
-                    
-                    float prx = rot[0] * vx_view + rot[1] * vy_view + rot[2] * vz_view;
-                    float pry = rot[4] * vx_view + rot[5] * vy_view + rot[6] * vz_view;
-                    float prz = rot[8] * vx_view + rot[9] * vy_view + rot[10] * vz_view;
-                    
-                    rayStartX = prx / voxScaleX + 0.5f;
-                    rayStartY = pry / voxScaleY + 0.5f;
-                    rayStartZ = prz / voxScaleZ + 0.5f;
-                    
-                    float[] dModel = transformDirTranspose(rot, 0.0f, 0.0f, -1.0f);
-                    rayDir[0] = dModel[0] / voxScaleX;
-                    rayDir[1] = dModel[1] / voxScaleY;
-                    rayDir[2] = dModel[2] / voxScaleZ;
+                    // HOROS-20240407準拠: GPUと同じく視点からの透視レイを使用 (正射影行列だがレイ生成は視点原点から)
+                    // GPUシェーダーは uCamPos から vTex へのレイを飛ばすため、正射影モードでも視点原点からのレイになる
+                    float[] vModel = transformDirTranspose(rot, ndcX, ndcY, -1.0f);
+                    rayDir[0] = vModel[0] / voxScaleX;
+                    rayDir[1] = vModel[1] / voxScaleY;
+                    rayDir[2] = vModel[2] / voxScaleZ;
                     float len = (float) Math.sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
                     if (len > 0) {
                         rayDir[0] /= len;
                         rayDir[1] /= len;
                         rayDir[2] /= len;
                     }
+                    rayStartX = camStartX;
+                    rayStartY = camStartY;
+                    rayStartZ = camStartZ;
                 }
                 
                 pixels[py * width + px] = castRay(rayStartX, rayStartY, rayStartZ, rayDir);

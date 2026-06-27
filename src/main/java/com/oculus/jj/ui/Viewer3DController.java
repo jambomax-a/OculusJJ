@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import com.oculus.jj.model.DicomPix;
 import org.lwjgl.opengl.awt.AWTGLCanvas;
 import org.lwjgl.opengl.awt.GLData;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * Viewer3DController - 3Dビューワー (MIP/VR)
@@ -69,6 +70,7 @@ public class Viewer3DController extends JFrame {
 
     private JDialog clippingDialog;
     private boolean showCropBox = false;
+    private boolean vrStereoActive = false;
     private JLabel loadingLabel;
     private String loadingStatus = "Preparing Volume Data (Converting to HU)...";
     private boolean gpuInitialized = false;
@@ -457,6 +459,7 @@ public class Viewer3DController extends JFrame {
                     glViewer.setWindowLevel(windowLevel, windowWidth);
                     glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
                     glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
+                    System.out.println("DEBUG activateGPU EDT: spacing=(" + spacingX + "," + spacingY + "," + spacingZ + ") dim=(" + dimX + "," + dimY + "," + dimZ + ")");
                     glViewer.setRotation((float) rotateX, (float) rotateY);
                     glViewer.setZoom((float) zoom);
                     System.out.println("DEBUG: GPU parameters set.");
@@ -757,6 +760,7 @@ public class Viewer3DController extends JFrame {
                         // tempCpu のデータが消えてしまう。先に volume を設定して防ぐ。
                         glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
                         glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
+                        System.out.println("DEBUG EDT: spacing=(" + spacingX + "," + spacingY + "," + spacingZ + ") dim=(" + dimX + "," + dimY + "," + dimZ + ")");
                         cpuRenderer = tempCpu;
                         glViewer.setCpuRenderer(cpuRenderer);
                         glViewer.setWindowLevel(windowLevel, windowWidth);
@@ -906,7 +910,7 @@ public class Viewer3DController extends JFrame {
 
         // 1. Mouse button function
         JPanel contentMouse = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
-        JPanel groupMouse = createToolbarGroup("Mouse button function", contentMouse);
+        JPanel groupMouse = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.mouse"), contentMouse);
         ButtonGroup bgTools = new ButtonGroup();
 
         // 左クリック時の動作を切り替えるボタンのみに絞る
@@ -936,7 +940,7 @@ public class Viewer3DController extends JFrame {
 
         // 2. WL/WW & CLUT & Opacity
         JPanel contentWLWW = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JPanel groupWLWW = createToolbarGroup("WL/WW & CLUT & Opacity", contentWLWW);
+        JPanel groupWLWW = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.wlww"), contentWLWW);
 
         JPanel gridLeft = new JPanel(new GridLayout(3, 2, 2, 2));
         gridLeft.setOpaque(false);
@@ -944,7 +948,7 @@ public class Viewer3DController extends JFrame {
         JLabel lblWL = new JLabel("WL/WW:", JLabel.RIGHT);
         lblWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
         JComboBox<String> cbWL = new JComboBox<>(new String[] {
-                "Other",
+                LanguageManager.get("vr.wlww.other"),
                 "Default WL & WW",
                 "Full dynamic",
                 "----------------",
@@ -983,7 +987,7 @@ public class Viewer3DController extends JFrame {
             } else if (item.contains("Pulmonary")) {
                 windowLevel = -600;
                 windowWidth = 1500;
-            } else if (item.contains("Endoscopy")) {
+            } else if (item.contains(LanguageManager.get("vr.perspective.endoscopy"))) {
                 windowLevel = -200;
                 windowWidth = 1000;
             }
@@ -1094,11 +1098,11 @@ public class Viewer3DController extends JFrame {
 
         JPanel pnlMid = new JPanel(new GridLayout(2, 1, 2, 2));
         pnlMid.setOpaque(false);
-        JButton btn8 = new JButton("8-bit");
+        JButton btn8 = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.8bit"));
         btn8.setFont(new Font("SansSerif", Font.BOLD, 9));
         btn8.setMargin(new Insets(1, 4, 1, 4));
         btn8.setFocusable(false);
-        JButton btn16 = new JButton("16-bit");
+        JButton btn16 = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.16bit"));
         btn16.setFont(new Font("SansSerif", Font.BOLD, 9));
         btn16.setMargin(new Insets(1, 4, 1, 4));
         btn16.setFocusable(false);
@@ -1106,7 +1110,7 @@ public class Viewer3DController extends JFrame {
         pnlMid.add(btn16);
         contentWLWW.add(pnlMid);
 
-        JButton btnPresets = new JButton("🎛️ Presets");
+        JButton btnPresets = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.presets"));
         btnPresets.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnPresets.setMargin(new Insets(4, 4, 4, 4));
         btnPresets.setFocusable(false);
@@ -1185,7 +1189,7 @@ public class Viewer3DController extends JFrame {
 
         // 3. Level of Detail & Engine & Crop & Orientation
         JPanel contentLOD = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JPanel groupLOD = createToolbarGroup("Level of Detail & Orientation", contentLOD);
+        JPanel groupLOD = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.lod"), contentLOD);
 
         JPanel pnlSlider = new JPanel(new BorderLayout());
         pnlSlider.setOpaque(false);
@@ -1216,7 +1220,7 @@ public class Viewer3DController extends JFrame {
         pnlSlider.add(pnlSliderLabels, BorderLayout.SOUTH);
         contentLOD.add(pnlSlider);
 
-        JButton btnBest = new JButton("✨ Best");
+        JButton btnBest = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.bestRendering"));
         btnBest.setFont(new Font("SansSerif", Font.BOLD, 10));
         btnBest.setMargin(new Insets(4, 4, 4, 4));
         btnBest.setFocusable(false);
@@ -1262,7 +1266,7 @@ public class Viewer3DController extends JFrame {
         pnlEngine.add(rbGPU);
         contentLOD.add(pnlEngine);
 
-        JToggleButton tglCrop = new JToggleButton("✂ Crop Box");
+        JToggleButton tglCrop = new JToggleButton(com.oculus.jj.utils.LanguageManager.get("vr.cropBox"));
         tglCrop.setFont(new Font("SansSerif", Font.PLAIN, 10));
         tglCrop.setMargin(new Insets(4, 4, 4, 4));
         tglCrop.setFocusable(false);
@@ -1272,7 +1276,7 @@ public class Viewer3DController extends JFrame {
         });
         contentLOD.add(tglCrop);
 
-        JButton btnOrient = new JButton("🧊 Orient");
+        JButton btnOrient = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.orientation"));
         btnOrient.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnOrient.setMargin(new Insets(4, 4, 4, 4));
         btnOrient.setFocusable(false);
@@ -1313,9 +1317,9 @@ public class Viewer3DController extends JFrame {
 
         // 4. Shading
         JPanel contentShading = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JPanel groupShading = createToolbarGroup("Shading", contentShading);
+        JPanel groupShading = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.shading"), contentShading);
 
-        JCheckBox chkShading = new JCheckBox("Shading", true);
+        JCheckBox chkShading = new JCheckBox(com.oculus.jj.utils.LanguageManager.get("vr.shading"), true);
         chkShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
         chkShading.setOpaque(false);
         chkShading.setFocusable(false);
@@ -1334,7 +1338,7 @@ public class Viewer3DController extends JFrame {
         });
         contentShading.add(chkShading);
 
-        JButton btnEditShading = new JButton("Edit");
+        JButton btnEditShading = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.edit"));
         btnEditShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnEditShading.setMargin(new Insets(2, 4, 2, 4));
         btnEditShading.setFocusable(false);
@@ -1345,18 +1349,34 @@ public class Viewer3DController extends JFrame {
         contentShading.add(btnEditShading);
         contentShading.add(lblParams);
         vrToolbar.add(groupShading);
+        // HOROS-20240407準拠: Stereo mode toggle
+        JPanel contentStereo = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        JCheckBox stereoCheck = new JCheckBox(com.oculus.jj.utils.LanguageManager.get("vr.stereo"));
+        stereoCheck.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        stereoCheck.setFocusable(false);
+        stereoCheck.addActionListener(e -> {
+            // HOROS-20240407準拠: Stereo mode toggle - enable stereoscopic rendering
+            vrStereoActive = stereoCheck.isSelected();
+            if (glViewer != null) {
+                glViewer.setStereoMode(stereoCheck.isSelected() ? GLViewer3D.STEREO_BUFFERED : GLViewer3D.STEREO_OFF);
+            }
+            repaint();
+        });
+        contentStereo.add(stereoCheck);
+        JPanel groupStereo = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.stereo"), contentStereo);
+        vrToolbar.add(groupStereo);
 
         // 5. Perspective & Filters
         JPanel contentPersp = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JPanel groupPersp = createToolbarGroup("Perspective & Filters", contentPersp);
+        JPanel groupPersp = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.persp"), contentPersp);
 
         JPanel pnlPerspRadios = new JPanel(new GridLayout(3, 1));
         pnlPerspRadios.setOpaque(false);
-        JRadioButton rbParallel = new JRadioButton("Parallel", true);
+        JRadioButton rbParallel = new JRadioButton(LanguageManager.get("vr.perspective.parallel"), true);
         rbParallel.setFont(new Font("SansSerif", Font.PLAIN, 9));
         rbParallel.setOpaque(false);
         rbParallel.setFocusable(false);
-        JRadioButton rbPersp = new JRadioButton("Perspective", false);
+        JRadioButton rbPersp = new JRadioButton(LanguageManager.get("vr.perspective.perspective"), false);
         rbPersp.setFont(new Font("SansSerif", Font.PLAIN, 9));
         rbPersp.setOpaque(false);
         rbPersp.setFocusable(false);
@@ -1388,15 +1408,15 @@ public class Viewer3DController extends JFrame {
 
         JPanel pnlFilter = new JPanel(new BorderLayout());
         pnlFilter.setOpaque(false);
-        JLabel lblFilter = new JLabel("Convolution Filter:", JLabel.LEFT);
+        JLabel lblFilter = new JLabel(LanguageManager.get("vr.filter.label"), JLabel.LEFT);
         lblFilter.setFont(new Font("SansSerif", Font.BOLD, 8));
         pnlFilter.add(lblFilter, BorderLayout.NORTH);
 
         JComboBox<String> cbFilter = new JComboBox<>(new String[] {
-                "Apply a filter",
-                "Basic Smooth 5x5",
-                "Blur 3x3",
-                "Blur 5x5",
+                LanguageManager.get("vr.filter.preset"),
+                LanguageManager.get("vr.filter.smooth5"),
+                LanguageManager.get("vr.filter.blur3"),
+                LanguageManager.get("vr.filter.blur5"),
                 "Bone Filter 3x3",
                 "Edge 3x3",
                 "Emboss",
@@ -1428,16 +1448,39 @@ public class Viewer3DController extends JFrame {
 
         // 6. Export & Tools (Originally hidden behind double-arrow in macOS Horos)
         JPanel contentTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
-        JPanel groupTools = createToolbarGroup("Export & Tools", contentTools);
+        JPanel groupTools = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.tools"), contentTools);
 
-        JButton btnClipping = new JButton("Clipping");
+        JButton btnClipping = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.clipping"));
         btnClipping.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnClipping.setMargin(new Insets(2, 4, 2, 4));
         btnClipping.setFocusable(false);
         btnClipping.addActionListener(e -> showClippingDialog());
         contentTools.add(btnClipping);
+        // HOROS-20240407準拠: Fusion/Blending toggle (Horos 2DBlending)
+        JButton btnFusion = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.fusion"));
+        btnFusion.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        btnFusion.setMargin(new Insets(2, 4, 2, 4));
+        btnFusion.setFocusable(false);
+        final boolean[] fusionOn = { false };
+        btnFusion.addActionListener(e -> {
+            fusionOn[0] = !fusionOn[0];
+            // fusion mode - GLViewer3D.setFusionMode() not yet implemented
+        });
+        contentTools.add(btnFusion);
 
-        JButton btnReset = new JButton("Reset");
+        // HOROS-20240407準拠: ROI Manager (ROIManager.pdf)
+        JButton btnROIManager = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.roiManager"));
+        btnROIManager.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        btnROIManager.setMargin(new Insets(2, 4, 2, 4));
+        btnROIManager.setFocusable(false);
+        btnROIManager.addActionListener(e -> {
+            // HOROS-20240407準拠: [roiGetManager:] - ROI Manager ウィンドウ表示
+            System.out.println("[VR] Opening ROI Manager...");
+            // TODO: Show ROI management dialog linked to current series ROIs
+        });
+        contentTools.add(btnROIManager);
+
+        JButton btnReset = new JButton(com.oculus.jj.utils.LanguageManager.get("button.reset"));
         btnReset.setFont(new Font("SansSerif", Font.BOLD, 10));
         btnReset.setMargin(new Insets(2, 4, 2, 4));
         btnReset.setFocusable(false);
@@ -1472,7 +1515,7 @@ public class Viewer3DController extends JFrame {
             contentTools.add(btn);
         }
 
-        JButton btnRevert = new JButton("Revert");
+        JButton btnRevert = new JButton(com.oculus.jj.utils.LanguageManager.get("button.revert"));
         btnRevert.setFont(new Font("SansSerif", Font.PLAIN, 10));
         btnRevert.setMargin(new Insets(2, 4, 2, 4));
         btnRevert.setFocusable(false);
@@ -1491,7 +1534,10 @@ public class Viewer3DController extends JFrame {
         });
         contentTools.add(btnRevert);
 
-        String[] extraTools2 = { "DICOM File", "Fly Thru" };
+        String[] extraTools2 = {
+        com.oculus.jj.utils.LanguageManager.get("vr.extra.dicomFile"),
+        com.oculus.jj.utils.LanguageManager.get("vr.extra.flyThru")
+    };
         for (String label : extraTools2) {
             JButton btn = new JButton(label);
             btn.setFont(new Font("SansSerif", Font.PLAIN, 10));
@@ -3217,5 +3263,15 @@ public class Viewer3DController extends JFrame {
             glViewer.markOverlayDirty();
             glViewer.repaint();
         }
+    }
+
+    /** HOROS-20240407準拠: Endoscopy Viewer (未実装プレースホルダ) */
+    public static void openEndoscopy(ViewerController viewer) {
+        System.out.println("[VR] Endoscopy Viewer - not yet implemented");
+    }
+
+    /** HOROS-20240407準拠: Structured Report Viewer (未実装プレースホルダ) */
+    public static void openSR(ViewerController viewer) {
+        System.out.println("[VR] SR Viewer - not yet implemented");
     }
 }

@@ -33,27 +33,27 @@ public class MainMenuBar extends JMenuBar {
     public MainMenuBar() { super(); initMenus(); }
 
     private void initMenus() {
-        String fileLabel = LanguageManager.get("menu_file", "File");
-        String viewLabel = LanguageManager.get("menu_view", "View");
-        String toolsLabel = LanguageManager.get("menu_tools", "Tools");
+        String fileLabel = LanguageManager.get("menu_file", MenuResourceLoader.getString("menu_file"));
+        String viewLabel = LanguageManager.get("menu_view", MenuResourceLoader.getString("menu_view"));
+        String toolsLabel = LanguageManager.get("menu_tools", MenuResourceLoader.getString("menu_tools"));
         String settingsLabel = LanguageManager.get("menu_settings", "Settings");
 
         JMenu fileMenu = new JMenu(fileLabel);
         fileMenu.add(makeItem("Open Study...", e -> openStudy()));
         fileMenu.addSeparator();
 
-        JMenuItem prefItem = makeItem("Preferences...", e -> showPreferences());
+        JMenuItem prefItem = makeItem(MenuResourceLoader.getString("menu_file_preferences"), e -> showPreferences());
         prefItem.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_COMMA, java.awt.event.InputEvent.CTRL_DOWN_MASK));
         fileMenu.add(prefItem);
 
-        JMenu importMenu = new JMenu("Import");
+        JMenu importMenu = new JMenu(MenuResourceLoader.getString("file_import"));
         importMenu.add(makeItem("From Files...", e -> openStudy()));
         importMenu.add(makeItem("From CD/DVD...", e -> showBurnerDialog()));
         JMenuItem pacsItem = makeItem("From PACS (C-MOVE)...", e -> queryPACS());
         importMenu.add(pacsItem);
         fileMenu.add(importMenu);
 
-        JMenu exportMenu = new JMenu("Export");
+        JMenu exportMenu = new JMenu(MenuResourceLoader.getString("file_export"));
         exportMenu.add(makeItem("To DICOM File...", e -> exportStudy()));
         exportMenu.add(makeItem("JPEG / TIFF...", e -> exportToImage()));
         exportMenu.add(makeItem("ROI Data...", e -> exportROIData()));
@@ -65,8 +65,8 @@ public class MainMenuBar extends JMenuBar {
         fileMenu.addSeparator();
 
         JMenu printSub = new JMenu("Print");
-        printSub.add(makeItem("DICOM Print...", e -> dicomPrint()));
-        printSub.add(makeItem("Page Setup...", e -> pageSetup()));
+        printSub.add(makeItem(MenuResourceLoader.getString("menu_file_dicom_print"), e -> dicomPrint()));
+        printSub.add(makeItem(MenuResourceLoader.getString("menu_file_page_setup"), e -> pageSetup()));
         fileMenu.add(printSub);
         fileMenu.addSeparator();
 
@@ -74,50 +74,53 @@ public class MainMenuBar extends JMenuBar {
         fileMenu.add(recentStudiesMenu);
         fileMenu.addSeparator();
 
-        fileMenu.add(makeItem("Close All Viewers", e -> closeAllViewers()));
+        fileMenu.add(makeItem(MenuResourceLoader.getString("menu_window_close_all_viewers"), e -> closeAllViewers()));
         fileMenu.add(makeItem("Exit", e -> System.exit(0)));
         add(fileMenu);
 
         viewMenu = new JMenu(viewLabel);
-        viewMenu.add(makeItem("Zoom", e -> setTool(DCMView.ToolMode.tZoom)));
+        viewMenu.add(makeItem(MenuResourceLoader.getString("menu_window_zoom"), e -> setTool(DCMView.ToolMode.tZoom)));
         viewMenu.addSeparator();
         viewMenu.add(makeItem("Shutter", e -> setTool(DCMView.ToolMode.tShutter)));
         viewMenu.addSeparator();
-        viewMenu.add(makeItem("Window Level/Width", e -> setTool(DCMView.ToolMode.tWLWW)));
+        viewMenu.add(makeItem(MenuResourceLoader.getString("menu_tools_window_level"), e -> setTool(DCMView.ToolMode.tWLWW)));
 
-        JMenu displaySub = new JMenu("Display");
-        displaySub.add(makeItem("Flip Horizontal", e -> flipX()));
-        displaySub.add(makeItem("Flip Vertical", e -> flipY()));
+        JMenu displaySub = new JMenu(MenuResourceLoader.getString("menu_display"));
+        displaySub.add(makeItem(MenuResourceLoader.getString("menu_flip_horizontal"), e -> flipX()));
+        displaySub.add(makeItem(MenuResourceLoader.getString("menu_flip_vertical"), e -> flipY()));
         viewMenu.add(displaySub);
         viewMenu.addSeparator();
 
-        JMenu tilingMenu = new JMenu("Image Tiling");
+        JMenu tilingMenu = new JMenu(MenuResourceLoader.getString("menu_tiling"));
         String[] layouts = {"1x1","2x1","1x2","2x2","3x1","1x3","3x3","4x2","2x4","5x1","1x5"};
         for (String l : layouts) { final String layout = l; tilingMenu.add(makeItem(layout, ev -> tileImages(layout))); }
         viewMenu.add(tilingMenu);
 
-        JMenu orientationMenu = new JMenu("Orientation");
-        orientationMenu.add(makeItem("Axial", e -> setOrientation("Axial")));
-        orientationMenu.add(makeItem("Coronal", e -> setOrientation("Coronal")));
-        orientationMenu.add(makeItem("Sagittal", e -> setOrientation("Sagittal")));
+        JMenu orientationMenu = new JMenu(MenuResourceLoader.getString("menu_orientation"));
+        orientationMenu.add(makeItem(MenuResourceLoader.getString("view_axial"), e -> setOrientation(MenuResourceLoader.getString("view_axial"))));
+        orientationMenu.add(makeItem(MenuResourceLoader.getString("view_coronal"), e -> setOrientation(MenuResourceLoader.getString("view_coronal"))));
+        orientationMenu.add(makeItem(MenuResourceLoader.getString("view_sagittal"), e -> setOrientation(MenuResourceLoader.getString("view_sagittal"))));
         viewMenu.add(orientationMenu);
         // Orthogonal MPR - 3D volume直交断面表示
         JMenuItem mprItem = makeItem("Orthogonal MPR", e -> openOrthogonalMPR());
         viewMenu.add(mprItem);
 
-        advancedMenu = new JMenu("Advanced");
+        advancedMenu = new JMenu(MenuResourceLoader.getString("menu_advanced"));
         mip3dItem = makeItem("3D MIP", e -> open3DMIP());
         vr3dItem = makeItem("3D Volume Rendering", e -> open3DVR());
         cprItem = makeItem("Curved MPR", e -> openCPR());
         advancedMenu.add(mip3dItem);
         advancedMenu.add(vr3dItem);
         advancedMenu.add(cprItem);
+        // HOROS-20240407準拠: Endoscopy / SR Viewer menu items
+        advancedMenu.add(makeItem("Endoscopy Viewer", e -> openEndoscopyImpl()));
+        advancedMenu.add(makeItem("Structured Report", e -> openSRViewerImpl()));
 
         toolsMenu = new JMenu(toolsLabel);
         JMenu roiTools = new JMenu("ROI Tools");
         roiOvalItem = makeItem("Oval ROI", e -> setTool(DCMView.ToolMode.tOval));
         roiTools.add(roiOvalItem);
-        JMenu measureTools = new JMenu("Measure");
+        JMenu measureTools = new JMenu(MenuResourceLoader.getString("menu_tools_measure"));
         lengthItem = makeItem("Length", e -> setTool(DCMView.ToolMode.tMesure));
         angleItem = makeItem("Angle", e -> setTool(DCMView.ToolMode.tAngle));
         measureTools.add(lengthItem);
@@ -131,11 +134,11 @@ public class MainMenuBar extends JMenuBar {
         toolsMenu.add(annotTools);
 
         analysisMenu = new JMenu("Analysis");
-        analysisMenu.add(makeItem("Bone Removal", e -> analysisPending("Bone Removal")));
+        analysisMenu.add(makeItem(MenuResourceLoader.getString("menu_toolbar_bone_removal"), e -> analysisPending(MenuResourceLoader.getString("menu_toolbar_bone_removal"))));
         analysisMenu.add(makeItem("Repulsor / ROI Sculpting", e -> setTool(DCMView.ToolMode.tRepulsor)));
 
         JMenu settingsMenu = new JMenu(settingsLabel);
-        settingsMenu.add(makeItem("Preferences...", e -> showPreferences()));
+        settingsMenu.add(makeItem(MenuResourceLoader.getString("menu_file_preferences"), e -> showPreferences()));
         add(settingsMenu);
 
         viewMenu.addSeparator();
@@ -176,9 +179,9 @@ public class MainMenuBar extends JMenuBar {
 
     private void queryPACS() { Frame owner = (Frame)SwingUtilities.getWindowAncestor(MainMenuBar.this); if(owner==null)owner=BrowserController.currentBrowser(); if(owner!=null) QueryController.getInstance().showQueryDialog(owner); }
 
-    private void exportStudy() { JOptionPane.showMessageDialog(this, "Export to DICOM File (pending integration)", "Export", JOptionPane.INFORMATION_MESSAGE); }
-    private void exportToImage() { JOptionPane.showMessageDialog(this, "JPEG / TIFF export dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE); }
-    private void exportROIData() { JOptionPane.showMessageDialog(this, "ROI data export dialog pending", "Export", JOptionPane.INFORMATION_MESSAGE); }
+    private void exportStudy() { JOptionPane.showMessageDialog(this, "Export to DICOM File (pending integration)", MenuResourceLoader.getString("file_export"), JOptionPane.INFORMATION_MESSAGE); }
+    private void exportToImage() { JOptionPane.showMessageDialog(this, "JPEG / TIFF export dialog pending", MenuResourceLoader.getString("file_export"), JOptionPane.INFORMATION_MESSAGE); }
+    private void exportROIData() { JOptionPane.showMessageDialog(this, "ROI data export dialog pending", MenuResourceLoader.getString("file_export"), JOptionPane.INFORMATION_MESSAGE); }
 
     private void dicomPrint() { BrowserController bc = BrowserController.currentBrowser(); if (bc != null) bc.generateReport(null); }
     private void pageSetup() { JOptionPane.showMessageDialog(this, "Page Setup dialog pending", "Page Setup", JOptionPane.INFORMATION_MESSAGE); }
@@ -196,7 +199,17 @@ public class MainMenuBar extends JMenuBar {
 
     private void open3DMIP() { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) Viewer3DController.openMIP(v.getController()); }
     private void open3DVR() { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) Viewer3DController.openVR(v.getController()); }
-    private void openCPR()  { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) CPRController.openCurved(v.getController()); }
+    private void openEndoscopyImpl() {
+        DCMView v = getActiveDCMView();
+        if (v != null && v.getController() != null) Viewer3DController.openEndoscopy(v.getController());
+    }
+
+    private void openSRViewerImpl() {
+        DCMView v = getActiveDCMView();
+        if (v != null && v.getController() != null) Viewer3DController.openSR(v.getController());
+    }
+
+private void openCPR()  { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) CPRController.openCurved(v.getController()); }
 
     private void openOrthogonalMPR() { DCMView v = getActiveDCMView(); if (v != null && v.getController() != null) MPRController.openOrthogonal(v.getController()); }
 
@@ -205,12 +218,12 @@ public class MainMenuBar extends JMenuBar {
 
     private void setOrientation(String orientation) { DCMView view = getActiveDCMView();
         if (view != null) { BrowserController bc = BrowserController.currentBrowser();
-            if (bc != null && bc.getCurrentViewType() == ViewType.STANDARD_2D) JOptionPane.showMessageDialog(this, "Orientation: " + orientation + " (requires MPR viewer active)", "Orientation", JOptionPane.INFORMATION_MESSAGE); } }
+            if (bc != null && bc.getCurrentViewType() == ViewType.STANDARD_2D) JOptionPane.showMessageDialog(this, "Orientation: " + orientation + " (requires MPR viewer active)", MenuResourceLoader.getString("menu_orientation"), JOptionPane.INFORMATION_MESSAGE); } }
 
     private void analysisPending(String name) { BrowserController bc = BrowserController.currentBrowser();
         if (bc != null) JOptionPane.showMessageDialog(bc, "\"" + name + "\" - implementation pending", "Analysis", JOptionPane.INFORMATION_MESSAGE); }
 
-    private JMenu makeRecentStudiesMenu() { JMenu menu = new JMenu("Recent Studies"); addRecentItems(menu);
+    private JMenu makeRecentStudiesMenu() { JMenu menu = new JMenu(MenuResourceLoader.getString("recent_studies")); addRecentItems(menu);
         if (menu.getItemCount() == 0) { JMenuItem empty = new JMenuItem("(empty)"); empty.setEnabled(false); menu.add(empty); } return menu; }
 
     private void addRecentItems(JMenu menu) { Preferences prefs = Preferences.userNodeForPackage(MainMenuBar.class);

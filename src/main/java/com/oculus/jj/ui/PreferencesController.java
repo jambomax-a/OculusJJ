@@ -22,6 +22,7 @@ public class PreferencesController extends JFrame {
     private JPanel contentPanel;
     private CardLayout cardLayout;
     private String lastSelection;
+    private JComboBox<String> langCombo;
 
     
     public static void showFrame(Frame owner) {
@@ -131,7 +132,13 @@ public static synchronized PreferencesController getInstance() {
 
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton saveBtn = new JButton("Apply");
-        saveBtn.addActionListener(e -> { AppPreferences.saveAll(); });
+        saveBtn.addActionListener(e -> {
+            String selectedLang = langCombo.getSelectedItem().toString();
+            AppPreferences.setAppLanguage(selectedLang.contains("ja") ? "ja" : "en");
+            AppPreferences.saveAll();
+            java.util.Locale locale = AppPreferences.getAppLanguage().equals("ja") ? new java.util.Locale("ja") : java.util.Locale.ENGLISH;
+            com.oculus.jj.ui.MenuResourceLoader.setLocale(locale);
+        });
         JButton closeBtn = new JButton("Close");
         closeBtn.addActionListener(e -> setVisible(false));
         bottomPanel.add(saveBtn);
@@ -149,7 +156,7 @@ public static synchronized PreferencesController getInstance() {
 
         JSectionBox ifaceBox = new JSectionBox("Interface");
         String[] langs = {"English (en)", "Japanese (ja)"};
-        JComboBox<String> langCombo = new JComboBox<>(langs);
+        langCombo = new JComboBox<>(langs);
         langCombo.setSelectedItem(com.oculus.jj.config.AppPreferences.getAppLanguage().equals("ja") ? "Japanese (ja)" : "English (en)");
         String[] displayTypes = {"Original Pixel Data", "Gray Scale", "Displayed Pixel Data"};
         JComboBox<String> displayTypeCombo = new JComboBox<>(displayTypes);

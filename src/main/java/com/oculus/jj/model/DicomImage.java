@@ -84,6 +84,15 @@ public class DicomImage {
     private Double zoom;
     private DicomSeries series;
 
+    // DICOM metadata fields (HOROS-20240407準拠: 患者・検査・シリーズ情報)
+    private String patientID;
+    private String studyDescription;
+    private String seriesDescription;
+    private Integer seriesNumber;
+    private String sopClassUID;
+    private String instanceComments;
+    private String accessionNumber;
+
     // キャッシュ
     private transient DicomPix cachedDicomPix;
 
@@ -306,6 +315,28 @@ public class DicomImage {
     public String getSopInstanceUID() {
         return sopInstanceUID;
     }
+
+    // DICOM metadata getters/setters (HOROS-20240407準拠: DicomPix.m 対応項目)
+    public String getPatientID() { return patientID; }
+    public void setPatientID(String v) { this.patientID = v; }
+
+    public String getStudyDescription() { return studyDescription; }
+    public void setStudyDescription(String v) { this.studyDescription = v; }
+
+    public String getSeriesDescription() { return seriesDescription; }
+    public void setSeriesDescription(String v) { this.seriesDescription = v; }
+
+    public Integer getSeriesNumber() { return seriesNumber; }
+    public void setSeriesNumber(Integer v) { this.seriesNumber = v; }
+
+    public String getSopClassUID() { return sopClassUID; }
+    public void setSopClassUID(String v) { this.sopClassUID = v; }
+
+    public String getInstanceComments() { return instanceComments; }
+    public void setInstanceComments(String v) { this.instanceComments = v; }
+
+    public String getAccessionNumber() { return accessionNumber; }
+    public void setAccessionNumber(String v) { this.accessionNumber = v; }
 
     public void setSopInstanceUID(String sopInstanceUID) {
         this.sopInstanceUID = sopInstanceUID;

@@ -142,6 +142,15 @@ public class DicomPix {
     // Frame of Reference UID
     private String frameOfReferenceUID = null;
 
+    // DICOM metadata fields (HOROS-20240407準拠)
+    private String patientID;
+    private String studyDescription;
+    private String seriesDescription;
+    private Integer seriesNumber;
+    private String sopClassUID;
+    private String instanceComments;
+    private String accessionNumber;
+
     public String getSOPInstanceUID() {
         if (imageObj != null) {
             return imageObj.getSopInstanceUID();
@@ -210,6 +219,14 @@ public class DicomPix {
             this.studyInstanceUID = attrs.getString(org.dcm4che3.data.Tag.StudyInstanceUID);
             this.seriesInstanceUID = attrs.getString(org.dcm4che3.data.Tag.SeriesInstanceUID);
             this.frameOfReferenceUID = attrs.getString(org.dcm4che3.data.Tag.FrameOfReferenceUID);
+            // DICOM metadata (HOROS-20240407準拠: DicomPix.m 対応項目)
+            this.patientID = attrs.getString(org.dcm4che3.data.Tag.PatientID);
+            this.studyDescription = attrs.getString(org.dcm4che3.data.Tag.StudyDescription);
+            this.seriesDescription = attrs.getString(org.dcm4che3.data.Tag.SeriesDescription);
+            this.seriesNumber = attrs.getInt(org.dcm4che3.data.Tag.SeriesNumber, 0);
+            this.sopClassUID = attrs.getString(org.dcm4che3.data.Tag.SOPClassUID);
+            this.instanceComments = attrs.getString(0x00084000);
+            this.accessionNumber = attrs.getString(org.dcm4che3.data.Tag.AccessionNumber);
             this.sliceLocation = attrs.getDouble(org.dcm4che3.data.Tag.SliceLocation, 0.0);
             this.sliceThickness = attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0);
 
@@ -693,6 +710,48 @@ public class DicomPix {
      * サムネイル画像を生成
      * HOROS-20240407準拠で実装
      */
+    /** Fast thumbnail for browser thumbnails: block-averages raw data without WL/WW. */
+    private BufferedImage generateQuickThumbnail(int maxWidth, int maxHeight) {
+        if (rawShortData == null || width <= 0 || height <= 0) return null;
+
+        // アスペクト比を維持
+        double scaleX = (double) maxWidth / width;
+        double scaleY = (double) maxHeight / height;
+        double scale = Math.min(scaleX, scaleY);
+        int thumbW = Math.max(1, (int)(width * scale));
+        int thumbH = Math.max(1, (int)(height * scale));
+
+        short[] data = rawShortData;
+        BufferedImage thumb = new BufferedImage(thumbW, thumbH, BufferedImage.TYPE_INT_RGB);
+        int[] pixels = ((java.awt.image.DataBufferInt) thumb.getRaster().getDataBuffer()).getData();
+
+        // Block averaging: each output pixel averages N source pixels
+        float blockW = (float)width / thumbW;
+        float blockH = (float)height / thumbH;
+
+        for (int ty = 0; ty < thumbH; ty++) {
+            int sy0 = (int)(ty * blockH);
+            int sy1 = (int)((ty + 1) * blockH);
+            if (sy1 > height) sy1 = height;
+            for (int tx = 0; tx < thumbW; tx++) {
+                int sx0 = (int)(tx * blockW);
+                int sx1 = (int)((tx + 1) * blockW);
+                if (sx1 > width) sx1 = width;
+
+                long sum = 0;
+                int count = 0;
+                for (int sy = sy0; sy < sy1; sy++) {
+                    for (int sx = sx0; sx < sx1; sx++) {
+                        sum += data[sy * width + sx] & 0xFFFF;
+                        count++;
+                    }
+                }
+                int avg = (count > 0) ? (int)(sum / count) : 0;
+                pixels[ty * thumbW + tx] = avg | (avg << 8) | (avg << 16);
+            }
+        }
+        return thumb;
+    }
     public BufferedImage generateThumbnail(int maxWidth, int maxHeight) {
         if (bufferedImage == null || (isGrayscale && rawShortData == null)) {
             loadImage();

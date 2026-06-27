@@ -23,6 +23,10 @@ import org.lwjgl.opengl.awt.GLData;
 public class GLViewer3D extends AWTGLCanvas {
 
     public static final int ENGINE_CPU = 0;
+    public static final int STEREO_OFF = 0;
+    public static final int STEREO_MONOSCOPIC_LEFT = 1;
+    public static final int STEREO_MONOSCOPIC_RIGHT = 2;
+    public static final int STEREO_BUFFERED = 3;
     public static final int ENGINE_GPU = 1;
 
     private int shaderProgram;
@@ -80,6 +84,8 @@ public class GLViewer3D extends AWTGLCanvas {
     private CPURaycastRenderer cpuRenderer;
     private float stepSize = 0.002f;
     private int useShading = 1;
+    private int stereoMode = STEREO_OFF;
+    private boolean fusionMode = false;
     private boolean isPerspective = false;
     private volatile BufferedImage cpuImage;
     private final Object cpuRenderLock = new Object();
@@ -200,6 +206,9 @@ public class GLViewer3D extends AWTGLCanvas {
                 renderer.setTransferFunction(transferFunction);
             }
             renderer.setWindowLevel(windowLevel, windowWidth);
+            // HOROS-20240407準拠: CPUレンダラーにGLの正確なvoxScaleを適用し、GPU/CPU両モードで初期表示時のアスペクト比正規化が一致するようにする。
+            // Debug: GL voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ") dim=(" + dimX + "," + dimY + "," + dimZ + ") spacing=(" + spacingX + "," + spacingY + "," + spacingZ + ")
+            renderer.setVoxScalesDirect(voxScaleX, voxScaleY, voxScaleZ);
         }
         requestCpuRender();
     }
@@ -465,6 +474,10 @@ public class GLViewer3D extends AWTGLCanvas {
             cpuRenderer.setVoxelSpacing(sx, sy, sz);
         }
     }
+    public float getVoxScaleX() { return voxScaleX; }
+    public float getVoxScaleY() { return voxScaleY; }
+    public float getVoxScaleZ() { return voxScaleZ; }
+
 
     public void setStepSize(float s) {
         this.stepSize = s;
@@ -1487,5 +1500,30 @@ public class GLViewer3D extends AWTGLCanvas {
             cur = cur.getCause();
         }
         return false;
+    }
+
+
+    /** HOROS-20240407準拠: Stereo vision mode toggle */
+    public void setStereoMode(int mode) {
+        this.stereoMode = mode;
+        System.out.println("[GL3D] Stereo mode: " + (mode == STEREO_BUFFERED ? "BUFFERED" : "OFF"));
+        // TODO: Implement stereoscopic rendering (active/passive glasses or anaglyph)
+        // HOROS uses stereo pairs with cross-eyed/parallel viewing
+    }
+
+    public boolean isStereoMode() {
+        return stereoMode != STEREO_OFF;
+    }
+
+    /** HOROS-20240407準拠: Fusion/Blending mode toggle */
+    public void setFusionMode(boolean enabled) {
+        this.fusionMode = enabled;
+        System.out.println("[GL3D] Fusion mode: " + enabled);
+        // TODO: Implement dual-volume blending for PET/CT or other modality fusion
+        // HOROS uses 2DBlending with percentage slider (tbBlending)
+    }
+
+    public boolean isFusionMode() {
+        return fusionMode;
     }
 }
