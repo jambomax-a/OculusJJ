@@ -76,3 +76,6 @@ dcm4che-5.34.1/
 weasis-native/
 *.zip
 *.pom
+
+# Maven local cache
+.m2-local/
