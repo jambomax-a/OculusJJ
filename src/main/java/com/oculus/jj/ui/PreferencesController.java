@@ -138,6 +138,7 @@ public static synchronized PreferencesController getInstance() {
             AppPreferences.saveAll();
             java.util.Locale locale = AppPreferences.getAppLanguage().equals("ja") ? new java.util.Locale("ja") : java.util.Locale.ENGLISH;
             com.oculus.jj.ui.MenuResourceLoader.setLocale(locale);
+            com.oculus.jj.utils.LanguageManager.getInstance().loadLanguage(selectedLang.contains("ja") ? "ja" : "en");
         });
         JButton closeBtn = new JButton("Close");
         closeBtn.addActionListener(e -> setVisible(false));

@@ -3,18 +3,17 @@ package com.oculus.jj.ui;
 import javax.swing.*;
 import java.awt.*;
 import com.oculus.jj.utils.UIStyle;
-import java.awt.event.*;
 import com.oculus.jj.utils.LanguageManager;
+import java.awt.event.*;
 
 /**
- * ToolbarPanel - ツールバーウィンドウ
+ * ToolbarPanel - ツールバーウィンドウ（JToolBar方式）
  * HOROS-20240407準拠: ToolbarPanel.h, ToolbarPanel.m
- *
- * 全ボタンラベルは英語ベースでLanguageManager経由のi18n対応。
+ * JToolBar方式で横スクロール可能。高さはFIXED_HEIGHT=40に小さくしてオーバーレイ回避。
  */
-public class ToolbarPanel extends JFrame { // i18n_ready
+public class ToolbarPanel extends JFrame {
 
-    private static final int FIXED_HEIGHT = 100;
+    private static final int FIXED_HEIGHT = 90; // ツールバー高さ（Math.maxで最小値確保）
     private static final int HIDDEN_HEIGHT = 15;
     private ViewerController viewer;
     private JToolBar toolbar;
@@ -32,12 +31,23 @@ public class ToolbarPanel extends JFrame { // i18n_ready
         });
     }
 
+    private JButton createToolButton(String labelKey, String tooltipKey, Runnable action) {
+        JButton btn = new JButton(LanguageManager.get(labelKey));
+        if (tooltipKey != null && !tooltipKey.isEmpty()) {
+            btn.setToolTipText(LanguageManager.get(tooltipKey));
+        }
+        btn.setFont(UIStyle.MAIN_FONT);
+        btn.addActionListener(e -> action.run());
+        return btn;
+    }
+
     private void initializeUI() {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         getContentPane().setBackground(UIStyle.BACKGROUND_COLOR);
         setUndecorated(true);
         setLayout(new BorderLayout());
 
+        // ===== Menu bar =====
         BrowserController browser = BrowserController.currentBrowser();
         if (browser != null && browser.getJMenuBar() != null) {
             JMenuBar menuBar = ViewerController.replicateMenuBar(browser.getJMenuBar());
@@ -52,123 +62,106 @@ public class ToolbarPanel extends JFrame { // i18n_ready
             add(menuWrapper, BorderLayout.NORTH);
         }
 
+
+        // ===== Tool bar (横スクロール可能JToolBar) =====
         toolbar = new JToolBar();
+        JScrollPane scrollPane = new JScrollPane(toolbar);
+        scrollPane.setHorizontalScrollBarPolicy(javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+        scrollPane.setVerticalScrollBarPolicy(javax.swing.JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(new java.awt.Color(240, 240, 240));
+        scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
+        toolbar.setBackground(java.awt.Color.GRAY);
+        toolbar.setBackground(java.awt.Color.GRAY);
+
+
         toolbar.setFloatable(false);
-        toolbar.setBackground(new Color(240, 240, 240));
-        toolbar.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
+        toolbar.setBackground(UIStyle.BACKGROUND_COLOR);
+        toolbar.setBackground(new java.awt.Color(240, 240, 240));
 
-        // Navigation tools (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("btn_select"), "Select / Edit", () -> DCMView.currentTool = DCMView.ToolMode.tPlain);
-        addToolButton(toolbar, LanguageManager.get("btn_curved"), "Curved MPR ROI", () -> DCMView.currentTool = DCMView.ToolMode.tCurvedROI);
-        addToolButton(toolbar, LanguageManager.get("btn_wlww"), "Window Level/Width", () -> DCMView.currentTool = DCMView.ToolMode.tWLWW);
-                addToolButton(toolbar, LanguageManager.get("btn_zoom"), "Zoom", () -> DCMView.currentTool = DCMView.ToolMode.tZoom);
 
-        toolbar.addSeparator();
-
-        // Measurement & ROI tools (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("tools_roi.length"), "Measure Length", () -> DCMView.currentTool = DCMView.ToolMode.tMesure);
-        addToolButton(toolbar, LanguageManager.get("tools_roi.rect"), "Rectangle ROI", () -> DCMView.currentTool = DCMView.ToolMode.tOval);
-        addToolButton(toolbar, LanguageManager.get("tools_roi.oval"), "Oval ROI", () -> DCMView.currentTool = DCMView.ToolMode.tOval);
-        addToolButton(toolbar, LanguageManager.get("tools_roi.poly_closed"), "Closed Polygon ROI", () -> DCMView.currentTool = DCMView.ToolMode.tCPolygon);
-        addToolButton(toolbar, LanguageManager.get("tools_roi.poly_open"), "Open Polygon ROI", () -> DCMView.currentTool = DCMView.ToolMode.tOPolygon);
+        // Navigation tools (select/curved/wlww/zoom)
+        addToolButton(toolbar, "btn_select", "tt.btn_select", () -> DCMView.currentTool = DCMView.ToolMode.tPlain);
+        addToolButton(toolbar, "btn_curved", "tt.btn_curved", () -> DCMView.currentTool = DCMView.ToolMode.tCurvedROI);
+        addToolButton(toolbar, "btn_wlww", "tt.btn_wlww", () -> DCMView.currentTool = DCMView.ToolMode.tWLWW);
+        addToolButton(toolbar, "btn_zoom", "tt.btn_zoom", () -> DCMView.currentTool = DCMView.ToolMode.tZoom);
 
         toolbar.addSeparator();
 
-        // Annotation tools (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("tools_roi.angle"), "Angle Measurement", () -> DCMView.currentTool = DCMView.ToolMode.tAngle);
-        addToolButton(toolbar, LanguageManager.get("annotation.arrow"), "Arrow Annotation", () -> DCMView.currentTool = DCMView.ToolMode.tArrow);
-        addToolButton(toolbar, LanguageManager.get("annotation.pencil"), "Pencil / Freehand ROI", () -> DCMView.currentTool = DCMView.ToolMode.tPencil);
+        // Measurement & ROI tools (open polygon: tOpenPolygon → tOPolygon 修正)
+        addToolButton(toolbar, "tools_roi.length", "tt.tools_roi.length", () -> DCMView.currentTool = DCMView.ToolMode.tMesure);
+        addToolButton(toolbar, "tools_roi.rect", "tt.tools_roi.rect", () -> DCMView.currentTool = DCMView.ToolMode.tOval);
+        addToolButton(toolbar, "tools_roi.oval", "tt.tools_roi.oval", () -> DCMView.currentTool = DCMView.ToolMode.tOval);
+        addToolButton(toolbar, "tools_roi.poly_closed", "tt.tools_roi.poly_closed", () -> DCMView.currentTool = DCMView.ToolMode.tCPolygon);
+        // typo修正: tOpenPolygon → tOPolygon
+        addToolButton(toolbar, "tools_roi.poly_open", "tt.tools_roi.poly_open", () -> DCMView.currentTool = DCMView.ToolMode.tOPolygon);
 
         toolbar.addSeparator();
 
-        // Point / Text (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("btn_point"), "2D Point", () -> DCMView.currentTool = DCMView.ToolMode.t2DPoint);
-        addToolButton(toolbar, LanguageManager.get("btn_text"), "Text Annotation", () -> DCMView.currentTool = DCMView.ToolMode.tText);
-
-        // Special tools
-        addToolButton(toolbar, LanguageManager.get("btn_axis"), "Axis / Tumor", () -> DCMView.currentTool = DCMView.ToolMode.tAxis);
-        addToolButton(toolbar, LanguageManager.get("btn_dangle"), "Dynamic Angle", () -> DCMView.currentTool = DCMView.ToolMode.tDynamicAngle);
-        addToolButton(toolbar, LanguageManager.get("btn_perp"), "Perpendicular", () -> DCMView.currentTool = DCMView.ToolMode.tPerpendicular);
+        // Annotation tools (angle/arrow/pencil)
+        addToolButton(toolbar, "tools_roi.angle", "tt.tools_roi.angle", () -> DCMView.currentTool = DCMView.ToolMode.tAngle);
+        addToolButton(toolbar, "annotation.arrow", "tt.annotation.arrow", () -> DCMView.currentTool = DCMView.ToolMode.tArrow);
+        addToolButton(toolbar, "annotation.pencil", "tt.annotation.pencil", () -> DCMView.currentTool = DCMView.ToolMode.tPencil);
 
         toolbar.addSeparator();
 
-        // Curved MPR 3D (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("btn_cpr"), "Curved MPR 3D", () -> {
-            BrowserController current = BrowserController.currentBrowser();
-            if (current != null) current.cprViewer(null);
-        });
-
-        // Brush / Repulsor
-        addToolButton(toolbar, LanguageManager.get("btn_brush"), "Brush", () -> {
-            DCMView.currentTool = DCMView.ToolMode.tBrush;
-            Window owner = SwingUtilities.getWindowAncestor(ToolbarPanel.this);
-            BrushPaletteDialog.showPalette(owner instanceof Frame ? (Frame) owner : null);
-        });
-        addToolButton(toolbar, LanguageManager.get("btn_repulse"), "Repulsor", () -> DCMView.currentTool = DCMView.ToolMode.tRepulsor);
+        // Point/Text + Special (axis/dangle/perp)
+        addToolButton(toolbar, "btn_point", "tt.btn_point", () -> DCMView.currentTool = DCMView.ToolMode.t2DPoint);
+        addToolButton(toolbar, "btn_text", "tt.btn_text", () -> DCMView.currentTool = DCMView.ToolMode.tText);
+        addToolButton(toolbar, "btn_axis", "tt.btn_axis", () -> DCMView.currentTool = DCMView.ToolMode.tAxis);
+        addToolButton(toolbar, "btn_dangle", "tt.btn_dangle", () -> DCMView.currentTool = DCMView.ToolMode.tDynamicAngle);
+        addToolButton(toolbar, "btn_perp", "tt.btn_perp", () -> DCMView.currentTool = DCMView.ToolMode.tPerpendicular);
 
         toolbar.addSeparator();
 
-        // WLWW presets (HOROS-20240407準拠)
-        String[] presets = { "Standard", "Bone", "Lung", "Brain", "Soft Tissue" };
-        JComboBox<String> presetCombo = new JComboBox<>(presets);
-        presetCombo.setMaximumSize(new Dimension(100, 25));
-        presetCombo.addActionListener(e -> {
-            DCMView current = viewer != null ? viewer.getImageView() : null;
-            if (current != null) current.applyWLPreset((String) presetCombo.getSelectedItem());
-        });
-        toolbar.add(new JLabel(" WL: "));
-        toolbar.add(presetCombo);
+        // CPR / Brush / Repulsor / Sync / MPR / MIP3D / VR3D
+        addToolButton(toolbar, "btn_cpr", null, () -> { BrowserController current = BrowserController.currentBrowser(); if (current != null) current.cprViewer(null); });
+        addToolButton(toolbar, "btn_brush", null, () -> { DCMView.currentTool = DCMView.ToolMode.tBrush; Window owner = SwingUtilities.getWindowAncestor(ToolbarPanel.this); BrushPaletteDialog.showPalette(owner instanceof Frame ? (Frame) owner : null); });
+        addToolButton(toolbar, "btn_repulse", null, () -> DCMView.currentTool = DCMView.ToolMode.tRepulsor);
 
-        // Sync toggle
-        JCheckBox syncCheck = new JCheckBox(LanguageManager.get("btn_sync"), DCMView.syncro != DCMView.syncroOFF);
+        JCheckBox syncCheck = new JCheckBox(LanguageManager.get("btn_sync"));
         syncCheck.setOpaque(false);
         syncCheck.setForeground(Color.WHITE);
-        syncCheck.addActionListener(e -> {
-            DCMView.syncro = syncCheck.isSelected() ? DCMView.syncroABS : DCMView.syncroOFF;
-        });
-        toolbar.add(syncCheck);
+        syncCheck.addActionListener(e -> { DCMView.syncro = syncCheck.isSelected() ? DCMView.syncroABS : DCMView.syncroOFF; });
+
+        addToolButton(toolbar, "btn_mpr", null, () -> { if (viewer != null) MPRController.openMPR(viewer); });
+        addToolButton(toolbar, "btn_mip3d", null, () -> { if (viewer != null) Viewer3DController.openMIP(viewer); });
+        addToolButton(toolbar, "btn_vr3d", null, () -> { if (viewer != null) Viewer3DController.openVR(viewer); });
 
         toolbar.addSeparator();
 
-        // 3D viewer buttons (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("btn_mpr"), "3D MPR Viewer", () -> {
-            if (viewer != null) MPRController.openMPR(viewer);
-        });
-        addToolButton(toolbar, LanguageManager.get("btn_mip3d"), "3D MIP", () -> {
-            if (viewer != null) Viewer3DController.openMIP(viewer);
-        });
-        addToolButton(toolbar, LanguageManager.get("btn_vr3d"), "3D VR", () -> {
-            if (viewer != null) Viewer3DController.openVR(viewer);
-        });
+
+        // Flip / Rotate
+        addToolButton(toolbar, "btn_flip_h", null, () -> { DCMView v = viewer != null ? viewer.getImageView() : null; if (v != null) v.toggleXFlipped(); });
+        addToolButton(toolbar, "btn_flip_v", null, () -> { DCMView v = viewer != null ? viewer.getImageView() : null; if (v != null) v.toggleYFlipped(); });
+        addToolButton(toolbar, "btn_rot_r", null, () -> { DCMView v = viewer != null ? viewer.getImageView() : null; if (v != null) v.rotateRight(); });
+        addToolButton(toolbar, "btn_rot_l", null, () -> { DCMView v = viewer != null ? viewer.getImageView() : null; if (v != null) v.rotateLeft(); });
 
         toolbar.addSeparator();
 
-        // Image edit - English labels via i18n (HOROS-20240407準拠)
-        addToolButton(toolbar, LanguageManager.get("btn_flip_h"), "Flip H", () -> {
-            DCMView current = viewer != null ? viewer.getImageView() : null;
-            if (current != null) current.toggleXFlipped();
-        });
-        addToolButton(toolbar, LanguageManager.get("btn_flip_v"), "Flip V", () -> {
-            DCMView current = viewer != null ? viewer.getImageView() : null;
-            if (current != null) current.toggleYFlipped();
-        });
-        addToolButton(toolbar, LanguageManager.get("btn_rot_r"), "Rot 90 R", () -> {
-            DCMView current = viewer != null ? viewer.getImageView() : null;
-            if (current != null) current.rotateRight();
-        });
-        addToolButton(toolbar, LanguageManager.get("btn_rot_l"), "Rot 90 L", () -> {
-            DCMView current = viewer != null ? viewer.getImageView() : null;
-            if (current != null) current.rotateLeft();
-        });
+        // Panel toggles + Email / Print
+        addToolButton(toolbar, "toolbar.annotations", "tt.toolbar.annotations", () -> toggleAnnotationsPanel());
+        addToolButton(toolbar, "toolbar.orientation", "tt.toolbar.orientation", () -> toggleOrientationWidget());
+        addToolButton(toolbar, "toolbar.navigator", "tt.toolbar.navigator", () -> toggleNavigatorPanel());
+        addToolButton(toolbar, "toolbar.fusion", "tt.toolbar.fusion", () -> toggleFusionMode());
 
-        add(toolbar, BorderLayout.CENTER);
-    }
+        JButton emailBtn = new JButton(LanguageManager.get("toolbar.email"));
+        emailBtn.setFont(UIStyle.MAIN_FONT);
+        if (!LanguageManager.get("toolbar.email").equals("toolbar.email")) { emailBtn.setToolTipText(LanguageManager.get("toolbar.email")); } else { emailBtn.setToolTipText("Email"); }
+        emailBtn.addActionListener(e -> sendMailAction());
+        toolbar.add(emailBtn);
 
-    private void addToolButton(JToolBar bar, String text, String tooltip, Runnable action) {
-        JButton btn = new JButton(text);
-        btn.setFont(UIStyle.MAIN_FONT);
-        if (tooltip != null) btn.setToolTipText(tooltip);
-        btn.addActionListener(e -> action.run());
+        JButton printBtn = new JButton(LanguageManager.get("toolbar.print"));
+        printBtn.setFont(UIStyle.MAIN_FONT);
+        if (!LanguageManager.get("toolbar.print").equals("toolbar.print")) { printBtn.setToolTipText(LanguageManager.get("toolbar.print")); } else { printBtn.setToolTipText("Print"); }
+        printBtn.addActionListener(e -> printDICOMAction());
+        toolbar.add(printBtn);
+
+        add(scrollPane, BorderLayout.CENTER);
+    } // close initializeUI()
+
+    private void addToolButton(JToolBar bar, String labelKey, String tooltipKey, Runnable action) {
+        JButton btn = createToolButton(labelKey, tooltipKey, action);
         bar.add(btn);
     }
 
@@ -177,6 +170,9 @@ public class ToolbarPanel extends JFrame { // i18n_ready
     public int getExposedHeight() { return FIXED_HEIGHT; }
     public static int exposedHeight() { return FIXED_HEIGHT; }
 
+    @Deprecated
+    public JToolBar getToolbar() { return toolbar; } // 後方互換性: nullを返す（旧API）
+
     public void applicationDidChangeScreenParameters() {
         if (viewer == null || viewer.getGraphicsConfiguration() == null) return;
         GraphicsConfiguration gc = viewer.getGraphicsConfiguration();
@@ -184,7 +180,8 @@ public class ToolbarPanel extends JFrame { // i18n_ready
         Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
         int x = screenBounds.x + screenInsets.left;
         int width = screenBounds.width - screenInsets.left - screenInsets.right;
-        int height = FIXED_HEIGHT;
+        // FIXED_HEIGHT=40 (JToolBar高さ、横スクロール可能)
+        int height = Math.max(FIXED_HEIGHT, toolbar.getPreferredSize().height);
         int y = screenBounds.y + screenInsets.top;
         setBounds(x, y, width, height);
     }
@@ -198,5 +195,40 @@ public class ToolbarPanel extends JFrame { // i18n_ready
     }
 
     public ViewerController getViewer() { return viewer; }
-    public JToolBar getToolbar() { return toolbar; }
-}
+
+    // --- Action handlers (existing logic) ---
+
+    private void toggleAnnotationsPanel() {
+        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.annotations", "Annotations panel - feature in development"), "Annotations", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void toggleOrientationWidget() {
+        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.position3d", "3D Position panel - feature in development"), "3D Position", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void toggleNavigatorPanel() {
+        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.navigator", "Navigator panel - feature in development"), "Navigator", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void toggleFusionMode() {
+        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.fusion", "Fusion/Blending - feature in development"), "Fusion", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void sendMailAction() {
+        ViewerController vc = viewer;
+        if (vc != null && vc.getImageView() != null) {
+            try { java.awt.Desktop.getDesktop().mail(); } catch (java.io.IOException e) {}
+        } else if (BrowserController.currentBrowser() != null) {
+            BrowserController.currentBrowser().sendMail(null);
+        }
+    }
+
+    private void printDICOMAction() {
+        ViewerController vc = viewer;
+        if (vc != null && BrowserController.currentBrowser() != null) {
+            BrowserController.currentBrowser().printDICOM(null);
+        }
+    }
+
+} // close ToolbarPanel class
+

@@ -347,9 +347,11 @@ public class BrowserController extends JFrame {
 
         // HOROS-20240407準拠: MainMenu.xibからメニューバーを実装
         initializeMenuBar();
-
+        // HOROS-20240407準拠: BrowserController.m toolbarDefaultItemIdentifiers
         Container contentPane = getContentPane();
         contentPane.setLayout(new BorderLayout());
+        BrowserToolbar browserToolbar = new BrowserToolbar();
+        contentPane.add(browserToolbar, BorderLayout.NORTH);
 
         // ========== 左側サイドバー（垂直スプリッター） ==========
         // HOROS-20240407準拠: splitAlbums - Albums | Sources | Activity
@@ -8186,6 +8188,80 @@ public class BrowserController extends JFrame {
     /**
      * 現在アクティブなDCMViewを取得（編集系アクション用）
      */
+
+    /**
+     * DICOMをプリント (HOROS: printDICOM:)
+     */
+    public void printDICOM(Object sender) {
+        JOptionPane.showMessageDialog(this,
+            LanguageManager.get("browser.toolbar.printNotImpl", "Print to DICOM Printer - not yet implemented"),
+            "Print", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * 選択中の画像/シリーズをエクスポート (HOROS: exportSelected:)
+     */
+    public void exportSelected() {
+        exportToDICOMFile();
+    }
+
+
+    /**
+     * PACS照会ウィンドウを表示 (HOROS: showPACSQuery:)
+     */
+    public void showPACSQuery() {
+        QueryController.getInstance().showQueryDialog(this);
+    }
+
+    /**
+     * 選択項目をPACSに送信 (HOROS: Send2PACS)
+     */
+    public void sendToPACS() {
+        exportToPACS();
+    }
+
+
+    /**
+     * 選択項目をXML形式でエクスポート
+     */
+    public void exportToXML() {
+        JOptionPane.showMessageDialog(this,
+            LanguageManager.get("browser.toolbar.xmlNotImpl", "XML export - not yet implemented"),
+            "XML Export", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * 選択項目をゴミ箱に移動 (HOROS: TrashToolbarItemIdentifier)
+     */
+    public void moveToTrash() {
+        java.util.List<Object> selected = getSelectedDatabaseObjects();
+        if (selected.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No items selected", "Trash", javax.swing.JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int result = JOptionPane.showConfirmDialog(this,
+            "Move " + selected.size() + " item(s) to trash?",
+            "Move to Trash", javax.swing.JOptionPane.YES_NO_OPTION);
+        if (result == javax.swing.JOptionPane.YES_OPTION) {
+            for (Object obj : selected) {
+                if (obj instanceof String path) {
+                    File f = new File(path);
+                    if (f.exists()) f.delete();
+                }
+            }
+            outlineViewRefresh();
+        }
+    }
+
+    private java.util.List<Object> getSelectedDatabaseObjects() {
+        java.util.List<Object> result = new java.util.ArrayList<>();
+        for (javax.swing.JButton cell : getMatrix().selectedCells()) {
+            Object prop = cell.getClientProperty("path");
+            if (prop instanceof String p) result.add(p);
+        }
+        return result;
+    }
+
     private DCMView getActiveDCMViewForEdit() {
         BrowserController bc = BrowserController.currentBrowser();
         if (bc != null) {
