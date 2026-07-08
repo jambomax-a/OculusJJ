@@ -3292,7 +3292,31 @@ public class DicomDatabase {
         for (File f : files) {
             if (f.isFile() && !f.getName().startsWith(".")) {
                 // HOROS-20240407準拠: インポートファイルをデータベースフォルダに移動
-                File destFile = new File(dataDir, f.getName());
+
+                String originalName = f.getName();
+
+                // UIDベースの名前には拡張子がないため、.dcm を付与（DicomStoreSCP準拠）
+
+                String originalLower = originalName.toLowerCase();
+                String destName;
+                if (originalLower.endsWith(".dcm") || originalLower.endsWith(".ima")) {
+                    destName = originalName;
+                } else {
+                    int lastDot = originalName.lastIndexOf('.');
+                    if (lastDot < 0) {
+                        destName = originalName + ".dcm";
+                    } else {
+                        String ext = originalName.substring(lastDot).toLowerCase();
+                        if (!ext.equals(".dcm") && !ext.equals(".ima")) {
+                            destName = originalName.substring(0, lastDot) + ".dcm";
+                        } else {
+                            destName = originalName;
+                        }
+                    }
+                }
+
+                File destFile = new File(dataDir, destName);
+
                 try {
                     java.nio.file.Files.move(f.toPath(), destFile.toPath(),
                             java.nio.file.StandardCopyOption.REPLACE_EXISTING);
