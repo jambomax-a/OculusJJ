@@ -206,8 +206,11 @@ public class GLViewer3D extends AWTGLCanvas {
                 renderer.setTransferFunction(transferFunction);
             }
             renderer.setWindowLevel(windowLevel, windowWidth);
-            // HOROS-20240407準拠: CPUレンダラーにGLの正確なvoxScaleを適用し、GPU/CPU両モードで初期表示時のアスペクト比正規化が一致するようにする。
-            // Debug: GL voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ") dim=(" + dimX + "," + dimY + "," + dimZ + ") spacing=(" + spacingX + "," + spacingY + "," + spacingZ + ")
+            // HOROS-20240407準拠:
+            // CPUレンダラーにGLの正確なvoxScaleを適用し、GPU/CPU両モードで初期表示時のアスペクト比正規化が一致するようにする。
+            // Debug: GL voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")
+            // dim=(" + dimX + "," + dimY + "," + dimZ + ") spacing=(" + spacingX + "," +
+            // spacingY + "," + spacingZ + ")
             renderer.setVoxScalesDirect(voxScaleX, voxScaleY, voxScaleZ);
         }
         requestCpuRender();
@@ -474,10 +477,18 @@ public class GLViewer3D extends AWTGLCanvas {
             cpuRenderer.setVoxelSpacing(sx, sy, sz);
         }
     }
-    public float getVoxScaleX() { return voxScaleX; }
-    public float getVoxScaleY() { return voxScaleY; }
-    public float getVoxScaleZ() { return voxScaleZ; }
 
+    public float getVoxScaleX() {
+        return voxScaleX;
+    }
+
+    public float getVoxScaleY() {
+        return voxScaleY;
+    }
+
+    public float getVoxScaleZ() {
+        return voxScaleZ;
+    }
 
     public void setStepSize(float s) {
         this.stepSize = s;
@@ -663,8 +674,8 @@ public class GLViewer3D extends AWTGLCanvas {
     public void initGL() {
         GL.createCapabilities(); // LWJGLのOpenGLコンテキストを有効化 (重要)
 
-        System.out.println("OpenGL Version: " + GL33.glGetString(GL33.GL_VERSION));
-        System.out.println("GL Renderer: " + GL33.glGetString(GL33.GL_RENDERER));
+        // System.out.println("OpenGL Version: " + GL33.glGetString(GL33.GL_VERSION));
+        // System.out.println("GL Renderer: " + GL33.glGetString(GL33.GL_RENDERER));
         GL33.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         GL33.glEnable(GL33.GL_BLEND);
         GL33.glBlendFunc(GL33.GL_SRC_ALPHA, GL33.GL_ONE_MINUS_SRC_ALPHA);
@@ -674,19 +685,22 @@ public class GLViewer3D extends AWTGLCanvas {
         // GPU ボリュームシェーダー (複雑、失敗しても CPU モードを維持)
         try {
             shaderProgram = createProgram(VERT, FRAG);
-            System.out.println("DEBUG: GPU shader compiled OK. program=" + shaderProgram);
+            // System.out.println("DEBUG: GPU shader compiled OK. program=" +
+            // shaderProgram);
         } catch (Throwable e) {
-            System.err.println("DEBUG: GPU shader compile FAILED (CPU fallback remains): " + e);
-            e.printStackTrace();
+            // System.err.println("DEBUG: GPU shader compile FAILED (CPU fallback remains):
+            // " + e);
+            // e.printStackTrace();
         }
 
         // CPU フレーム表示クワッドシェーダー (必須: CPU モードに使用)
         try {
             cpuQuadProgram = createProgram(CPU_QUAD_VS, CPU_QUAD_FS);
             initCpuQuad();
-            System.out.println("DEBUG: CPU quad shader+VAO ready. program=" + cpuQuadProgram + " vao=" + cpuQuadVao);
+            // System.out.println("DEBUG: CPU quad shader+VAO ready. program=" +
+            // cpuQuadProgram + " vao=" + cpuQuadVao);
         } catch (Throwable e) {
-            System.err.println("DEBUG: CPU quad shader FAILED: " + e);
+            // System.err.println("DEBUG: CPU quad shader FAILED: " + e);
             e.printStackTrace();
         }
 
@@ -695,9 +709,11 @@ public class GLViewer3D extends AWTGLCanvas {
             cubeShaderProgram = createProgram(CUBE_VS, CUBE_FS);
             initCube();
             createOrientationTextures();
-            System.out.println("DEBUG: Orientation cube shader ready. program=" + cubeShaderProgram);
+            // System.out.println("DEBUG: Orientation cube shader ready. program=" +
+            // cubeShaderProgram);
         } catch (Throwable e) {
-            System.err.println("DEBUG: Orientation cube shader FAILED (non-critical): " + e);
+            // System.err.println("DEBUG: Orientation cube shader FAILED (non-critical): " +
+            // e);
             e.printStackTrace();
         }
 
@@ -772,7 +788,8 @@ public class GLViewer3D extends AWTGLCanvas {
             GL33.glTexSubImage3D(GL33.GL_TEXTURE_3D, 0, 0, 0, startZ, dimX, dimY, currentChunk, GL33.GL_RED,
                     GL33.GL_UNSIGNED_SHORT, sb);
             MemoryUtil.memFree(sb);
-            System.out.println("DEBUG: GPU Volume Uploaded: " + (startZ + currentChunk) + "/" + tz);
+            // System.out.println("DEBUG: GPU Volume Uploaded: " + (startZ + currentChunk) +
+            // "/" + tz);
         }
 
         // Gradient texture (RGB8 = 事前計算法線)
@@ -815,12 +832,11 @@ public class GLViewer3D extends AWTGLCanvas {
         if (engineMode == ENGINE_GPU)
             gpuFrameCount++;
         if (frameCount % 60 == 0) {
-            System.out.println(
-                    "DEBUG: paintGL() executed. engineMode=" + engineMode + ", size=" + getWidth() + "x" + getHeight());
+            // System.out.println("DEBUG: paintGL() executed. engineMode=" + engineMode + ",
+            // size=" + getWidth() + "x" + getHeight());
         }
         int width = getWidth();
         int height = getHeight();
-        // 最初の3GPUフレームは明るい緑色の背景でジオメトリ描画を確認
         if (gpuFrameCount > 0 && gpuFrameCount <= 3) {
             GL33.glClearColor(0.0f, 0.7f, 0.0f, 1.0f);
         } else {
@@ -845,8 +861,8 @@ public class GLViewer3D extends AWTGLCanvas {
                 uploadVolume();
                 volumeNeedsReupload = false;
             } catch (Throwable t) {
-                System.err.println("DEBUG: Critical error during uploadVolume:");
-                t.printStackTrace();
+                // System.err.println("DEBUG: Critical error during uploadVolume:");
+                // t.printStackTrace();
                 volumeTexture = -1; // 再試行防止
                 return;
             }
@@ -868,7 +884,7 @@ public class GLViewer3D extends AWTGLCanvas {
         GL33.glUseProgram(shaderProgram);
         int err = GL33.glGetError();
         if (err != GL33.GL_NO_ERROR) {
-            System.err.println("GL Error after glUseProgram: " + err);
+            // System.err.println("GL Error after glUseProgram: " + err);
         }
 
         if (tfDirty)
@@ -912,13 +928,14 @@ public class GLViewer3D extends AWTGLCanvas {
         u1i("useShading", useShading);
         // 最初の3GPUフレームで診断情報をログ出力
         if (gpuFrameCount <= 3) {
-            System.out.println("DEBUG GPU[" + gpuFrameCount + "]: renderMode=" + renderMode
-                    + " wl=" + windowLevel + " ww=" + windowWidth
-                    + " shader=" + shaderProgram + " vao=" + vao + " volTex=" + volumeTexture
-                    + " gradTex=" + gradientTexture + " tfTex=" + tfTexture
-                    + " voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")"
-                    + " uCamPos=(" + vCamX + "," + vCamY + "," + vCamZ + ")"
-                    + " dataReady=" + dataReady + " size=" + width + "x" + height);
+            // System.out.println("DEBUG GPU[" + gpuFrameCount + "]: renderMode=" +
+            // renderMode
+            // + " wl=" + windowLevel + " ww=" + windowWidth
+            // + " shader=" + shaderProgram + " vao=" + vao + " volTex=" + volumeTexture
+            // + " gradTex=" + gradientTexture + " tfTex=" + tfTexture
+            // + " voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")"
+            // + " uCamPos=(" + vCamX + "," + vCamY + "," + vCamZ + ")"
+            // + " dataReady=" + dataReady + " size=" + width + "x" + height);
         }
         u1i("renderMode", renderMode);
         // 最初の3GPUフレームはisoThreshold=-10000でシェーダーテスト(黄色出力でジオメトリ確認)
@@ -952,7 +969,7 @@ public class GLViewer3D extends AWTGLCanvas {
         GL33.glBindVertexArray(0);
         int drawErr = GL33.glGetError();
         if (drawErr != GL33.GL_NO_ERROR) {
-            System.err.println("DEBUG: GL error after volume draw: " + drawErr);
+            // System.err.println("DEBUG: GL error after volume draw: " + drawErr);
         }
 
         // 方位ボックスはカリング不要 — 状態を戻してから描画
@@ -1001,8 +1018,8 @@ public class GLViewer3D extends AWTGLCanvas {
             throw new Exception("Vertex shader compile error: " + log);
         }
         String vLog = GL33.glGetShaderInfoLog(v);
-        if (!vLog.isBlank())
-            System.err.println("VS: " + vLog);
+        if (!vLog.isBlank()) {
+            /* suppress */ }
 
         int f = GL33.glCreateShader(GL33.GL_FRAGMENT_SHADER);
         GL33.glShaderSource(f, fs);
@@ -1014,8 +1031,8 @@ public class GLViewer3D extends AWTGLCanvas {
             throw new Exception("Fragment shader compile error: " + log);
         }
         String fLog = GL33.glGetShaderInfoLog(f);
-        if (!fLog.isBlank())
-            System.err.println("FS: " + fLog);
+        if (!fLog.isBlank()) {
+            /* suppress */ }
 
         int p = GL33.glCreateProgram();
         GL33.glAttachShader(p, v);
@@ -1073,7 +1090,8 @@ public class GLViewer3D extends AWTGLCanvas {
 
         if (cpuQuadProgram == 0) {
             if (!cpuFirstFrameLogged) {
-                System.err.println("DEBUG: drawCpuFrame() — cpuQuadProgram=0, GL 初期化未完了またはシェーダーコンパイル失敗。画像は描画されません。");
+                // System.err.println("DEBUG: drawCpuFrame() — cpuQuadProgram=0, GL
+                // 初期化未完了またはシェーダーコンパイル失敗。画像は描画されません。");
                 cpuFirstFrameLogged = true;
             }
             return;
@@ -1089,8 +1107,9 @@ public class GLViewer3D extends AWTGLCanvas {
         }
 
         if (!cpuFirstFrameLogged) {
-            System.out.println("DEBUG: drawCpuFrame() — cpuImage ready " + img.getWidth() + "x" + img.getHeight()
-                    + ", cpuQuadProgram=" + cpuQuadProgram + ", cpuQuadVao=" + cpuQuadVao);
+            // System.out.println("DEBUG: drawCpuFrame() — cpuImage ready " + img.getWidth()
+            // + "x" + img.getHeight()
+            // + ", cpuQuadProgram=" + cpuQuadProgram + ", cpuQuadVao=" + cpuQuadVao);
             cpuFirstFrameLogged = true;
         }
 
@@ -1429,7 +1448,8 @@ public class GLViewer3D extends AWTGLCanvas {
             if (isPixelFormatError(t) || engineMode == ENGINE_CPU) {
                 if (engineMode == ENGINE_GPU && !gpuContextFailed) {
                     gpuContextFailed = true;
-                    System.err.println("GLViewer3D: OpenGL context creation failed. Switching to CPU renderer.");
+                    // System.err.println("GLViewer3D: OpenGL context creation failed. Switching to
+                    // CPU renderer.");
                     t.printStackTrace();
                     if (gpuContextFailureHandler != null) {
                         try {
@@ -1502,11 +1522,11 @@ public class GLViewer3D extends AWTGLCanvas {
         return false;
     }
 
-
     /** HOROS-20240407準拠: Stereo vision mode toggle */
     public void setStereoMode(int mode) {
         this.stereoMode = mode;
-        System.out.println("[GL3D] Stereo mode: " + (mode == STEREO_BUFFERED ? "BUFFERED" : "OFF"));
+        // System.out.println("[GL3D] Stereo mode: " + (mode == STEREO_BUFFERED ?
+        // "BUFFERED" : "OFF"));
         // TODO: Implement stereoscopic rendering (active/passive glasses or anaglyph)
         // HOROS uses stereo pairs with cross-eyed/parallel viewing
     }
@@ -1518,7 +1538,7 @@ public class GLViewer3D extends AWTGLCanvas {
     /** HOROS-20240407準拠: Fusion/Blending mode toggle */
     public void setFusionMode(boolean enabled) {
         this.fusionMode = enabled;
-        System.out.println("[GL3D] Fusion mode: " + enabled);
+        // System.out.println("[GL3D] Fusion mode: " + enabled);
         // TODO: Implement dual-volume blending for PET/CT or other modality fusion
         // HOROS uses 2DBlending with percentage slider (tbBlending)
     }

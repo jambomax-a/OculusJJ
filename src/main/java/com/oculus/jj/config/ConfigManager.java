@@ -58,7 +58,7 @@ public class ConfigManager {
             props.load(fis);
         } catch (IOException e) {
             // ファイルがない場合はデフォルト値を使用
-            System.out.println("Config file not found, using default values.");
+            // System.out.println("Config file not found, using default values.");
         }
     }
 
@@ -110,7 +110,7 @@ public class ConfigManager {
         return Boolean.parseBoolean(value);
     }
 
-   /**
+    /**
      * 設定を設定する（メモリ上のみ）。
      */
     public static void setProperty(String key, String value) {

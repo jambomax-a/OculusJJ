@@ -5,7 +5,8 @@ import java.util.*;
 import java.nio.file.*;
 
 /**
- * ConfigManager - Handles application configuration from an external properties file.
+ * ConfigManager - Handles application configuration from an external properties
+ * file.
  * Supports default values and reloading at runtime.
  */
 public class ConfigManager {
@@ -28,7 +29,7 @@ public class ConfigManager {
     }
 
     /**
-     * Loads the configuration from a file. 
+     * Loads the configuration from a file.
      * If no config file exists, it uses default values.
      */
     public void loadConfig() {
@@ -36,13 +37,16 @@ public class ConfigManager {
         if (configFile.exists()) {
             try (InputStream input = new FileInputStream(configFile)) {
                 props.load(input);
-                System.out.println("[ConfigManager] Loaded configuration from " + configFile.getAbsolutePath());
+                // System.out.println("[ConfigManager] Loaded configuration from " +
+                // configFile.getAbsolutePath());
             } catch (IOException ex) {
-                System.err.println("[ConfigManager] Error loading config file, using defaults.");
+                // System.err.println("[ConfigManager] Error loading config file, using
+                // defaults.");
             }
         } else {
             createDefaultConfig();
-            System.out.println("[ConfigManager] Created default configuration file at " + DEFAULT_CONFIG_PATH);
+            // System.out.println("[ConfigManager] Created default configuration file at " +
+            // DEFAULT_CONFIG_PATH);
         }
     }
 

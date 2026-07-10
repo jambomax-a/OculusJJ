@@ -116,26 +116,26 @@ public class DicomDatabase {
                         .findFirst()
                         .ifPresent(path -> {
                             String trimmedPath = path.trim();
-                            // パスが実際に存在するか確認
                             if (new File(trimmedPath).exists()) {
                                 this.dataBaseDirPath = trimmedPath;
-                                // // logger.info("Using dataBaseDirPath from DBFOLDER_LOCATION: {}", trimmedPath);
+                                // System.out.println(">>> Database directory from DBFOLDER_LOCATION: " +
+                                // trimmedPath);
                             } else {
-                                // // logger.warn(
-// //                                         "dataBaseDirPath from DBFOLDER_LOCATION does not exist: {}. Falling back to baseDirPath.",
-// //                                         trimmedPath);
                                 this.dataBaseDirPath = baseDirPath;
+                                // System.out.println(">>> DBFOLDER_LOCATION path not found: " + trimmedPath +
+                                // ". Fallback: " + baseDirPath);
                             }
                         });
             } catch (Exception e) {
-                // 読み取りエラー時はbaseDirPathを使用
-                // // logger.error("Failed to read DBFOLDER_LOCATION", e);
                 this.dataBaseDirPath = baseDirPath;
+                // System.out.println(">>> Error reading DBFOLDER_LOCATION. Fallback: " +
+                // baseDirPath);
             }
         }
         if (this.dataBaseDirPath == null) {
             this.dataBaseDirPath = baseDirPath;
-            // // logger.info("Using baseDirPath as dataBaseDirPath: {}", baseDirPath);
+            // System.out.println(">>> Using baseDirPath as dataBaseDirPath: " +
+            // baseDirPath);
         }
         this.processFilesLock = new ReentrantLock();
         this.importFilesFromIncomingDirLock = new ReentrantLock();
@@ -236,10 +236,19 @@ public class DicomDatabase {
 
     /**
      * デフォルトデータベースを取得
+     * HOROS-20240407準拠: NSUserDefaultsから新しいパスを取得しているため、キャッシュが古い場合はリセット
      */
     public static DicomDatabase defaultDatabase() {
+        String currentBasePath = defaultBaseDirPath(); // HOROS-20240407準拠: 毎回最新のパスを取得
         if (defaultDatabase == null) {
-            defaultDatabase = databaseAtPath(defaultBaseDirPath());
+            defaultDatabase = databaseAtPath(currentBasePath);
+        } else if (!java.util.Objects.equals(defaultDatabase.getBaseDirPath(), currentBasePath)) {
+            // HOROS-20240407準拠: パスが変更された場合は古いインスタンスを破棄して再作成
+            logger.info("Resetting database cache - base path changed from {} to {}",
+                    defaultDatabase.getBaseDirPath(), currentBasePath);
+            defaultDatabase = null;
+            activeLocalDatabase = null; // also clear this reference
+            defaultDatabase = databaseAtPath(currentBasePath);
         }
         return defaultDatabase;
     }
@@ -279,20 +288,33 @@ public class DicomDatabase {
      * HOROS-20240407準拠: activeLocalDatabaseがnullの場合はdefaultDatabaseを返す
      */
     public static DicomDatabase activeLocalDatabase() {
+        String currentBasePath = defaultBaseDirPath(); // HOROS-20240407準拠: 毎回最新のパスをチェック
         if (activeLocalDatabase == null) {
-            // HOROS-20240407準拠: activeLocalDatabaseが設定されていない場合はdefaultDatabaseを使用
             activeLocalDatabase = defaultDatabase();
+        } else if (!java.util.Objects.equals(activeLocalDatabase.getBaseDirPath(), currentBasePath)) {
+            // HOROS-20240407準拠: パス不整合の場合はリセットして再作成
+            logger.info("Resetting active database cache - base path changed from {} to {}",
+                    activeLocalDatabase.getBaseDirPath(), currentBasePath);
+            activeLocalDatabase = null;
+            defaultDatabase = null;
+            return defaultDatabase();
         }
         return activeLocalDatabase;
     }
 
     /**
-     * アクティブなローカルデータベースを設定
+     * データベースインスタンスをリセット（パス変更時に呼ぶ）
+     * HOROS-20240407準拠: NSUserDefaults監視に類似した処理
      */
+    public static void resetCachedDatabases() {
+        logger.info("Resetting cached database instances");
+        defaultDatabase = null;
+        activeLocalDatabase = null;
+    }
+
     public static void setActiveLocalDatabase(DicomDatabase database) {
         activeLocalDatabase = database;
     }
-
     // ========== プロパティ ==========
 
     /**
@@ -438,7 +460,8 @@ public class DicomDatabase {
                 dbDir.mkdirs();
             }
             sqliteDatabasePath = new File(dbDir, "Database.sql").getAbsolutePath();
-            // // logger.info("Initializing SQLite database at: {}", sqliteDatabasePath);
+            // System.out.println(">>> Initializing SQLite Database (Read/Write) at: " +
+            // sqliteDatabasePath);
 
             // SQLite接続を開く
             sqliteConnection = DriverManager.getConnection("jdbc:sqlite:" + sqliteDatabasePath);
@@ -452,9 +475,12 @@ public class DicomDatabase {
             // テーブルを作成
             createTables();
 
-            // // logger.info("SQLite database initialized successfully");
+            // マイグレーション
+            migrateDatabase();
+            migrateImageMetadata();
         } catch (SQLException e) {
-            // // logger.error("Failed to initialize SQLite database", e);
+            // System.err.println("!!! Failed to initialize SQLite database [" +
+            // sqliteDatabasePath + "]: " + e.getMessage());
         }
     }
 
@@ -527,6 +553,10 @@ public class DicomDatabase {
                             fileType TEXT,
                             height INTEGER,
                             width INTEGER,
+                            sliceThickness REAL,
+                            spacingBetweenSlices REAL,
+                            pixelSpacingX REAL,
+                            pixelSpacingY REAL,
                             sliceLocation REAL,
                            patientName TEXT,
                            studyDate TEXT,
@@ -534,6 +564,12 @@ public class DicomDatabase {
                            acquisitionDate TEXT,
                            manufacturerModelString TEXT,
                            deviceSerialNumber TEXT,
+                           kvp REAL,
+                           ma REAL,
+                           tr REAL,
+                           te REAL,
+                           dynamicRange TEXT,
+                           frequency TEXT,
                            FOREIGN KEY (seriesId) REFERENCES Series(id)
                        )
                     """);
@@ -593,8 +629,6 @@ public class DicomDatabase {
             // インデックス追加
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_roi_sop ON ROI(sopInstanceUID)");
 
-            // // logger.info("SQLite tables created successfully");
-
             // データベースマイグレーション: hiddenカラムを追加
             migrateDatabase();
             // 追加のメタデータカラム（sliceThickness等）を適用
@@ -620,77 +654,83 @@ public class DicomDatabase {
             }
 
             if (!hasHiddenColumn) {
-                // // logger.info("Adding 'hidden' column to Study table");
+
                 try (Statement stmt = sqliteConnection.createStatement()) {
                     stmt.execute("ALTER TABLE Study ADD COLUMN hidden INTEGER DEFAULT 0");
-                    // // logger.info("Successfully added 'hidden' column to Study table");
+
                 } catch (SQLException e) {
                     // カラムが既に存在する場合は無視
                     if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
-                        // // logger.info("'hidden' column already exists in Study table");
+
                     } else {
-                        // // logger.warn("Failed to add 'hidden' column to Study table: " + e.getMessage());
+
+                        // e.getMessage());
                     }
                 }
-           }
-       } catch (Exception e) {
-           // // logger.warn("Failed to check/migrate database schema: " + e.getMessage());
-       }
+            }
+        } catch (Exception e) {
+
+        }
     }
 
-     /**
+    /**
      * Imageテーブルへのメタデータカラム追加（migration）
      */
-     private void migrateImageMetadata() {
-         try (Statement stmt = sqliteConnection.createStatement()) {
-             // sliceThickness, spacingBetweenSlices, pixelSpacingX, pixelSpacingY の追加を試行
-             String[] numericCols = {"sliceThickness", "spacingBetweenSlices", "pixelSpacingX", "pixelSpacingY", "kvp", "ma", "tr", "te"};
-             for (String col : numericCols) {
-                 try {
-                     stmt.execute("ALTER TABLE Image ADD COLUMN " + col + " REAL DEFAULT 0");
-                 } catch (SQLException e) {
-                     if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
-                         // // logger.info(col + " already exists in Image table");
-                     } else {
-                         // // logger.warn("Failed to add ' " + col + "' to Image table: " + e.getMessage());
-                     }
-                 }
-             }
-			// dynamicRange, frequency の追加を試行
-             String[] textCols = {"dynamicRange", "frequency"};
-             for (String col : textCols) {
-                 try {
-                     stmt.execute("ALTER TABLE Image ADD COLUMN " + col + " TEXT");
-                 } catch (SQLException e) {
-                     if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
-                         // // logger.info(col + " already exists in Image table");
-                     } else {
-                         // // logger.warn("Failed to add ' " + col + "' to Image table: " + e.getMessage());
-                     }
-                 }
-             }
-         } catch (SQLException e) {
-             // // logger.error("Error during Image metadata migration: " + e.getMessage());
-         }
-     }
+    private void migrateImageMetadata() {
+        try (Statement stmt = sqliteConnection.createStatement()) {
+            // sliceThickness, spacingBetweenSlices, pixelSpacingX, pixelSpacingY の追加を試行
+            String[] numericCols = { "sliceThickness", "spacingBetweenSlices", "pixelSpacingX", "pixelSpacingY", "kvp",
+                    "ma", "tr", "te" };
+            for (String col : numericCols) {
+                try {
+                    stmt.execute("ALTER TABLE Image ADD COLUMN " + col + " REAL DEFAULT 0");
+                } catch (SQLException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
 
-     /**
+                    } else {
+
+                        // e.getMessage());
+                    }
+                }
+            }
+            // dynamicRange, frequency の追加を試行
+            String[] textCols = { "dynamicRange", "frequency" };
+            for (String col : textCols) {
+                try {
+                    stmt.execute("ALTER TABLE Image ADD COLUMN " + col + " TEXT");
+                } catch (SQLException e) {
+                    if (e.getMessage() != null && e.getMessage().contains("duplicate column name")) {
+
+                    } else {
+
+                        // e.getMessage());
+                    }
+                }
+            }
+        } catch (SQLException e) {
+
+        }
+    }
+
+    /**
      * データベースからデータを読み込む
      * HOROS-20240407準拠: 起動時にDBからStudy-Series-Imageを読み込む
      */
     private void loadFromDatabase() {
         if (sqliteConnection == null) {
-            // // logger.warn("SQLite connection is null, cannot load data");
+            // System.out.println(">>> SQLite connection is null, cannot load data");
             return;
         }
 
         try {
-            // // logger.info("Loading data from SQLite database at: {}", sqliteDatabasePath);
+            // System.out.println(">>> Loading data from SQLite database (Read) at: " +
+            // sqliteDatabasePath);
 
             // データベースファイルの存在確認
             File dbFile = new File(sqliteDatabasePath);
             if (!dbFile.exists()) {
-                // // logger.warn("Database file does not exist: {}", sqliteDatabasePath);
+                // System.out.println(">>> Database file does not exist: " +
+                // sqliteDatabasePath);
                 return;
             }
 
@@ -700,11 +740,14 @@ public class DicomDatabase {
             // HOROS-20240407準拠: アルバムを読み込む
             loadAlbums();
 
-            // // logger.info("Loaded {} studies, {} albums from database", studies.size(), albums.size());
+            // System.out.println(">>> Loaded " + studies.size() + " studies, " +
+            // albums.size() + " albums from database");
         } catch (SQLException e) {
-            // // logger.error("Failed to load data from database: {}", e.getMessage(), e);
+            // System.err.println("!!! SQLite Load Error [" + sqliteDatabasePath + "]: " +
+            // e.getMessage());
         } catch (Exception e) {
-            // // logger.error("Unexpected error loading data from database: {}", e.getMessage(), e);
+            // System.err.println("!!! Unexpected Load Error [" + sqliteDatabasePath + "]: "
+            // + e.getMessage());
         }
     }
 
@@ -718,7 +761,7 @@ public class DicomDatabase {
 
             // HOROS-20240407準拠: すべてのテーブルをリストアップして確認
             try {
-                // // logger.info("Checking database tables...");
+
                 String listTablesSql = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
                 try (Statement listStmt = sqliteConnection.createStatement();
                         ResultSet listRs = listStmt.executeQuery(listTablesSql)) {
@@ -727,7 +770,7 @@ public class DicomDatabase {
                         String tableName = listRs.getString("name");
                         tableNames.add(tableName);
                     }
-                    // // logger.info("Database tables: {}", tableNames);
+
                 }
 
                 // テーブルの存在確認
@@ -739,7 +782,7 @@ public class DicomDatabase {
                 }
 
                 if (!albumTableExists) {
-                    // // logger.warn("Album table does not exist, skipping album loading");
+
                     return;
                 }
 
@@ -752,7 +795,6 @@ public class DicomDatabase {
                         albumCount = countRs.getInt("count");
                     }
                 }
-                // // logger.info("Found {} albums in Album table", albumCount);
 
                 String sql = "SELECT * FROM Album ORDER BY name";
                 try (Statement stmt = sqliteConnection.createStatement();
@@ -782,10 +824,10 @@ public class DicomDatabase {
 
                     }
 
-                    // // logger.info("Loaded {} albums from database", count);
                 }
             } catch (SQLException e) {
-                // // logger.error("Failed to load albums from database: {}", e.getMessage(), e);
+
+                // e);
                 throw e;
             }
         }
@@ -850,8 +892,9 @@ public class DicomDatabase {
                 String studyID_text = rs.getString("studyID");
 
                 if (count <= 5) {
-                    // // logger.info("Study {}: id={}, studyID(text)={}, name={}", count, studyDbId, studyID_text,
-// //                             rs.getString("name"));
+
+                    // studyDbId, studyID_text,
+                    // // rs.getString("name"));
                 }
 
                 study.setInternalDbId(studyDbId); // DBのプライマリキーを保存
@@ -938,9 +981,10 @@ public class DicomDatabase {
                     studies.add(study);
                 }
             }
-            // // logger.info("Loaded {} studies from database", count);
+
         } catch (SQLException e) {
-            // // logger.error("Failed to load studies from database: {}", e.getMessage(), e);
+
+            // e);
             throw e;
         }
     }
@@ -967,14 +1011,15 @@ public class DicomDatabase {
                 }
             }
 
-            // // logger.debug("loadSeriesForStudyIfNeeded: study={}, studyDbId={}", study.getName(), studyDbId);
+            // study.getName(), studyDbId);
             if (studyDbId > 0) {
                 loadSeriesForStudy(study, studyDbId);
             } else {
-                // // logger.warn("Could not find database ID for study: {}", study.getName());
+
             }
         } catch (Exception e) {
-            // // logger.error("Failed to load series for study: {}", study.getStudyInstanceUID(), e);
+
+            // study.getStudyInstanceUID(), e);
         }
     }
 
@@ -983,7 +1028,8 @@ public class DicomDatabase {
      */
     private void loadSeriesForStudy(DicomStudy study, int studyDbId) throws SQLException {
         String sql = "SELECT * FROM Series WHERE studyId = ? ORDER BY seriesNumber";
-        // // logger.debug("loadSeriesForStudy: Executing SQL: {} with studyId={}", sql, studyDbId);
+
+        // studyDbId);
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
             pstmt.setInt(1, studyDbId);
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -1032,7 +1078,8 @@ public class DicomDatabase {
 
                     study.addSeriesObject(series);
                 }
-                // // logger.debug("loadSeriesForStudy: Loaded {} series for study: {}", count, study.getName());
+
+                // study.getName());
             }
         }
     }
@@ -1059,7 +1106,8 @@ public class DicomDatabase {
                 }
             }
         } catch (Exception e) {
-            // // logger.error("Failed to load images for series: {}", series.getSeriesInstanceUID(), e);
+
+            // series.getSeriesInstanceUID(), e);
         }
     }
 
@@ -1086,7 +1134,7 @@ public class DicomDatabase {
                 pstmt.setInt(10, roi.getId());
                 pstmt.executeUpdate();
             } catch (SQLException e) {
-                // // logger.error("Failed to update ROI in database", e);
+
             }
         } else {
             // 新規挿入
@@ -1113,7 +1161,7 @@ public class DicomDatabase {
                     }
                 }
             } catch (SQLException e) {
-                // // logger.error("Failed to insert ROI to database", e);
+
             }
         }
     }
@@ -1128,7 +1176,7 @@ public class DicomDatabase {
             pstmt.setInt(2, frame);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            // // logger.error("Failed to delete ROIs from database", e);
+
         }
     }
 
@@ -1187,7 +1235,7 @@ public class DicomDatabase {
                 }
             }
         } catch (SQLException e) {
-            // // logger.error("Failed to load ROIs from database", e);
+
         }
     }
 
@@ -1252,6 +1300,16 @@ public class DicomDatabase {
                         // pathNumberカラムが存在しない場合は無視（既存DBの互換性）
                     }
                     image.setPathString(rs.getString("pathString"));
+                    // HOROS-20240407準拠差分: DBに保存済みの完全パスを優先復元
+                    // pathNumber/pathString だけでは再構築できないケースでサムネイル消失を防ぐ
+                    try {
+                        String dbCompletePath = rs.getString("completePath");
+                        if (dbCompletePath != null && !dbCompletePath.isEmpty()) {
+                            image.setCompletePathCache(dbCompletePath);
+                        }
+                    } catch (SQLException e) {
+                        // completePathカラムが存在しない既存DBは無視（互換性維持）
+                    }
                     // HOROS-20240407準拠: inDatabaseFolderも読み込む
                     try {
                         Boolean inDatabaseFolder = rs.getBoolean("inDatabaseFolder");
@@ -1317,13 +1375,16 @@ public class DicomDatabase {
      */
     public boolean save(java.util.Collection<DicomStudy> studiesToSave) {
         if (sqliteConnection == null) {
-            // // logger.warn("SQLite connection is null, cannot save data");
+            // System.out.println(">>> SQLite connection is null, cannot save data");
             return false;
         }
 
         if (studiesToSave == null || studiesToSave.isEmpty()) {
             return true;
         }
+
+        // System.out.println(">>> SQL Commit/Save (Write) [" + sqliteDatabasePath + "]
+        // items: " + studiesToSave.size());
 
         try {
             // HOROS-20240407準拠: トランザクションを使用して高速化
@@ -1338,12 +1399,12 @@ public class DicomDatabase {
 
             return true;
         } catch (SQLException e) {
-            // // logger.error("Failed to save data to database", e);
+
             try {
                 sqliteConnection.rollback();
                 sqliteConnection.setAutoCommit(true);
             } catch (SQLException e2) {
-                // // logger.error("Failed to rollback transaction", e2);
+
             }
             return false;
         }
@@ -1357,6 +1418,9 @@ public class DicomDatabase {
         if (study.getDateAdded() == null) {
             study.setDateAdded(java.time.LocalDateTime.now());
         }
+
+        // System.out.println(">>> SQL Save Study (Write) [" + sqliteDatabasePath + "]
+        // Study: " + study.getStudyInstanceUID());
 
         // 既存のIDを確認（外部キー整合性維持のため重要）
         int studyDbId = getStudyDbId(study.getStudyInstanceUID());
@@ -1449,6 +1513,9 @@ public class DicomDatabase {
             series.setDateAdded(java.time.LocalDateTime.now());
         }
 
+        // System.out.println(">>> SQL Save Series (Write) [" + sqliteDatabasePath + "]
+        // Series: " + series.getSeriesInstanceUID());
+
         // 既存のIDを確認
         int seriesDbId = getSeriesDbId(series.getSeriesInstanceUID());
 
@@ -1524,10 +1591,13 @@ public class DicomDatabase {
         String sql = """
                     INSERT OR REPLACE INTO Image
                     (sopInstanceUID, seriesId, pathNumber, pathString, completePath, inDatabaseFolder, instanceNumber,
-                     numberOfFrames, frameID, date, modality, fileType, height, width, sliceThickness, spacingBetweenSlices, pixelSpacingX, pixelSpacingY, sliceLocation, patientName, studyDate, seriesDate, acquisitionDate, manufacturerModelString, deviceSerialNumber, kvp, ma, tr, te, dynamicRange, frequency)		
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)		
+                     numberOfFrames, frameID, date, modality, fileType, height, width, sliceThickness, spacingBetweenSlices, pixelSpacingX, pixelSpacingY, sliceLocation, patientName, studyDate, seriesDate, acquisitionDate, manufacturerModelString, deviceSerialNumber, kvp, ma, tr, te, dynamicRange, frequency)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-		
+
+        // System.out.println(">>> SQL Save Image (Write) [" + sqliteDatabasePath + "]
+        // SOP: " + image.getSopInstanceUID());
+
         try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
             pstmt.setString(1, image.getSopInstanceUID());
             pstmt.setInt(2, seriesDbId);
@@ -1562,8 +1632,12 @@ public class DicomDatabase {
             pstmt.setDouble(29, image.getTe() != null ? image.getTe() : 0.0);
             pstmt.setString(30, image.getDynamicRange());
             pstmt.setString(31, image.getFrequency());
-			
+
             pstmt.executeUpdate();
+        } catch (SQLException e) {
+            // System.err.println("!!! SQL Write Error (Image) [" + sqliteDatabasePath + "]:
+            // " + e.getMessage());
+            throw e;
         }
     }
 
@@ -1576,9 +1650,9 @@ public class DicomDatabase {
                 // 保存してから閉じる
                 save();
                 sqliteConnection.close();
-                // // logger.info("SQLite database connection closed");
+
             } catch (SQLException e) {
-                // // logger.error("Failed to close SQLite database connection", e);
+
             }
         }
     }
@@ -1826,10 +1900,8 @@ public class DicomDatabase {
                 studies.remove(study);
             }
 
-            // // logger.info("Deleted study: " + study.getStudyInstanceUID());
-
         } catch (SQLException e) {
-            // // logger.error("Failed to delete study: " + study.getStudyInstanceUID(), e);
+
         }
     }
 
@@ -1876,10 +1948,9 @@ public class DicomDatabase {
                 study.getSeries().remove(series);
             }
 
-            // // logger.info("Deleted series: " + series.getSeriesInstanceUID());
-
         } catch (SQLException e) {
-            // // logger.error("Failed to delete series: " + series.getSeriesInstanceUID(), e);
+
+            // e);
         }
     }
 
@@ -2020,12 +2091,12 @@ public class DicomDatabase {
                         // HOROS-20240407準拠: 読み取り不能なファイルの処理（1593-1609行目）
                         String absolutePath = file.getAbsolutePath();
                         if (dataDirPath != null && absolutePath.startsWith(dataDirPath)) {
-                            // // logger.warn("Unreadable file in DATABASE folder: " + absolutePath);
+
                         }
                     }
                 }
             } catch (Exception e) {
-                // // logger.warn("Exception while scanning file: " + path, e);
+
             }
 
             // HOROS-20240407準拠: キャンセルチェック（1624-1640行目）
@@ -2221,7 +2292,7 @@ public class DicomDatabase {
                         if (studyID != null) {
                             studiesArrayStudyInstanceUID.add(studyID);
                         } else {
-                            // // logger.warn("no studyID !");
+
                             studiesArrayStudyInstanceUID.add("noStudyID");
                         }
 
@@ -2627,7 +2698,7 @@ public class DicomDatabase {
                 updateStudyNumberOfImages(study);
 
             } catch (Exception e) {
-                // // logger.warn("Exception in addFilesDescribedInDictionaries loop", e);
+
             }
         }
 
@@ -2727,7 +2798,7 @@ public class DicomDatabase {
             }
             return dis.readDataset();
         } catch (Exception e) {
-            // // logger.warn("Failed to read DICOM file: " + file.getAbsolutePath(), e);
+
             return null;
         }
     }
@@ -3322,7 +3393,8 @@ public class DicomDatabase {
                             java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     paths.add(destFile.getAbsolutePath());
                 } catch (Exception e) {
-                    // // logger.error("Failed to move file from Incoming to Database folder: " + f.getAbsolutePath(), e);
+
+                    // f.getAbsolutePath(), e);
                     // 移動に失敗した場合は元のパスで試行
                     paths.add(f.getAbsolutePath());
                 }
@@ -3332,8 +3404,6 @@ public class DicomDatabase {
         if (paths.isEmpty()) {
             return 0;
         }
-
-        // // logger.info("Importing {} files from Incoming directory", paths.size());
 
         // HOROS-20240407準拠: addFilesAtPathsを呼び出す
         // postNotifications:true, dicomOnly:true (or false?),
@@ -3512,7 +3582,7 @@ public class DicomDatabase {
      * HOROS-20240407準拠: - (void)copyFilesThread:(NSDictionary*)dict (2610-2848行目)
      */
     public void copyFilesThread(java.util.Map<String, Object> dict) {
-        // // logger.info("copyFilesThread: starting");
+
         // HOROS-20240407準拠: @autoreleasepool (2612行目)
         try {
             // HOROS-20240407準拠: NSOperationQueue* queue = [[[NSOperationQueue alloc] init]
@@ -3524,7 +3594,8 @@ public class DicomDatabase {
             // (2617行目)
             Boolean onlyDICOM = dict.containsKey("onlyDICOM") ? (Boolean) dict.get("onlyDICOM") : true;
             Boolean copyFiles = dict.containsKey("copyFiles") ? (Boolean) dict.get("copyFiles") : false;
-            // // logger.info("copyFilesThread: onlyDICOM={}, copyFiles={}", onlyDICOM, copyFiles);
+
+            // copyFiles);
 
             // HOROS-20240407準拠: __block BOOL studySelected = NO; (2618行目)
             java.util.concurrent.atomic.AtomicBoolean studySelected = new java.util.concurrent.atomic.AtomicBoolean(
@@ -3546,10 +3617,10 @@ public class DicomDatabase {
             @SuppressWarnings("unchecked")
             List<String> filesInput = (List<String>) dict.get("filesInput");
             if (filesInput == null || filesInput.isEmpty()) {
-                // // logger.warn("copyFilesThread: filesInput is null or empty");
+
                 return;
             }
-            // // logger.info("copyFilesThread: filesInput.size()={}", filesInput.size());
+
             List<String> sortedFiles = new java.util.ArrayList<>(filesInput);
             sortedFiles.sort(String::compareTo);
 
@@ -3641,13 +3712,14 @@ public class DicomDatabase {
 
                         // HOROS-20240407準拠: [queue addOperationWithBlock:^{ (2737行目)
                         final List<String> finalCopiedFiles = copiedFiles;
-                        // // logger.info("copyFilesThread: submitting batch with {} files", finalCopiedFiles.size());
+
+                        // finalCopiedFiles.size());
 
                         queue.submit(() -> {
                             Thread workerThread = null;
                             try {
-                                // // logger.info("copyFilesThread: queue operation started, files={}",
-// //                                         finalCopiedFiles.size());
+
+                                // // finalCopiedFiles.size());
                                 // HOROS-20240407準拠: NSThread* thread = [NSThread currentThread]; thread.name =
                                 // NSLocalizedString(@"Adding files...", nil); [[ThreadsManager defaultManager]
                                 // addThreadAndStart:thread]; (2738-2740行目)
@@ -3680,12 +3752,12 @@ public class DicomDatabase {
                                     // HOROS-20240407準拠: objects = [idatabase addFilesAtPaths:copiedFiles
                                     // postNotifications:YES dicomOnly:onlyDICOM rereadExistingItems:YES
                                     // generatedByOsiriX:NO importedFiles:YES returnArray:YES]; (2758行目)
-                                    // // logger.info("copyFilesThread: calling addFilesAtPaths with {} files",
-// //                                             finalCopiedFiles.size());
+
+                                    // // finalCopiedFiles.size());
                                     final List<Object> finalObjects = idatabase.addFilesAtPaths(finalCopiedFiles, true,
                                             onlyDICOM, true, false, true, true);
-                                    // // logger.info("copyFilesThread: addFilesAtPaths returned {} objects",
-// //                                             finalObjects != null ? finalObjects.size() : 0);
+
+                                    // // finalObjects != null ? finalObjects.size() : 0);
 
                                     // HOROS-20240407準拠: DicomDatabase* mdatabase = self.isMainDatabase? self :
                                     // self.mainDatabase; if( [[BrowserController currentBrowser] database] ==
@@ -3725,13 +3797,13 @@ public class DicomDatabase {
                                                 } catch (Exception e) {
                                                     // HOROS-20240407準拠: @catch (NSException *e) {
                                                     // N2LogExceptionWithStackTrace(e); } (2808-2809行目)
-                                                    // // logger.error("Error updating UI after import", e);
+
                                                 }
                                             });
                                         } catch (Exception e) {
                                             // HOROS-20240407準拠: @catch (NSException* e) {
                                             // N2LogExceptionWithStackTrace(e); } (2812-2813行目)
-                                            // // logger.error("Error in copyFilesThread operation", e);
+
                                         }
                                     } else {
                                         // オブジェクトが空の場合でもUIを更新（エラーハンドリングのため）
@@ -3743,7 +3815,7 @@ public class DicomDatabase {
                                                     bc.outlineViewRefresh();
                                                 }
                                             } catch (Exception e) {
-                                                // // logger.error("Error updating UI after import (no objects)", e);
+
                                             }
                                         });
                                     }
@@ -3769,7 +3841,7 @@ public class DicomDatabase {
                                 if (!(e instanceof java.util.ConcurrentModificationException) &&
                                         !(e instanceof ArrayIndexOutOfBoundsException) &&
                                         !(e instanceof NullPointerException)) {
-                                    // // logger.error("Error in copyFilesThread queue operation", e);
+
                                 }
                             } finally {
                                 // HOROS-20240407準拠: 例外が発生しても必ずremoveThreadを呼ぶ（重複登録を防ぐため）
@@ -3777,7 +3849,7 @@ public class DicomDatabase {
                                     try {
                                         tm.removeThread(workerThread);
                                     } catch (Exception e) {
-                                        // // logger.error("Error removing thread from ThreadsManager", e);
+
                                     }
                                 }
                             }
@@ -3790,10 +3862,10 @@ public class DicomDatabase {
                     } catch (Exception e) {
                         // HOROS-20240407準拠: @catch (NSException * e) { N2LogExceptionWithStackTrace(e);
                         // } (2823-2825行目)
-                        // // logger.error("Error in copyFilesThread inner loop", e);
+
                     }
                 } catch (Exception e) {
-                    // // logger.error("Error in copyFilesThread", e);
+
                 }
             }
 
@@ -3825,9 +3897,9 @@ public class DicomDatabase {
             // && copyFiles == YES) { if( [[NSUserDefaults standardUserDefaults] boolForKey:
             // @"EJECTCDDVD"]) [[NSWorkspace sharedWorkspace] unmountAndEjectDeviceAtPath:
             // [filesInput objectAtIndex:0]]; } (2842-2845行目)
-            // // logger.info("copyFilesThread: finished");
+
         } catch (Exception e) {
-            // // logger.error("Error in copyFilesThread", e);
+
             // デバッグログは条件付きで出力（必要に応じて有効化）
             // e.printStackTrace();
         }
@@ -3936,7 +4008,7 @@ public class DicomDatabase {
                 }
             }
         } catch (SQLException e) {
-            // // logger.error("Error querying studies by patientUID: " + patientUID, e);
+
         }
         return result;
     }

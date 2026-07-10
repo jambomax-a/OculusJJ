@@ -58,7 +58,10 @@ public class CPURaycastRenderer {
         voxScaleZ = (maxPhys > 0) ? physZ / maxPhys : 1.0f;
     }
 
-    /** Set voxel scales directly from GPU renderer. Bypasses spacing recalculation to prevent drift. */
+    /**
+     * Set voxel scales directly from GPU renderer. Bypasses spacing recalculation
+     * to prevent drift.
+     */
     public void setVoxScalesDirect(float sx, float sy, float sz) {
         voxScaleX = sx;
         voxScaleY = sy;
@@ -200,16 +203,17 @@ public class CPURaycastRenderer {
                 // 透視投影では fovFactor * aspect, 正射影では projScale * aspect
                 float ndcX = (2.0f * px / width - 1.0f) * aspect * projScale / zoom;
                 float ndcY = (1.0f - 2.0f * py / height) * projScale / zoom;
-                
+
                 float rayStartX, rayStartY, rayStartZ;
                 float[] rayDir = new float[3];
-                
+
                 if (isPerspective) {
                     float[] vModel = transformDirTranspose(rot, ndcX, ndcY, -1.0f);
                     rayDir[0] = vModel[0] / voxScaleX;
                     rayDir[1] = vModel[1] / voxScaleY;
                     rayDir[2] = vModel[2] / voxScaleZ;
-                    float len = (float) Math.sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
+                    float len = (float) Math
+                            .sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
                     if (len > 0) {
                         rayDir[0] /= len;
                         rayDir[1] /= len;
@@ -225,7 +229,8 @@ public class CPURaycastRenderer {
                     rayDir[0] = vModel[0] / voxScaleX;
                     rayDir[1] = vModel[1] / voxScaleY;
                     rayDir[2] = vModel[2] / voxScaleZ;
-                    float len = (float) Math.sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
+                    float len = (float) Math
+                            .sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
                     if (len > 0) {
                         rayDir[0] /= len;
                         rayDir[1] /= len;
@@ -235,7 +240,7 @@ public class CPURaycastRenderer {
                     rayStartY = camStartY;
                     rayStartZ = camStartZ;
                 }
-                
+
                 pixels[py * width + px] = castRay(rayStartX, rayStartY, rayStartZ, rayDir);
             }
         });
@@ -248,10 +253,11 @@ public class CPURaycastRenderer {
         }
         if (debugPrintCount < 5) {
             debugPrintCount++;
-            System.out.println("DEBUG CPURenderer: renderW=" + width + ", renderH=" + height 
-                + ", nonZero=" + nonZero + " (out of " + pixels.length + ")"
-                + ", cam=(" + camStartX + "," + camStartY + "," + camStartZ + ")"
-                + ", voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")");
+            // System.out.println("DEBUG CPURenderer: renderW=" + width + ", renderH=" +
+            // height
+            // + ", nonZero=" + nonZero + " (out of " + pixels.length + ")"
+            // + ", cam=(" + camStartX + "," + camStartY + "," + camStartZ + ")"
+            // // + ", voxScale=(" + voxScaleX + "," + voxScaleY + "," + voxScaleZ + ")");
         }
 
         BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -272,7 +278,8 @@ public class CPURaycastRenderer {
         }
 
         float dt = (tEnd - t) / lodSteps;
-        if (dt < 0.0005f) dt = 0.0005f; // prevent infinite loop
+        if (dt < 0.0005f)
+            dt = 0.0005f; // prevent infinite loop
         float accR = 0, accG = 0, accB = 0, accA = 0, maxVal = 0;
         float winLow = windowLevel - windowWidth * 0.5f;
         float winHigh = windowLevel + windowWidth * 0.5f;
@@ -362,7 +369,8 @@ public class CPURaycastRenderer {
         return new float[] { tMin, tMax };
     }
 
-    private float interpolateField(float[] field, int x0, int x1, int y0, int y1, int z0, int z1, float tx, float ty, float tz) {
+    private float interpolateField(float[] field, int x0, int x1, int y0, int y1, int z0, int z1, float tx, float ty,
+            float tz) {
         float c000 = field[z0 * dimY * dimX + y0 * dimX + x0];
         float c100 = field[z0 * dimY * dimX + y0 * dimX + x1];
         float c010 = field[z0 * dimY * dimX + y1 * dimX + x0];
@@ -413,7 +421,8 @@ public class CPURaycastRenderer {
             ny = interpolateField(gradientY, x0_c, x1_c, y0_c, y1_c, z0_c, z1_c, tx, ty, tz);
             nz = interpolateField(gradientZ, x0_c, x1_c, y0_c, y1_c, z0_c, z1_c, tx, ty, tz);
 
-            // Invert normal to point outwards (HU gradient points towards increasing density)
+            // Invert normal to point outwards (HU gradient points towards increasing
+            // density)
             nx = -nx;
             ny = -ny;
             nz = -nz;
@@ -444,9 +453,9 @@ public class CPURaycastRenderer {
         float spec = (float) Math.pow(Math.max(0.0f, nx * hx + ny * hy + nz * hz), 15.0f) * 0.30f;
 
         return new float[] {
-            Math.min(1.0f, rgba[0] * (ambient + diffuse) + spec),
-            Math.min(1.0f, rgba[1] * (ambient + diffuse) + spec),
-            Math.min(1.0f, rgba[2] * (ambient + diffuse) + spec)
+                Math.min(1.0f, rgba[0] * (ambient + diffuse) + spec),
+                Math.min(1.0f, rgba[1] * (ambient + diffuse) + spec),
+                Math.min(1.0f, rgba[2] * (ambient + diffuse) + spec)
         };
     }
 
@@ -514,9 +523,9 @@ public class CPURaycastRenderer {
 
     private float[] transformDirTranspose(float[] m, float x, float y, float z) {
         return new float[] {
-            m[0] * x + m[1] * y + m[2] * z,
-            m[4] * x + m[5] * y + m[6] * z,
-            m[8] * x + m[9] * y + m[10] * z
+                m[0] * x + m[1] * y + m[2] * z,
+                m[4] * x + m[5] * y + m[6] * z,
+                m[8] * x + m[9] * y + m[10] * z
         };
     }
 

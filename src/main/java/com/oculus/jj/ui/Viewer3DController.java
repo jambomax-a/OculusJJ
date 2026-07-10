@@ -394,7 +394,7 @@ public class Viewer3DController extends JFrame {
     }
 
     private void cleanup() {
-        System.out.println("Cleaning up 3D Viewer resources...");
+        // System.out.println("Cleaning up 3D Viewer resources...");
         stopRenderLoop();
         if (keyboardShortcutDispatcher != null) {
             KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(keyboardShortcutDispatcher);
@@ -415,7 +415,8 @@ public class Viewer3DController extends JFrame {
 
     private void activateGPUMode() {
         if (gpuContextUnsupported) {
-            System.err.println("DEBUG: GPU mode unavailable for all GL configs. Staying in CPU mode.");
+            // System.err.println("DEBUG: GPU mode unavailable for all GL configs. Staying
+            // in CPU mode.");
             if (glViewer != null) {
                 glViewer.setEngine(GLViewer3D.ENGINE_CPU);
                 glViewer.requestCpuRender();
@@ -443,13 +444,13 @@ public class Viewer3DController extends JFrame {
                     int zStep = (dimZ > 512) ? 2 : 1;
                     int tz = dimZ / zStep;
                     byte[] grad = computeGradients(zStep, tz);
-                    System.out.println("DEBUG: Gradients computed (" + grad.length + " bytes).");
+                    // System.out.println("DEBUG: Gradients computed (" + grad.length + " bytes).");
 
                     SwingUtilities.invokeLater(() -> loadingLabel
                             .setText("Uploading Volume to GPU (Step 1/2)... Please wait 2-3 seconds..."));
-                    System.out.println("DEBUG: Starting glViewer.setVolumeData...");
+                    // System.out.println("DEBUG: Starting glViewer.setVolumeData...");
                     glViewer.setVolumeData(volume, grad, dimX, dimY, dimZ);
-                    System.out.println("DEBUG: glViewer.setVolumeData finished.");
+                    // System.out.println("DEBUG: glViewer.setVolumeData finished.");
 
                     Thread.sleep(400); // EDTに "Uploading Volume..." 表示を描画させる時間を確保
 
@@ -459,10 +460,12 @@ public class Viewer3DController extends JFrame {
                     glViewer.setWindowLevel(windowLevel, windowWidth);
                     glViewer.setClipping(clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ, clipMaxZ);
                     glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
-                    System.out.println("DEBUG activateGPU EDT: spacing=(" + spacingX + "," + spacingY + "," + spacingZ + ") dim=(" + dimX + "," + dimY + "," + dimZ + ")");
+                    // System.out.println("DEBUG activateGPU EDT: spacing=(" + spacingX + "," +
+                    // spacingY + "," + spacingZ + ") dim=(" + dimX + "," + dimY + "," + dimZ +
+                    // ")");
                     glViewer.setRotation((float) rotateX, (float) rotateY);
                     glViewer.setZoom((float) zoom);
-                    System.out.println("DEBUG: GPU parameters set.");
+                    // System.out.println("DEBUG: GPU parameters set.");
 
                     Thread.sleep(400); // EDTに "Completing GPU..." 表示を描画させる時間を確保
 
@@ -471,12 +474,12 @@ public class Viewer3DController extends JFrame {
                             glViewer.setEngine(GLViewer3D.ENGINE_GPU);
                             this.canvas = glViewer; // 描画ループ対象をセット
                             setMode(this.mode);
-                            System.out.println("DEBUG: activateGPUMode EDT: about to showView(VIEW)");
+                            // System.out.println("DEBUG: activateGPUMode EDT: about to showView(VIEW)");
                             showView("VIEW");
                             startRenderLoop();
-                            System.out.println("3D Rendering Ready. Mode: GPU");
+                            // System.out.println("3D Rendering Ready. Mode: GPU");
                         } catch (Throwable t) {
-                            System.err.println("DEBUG: EXCEPTION in activateGPUMode EDT block:");
+                            // System.err.println("DEBUG: EXCEPTION in activateGPUMode EDT block:");
                             t.printStackTrace();
                             showView("VIEW");
                             startRenderLoop();
@@ -485,7 +488,7 @@ public class Viewer3DController extends JFrame {
                         }
                     });
                 } catch (Throwable t) {
-                    System.err.println("DEBUG: Error in activateGPUMode thread:");
+                    // System.err.println("DEBUG: Error in activateGPUMode thread:");
                     t.printStackTrace();
                     SwingUtilities.invokeLater(() -> {
                         gpuActivationInProgress = false;
@@ -511,7 +514,8 @@ public class Viewer3DController extends JFrame {
                 ((Timer) e.getSource()).stop();
                 return;
             }
-            System.err.println("DEBUG: GPU activation timeout at step 2/2. Triggering GL fallback retry.");
+            // System.err.println("DEBUG: GPU activation timeout at step 2/2. Triggering GL
+            // fallback retry.");
             gpuActivationInProgress = false;
             ((Timer) e.getSource()).stop();
             SwingUtilities.invokeLater(this::handleGpuContextFailure);
@@ -526,14 +530,14 @@ public class Viewer3DController extends JFrame {
 
         new Thread(() -> {
             try {
-                System.out.println("DEBUG: startAsyncGPUInitialization thread started.");
+                // System.out.println("DEBUG: startAsyncGPUInitialization thread started.");
                 List<List<DicomPix>> allPix = viewer2D.getPixList();
                 if (allPix == null || allPix.isEmpty()) {
-                    System.err.println("DEBUG: allPix is NULL or empty!");
+                    // System.err.println("DEBUG: allPix is NULL or empty!");
                     return;
                 }
                 this.pixList = new ArrayList<>(allPix.get(0));
-                System.out.println("DEBUG: pixList size = " + pixList.size());
+                // System.out.println("DEBUG: pixList size = " + pixList.size());
                 if (pixList == null || pixList.isEmpty())
                     return;
 
@@ -564,8 +568,10 @@ public class Viewer3DController extends JFrame {
                 }
 
                 volume = new short[dimZ * dimY * dimX];
-                System.out.println("DEBUG: loadSlices started. dimZ=" + dimZ + ", dimY=" + dimY + ", dimX=" + dimX);
-                System.out.println("Starting HU conversion (Sequential/Safe Mode) for " + dimZ + " slices...");
+                // System.out.println("DEBUG: loadSlices started. dimZ=" + dimZ + ", dimY=" +
+                // dimY + ", dimX=" + dimX);
+                // System.out.println("Starting HU conversion (Sequential/Safe Mode) for " +
+                // dimZ + " slices...");
 
                 for (int z = 0; z < dimZ; z++) {
                     final int currentZ = z;
@@ -599,50 +605,44 @@ public class Viewer3DController extends JFrame {
 
                         // 50枚ごとにコンソールに進捗を出す
                         if (z % 50 == 0) {
-                            System.out.println("DEBUG: HU Converting... " + z + "/" + dimZ);
+                            // System.out.println("DEBUG: HU Converting... " + z + "/" + dimZ);
                         }
                         // 100枚ごとにGCを強制
                         if (z % 100 == 0) {
                             System.gc();
                         }
                     } catch (Throwable t) {
-                        System.err.println("Error at slice " + z + ": " + t.getMessage());
+                        // System.err.println("Error at slice " + z + ": " + t.getMessage());
                     }
                 }
 
-                System.out.println("HU conversion finished. Finalizing...");
-                // データの詳細統計チェック
-                long nonZeroCount = 0;
-                int maxV = -3000, minV = 3000;
-                long sumV = 0;
-                for (int i = 0; i < Math.min(volume.length, 1000000); i++) {
-                    short val = volume[i];
-                    if (val != 0)
-                        nonZeroCount++;
-                    if (val > maxV)
-                        maxV = val;
-                    if (val < minV)
-                        minV = val;
-                    sumV += val;
-                }
-                System.out.println("DEBUG: Volume Stats (first 1M samples):");
-                System.out.println("  Non-zero: " + nonZeroCount);
-                System.out.println("  Max: " + maxV + ", Min: " + minV + ", Avg: " + (sumV / 1000000));
+                // System.out.println("HU conversion finished. Finalizing...");
+                // データの詳細統計チェック（デバッグログ出力のため）
+                /*
+                 * long nonZeroCount = 0;
+                 * int maxV = -3000, minV = 3000;
+                 * long sumV = 0;
+                 * for (int i = 0; i < Math.min(volume.length, 1000000); i++) {
+                 * short val = volume[i];
+                 * if (val != 0)
+                 * nonZeroCount++;
+                 * if (val > maxV)
+                 * maxV = val;
+                 * if (val < minV)
+                 * minV = val;
+                 * sumV += val;
+                 * }
+                 * // System.out.println("DEBUG: Volume Stats (first 1M samples):");
+                 * // System.out.println("  Non-zero: " + nonZeroCount);
+                 * // System.out.println("  Max: " + maxV + ", Min: " + minV + ", Avg: " + (sumV
+                 * / 1000000));
+                 */
                 pixList = null;
 
                 // 3Dレンダリング用ウィンドウは広範囲を維持する。
                 // DICOMの2D表示用窓(例: 軟部組織 WL=50/WW=300)は骨(HU>200)を完全除外するため
                 // VRモードで真っ黒になる。wl=300/ww=2000を使用して骨・軟組織を両方表示する。
-                if (viewer2D != null && viewer2D.getImageView() != null
-                        && viewer2D.getImageView().getCurDCM() != null) {
-                    float dicom2DWL = viewer2D.getImageView().getCurDCM().getWindowLevel();
-                    float dicom2DWW = viewer2D.getImageView().getCurDCM().getWindowWidth();
-                    System.out
-                            .println("DEBUG: DICOM 2D window (not used for 3D): WL=" + dicom2DWL + " WW=" + dicom2DWW);
-                } else if (first != null) {
-                    System.out.println("DEBUG: DICOM first-slice window (not used for 3D): WL="
-                            + first.getWindowLevel() + " WW=" + first.getWindowWidth());
-                }
+                // DICOM 2D window info suppressed. 3D uses separate WL/WW.
                 // 3D用デフォルト窓: WL=1024 WW=4096 (1:1マッピング)
                 windowLevel = 1024;
                 windowWidth = 4096;
@@ -679,19 +679,22 @@ public class Viewer3DController extends JFrame {
                 consecutiveErrors[0] = 0; // 成功したらリセット
             } catch (Throwable ex) {
                 if (isPixelFormatError(ex)) {
-                    System.err.println("DEBUG: OpenGL pixel format error detected. Trying next GL config.");
+                    // System.err.println("DEBUG: OpenGL pixel format error detected. Trying next GL
+                    // config.");
                     ex.printStackTrace();
                     gpuActivationInProgress = false;
                     SwingUtilities.invokeLater(this::handleGpuContextFailure);
                     return;
                 }
                 consecutiveErrors[0]++;
-                System.err.println("DEBUG: Render error #" + consecutiveErrors[0] + ": " + ex);
+                // System.err.println("DEBUG: Render error #" + consecutiveErrors[0] + ": " +
+                // ex);
                 ex.printStackTrace();
                 if (consecutiveErrors[0] >= 10) {
                     // 連続10回失敗した場合のみ停止 (一時的なエラーで永久停止しないよう)
                     stopRenderLoop();
-                    System.err.println("DEBUG: Render loop stopped after 10 consecutive errors.");
+                    // System.err.println("DEBUG: Render loop stopped after 10 consecutive
+                    // errors.");
                 }
             }
         });
@@ -737,10 +740,11 @@ public class Viewer3DController extends JFrame {
     }
 
     private void setupGPURenderer() {
-        System.out.println("DEBUG: setupGPURenderer called. engine=" + (isGpuEngine() ? "GPU" : "CPU"));
+        // System.out.println("DEBUG: setupGPURenderer called. engine=" + (isGpuEngine()
+        // ? "GPU" : "CPU"));
         new Thread(() -> {
             try {
-                System.out.println("DEBUG: setupGPURenderer thread started.");
+                // System.out.println("DEBUG: setupGPURenderer thread started.");
                 // 先にCPURendererを完全に作ってからEDTに渡すことで排他やNPEを回避
                 CPURaycastRenderer tempCpu = new CPURaycastRenderer();
                 tempCpu.setVolumeData(volume, dimX, dimY, dimZ);
@@ -760,28 +764,27 @@ public class Viewer3DController extends JFrame {
                         // tempCpu のデータが消えてしまう。先に volume を設定して防ぐ。
                         glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
                         glViewer.setVoxelSpacing((float) spacingX, (float) spacingY, (float) spacingZ);
-                        System.out.println("DEBUG EDT: spacing=(" + spacingX + "," + spacingY + "," + spacingZ + ") dim=(" + dimX + "," + dimY + "," + dimZ + ")");
                         cpuRenderer = tempCpu;
                         glViewer.setCpuRenderer(cpuRenderer);
                         glViewer.setWindowLevel(windowLevel, windowWidth);
                         setMode(this.mode);
                         glViewer.setEngine(GLViewer3D.ENGINE_CPU);
                         this.canvas = glViewer; // 描画ループの対象セット
-                        System.out.println("DEBUG: setupGPURenderer EDT: about to showView(VIEW)");
+                        // System.out.println("DEBUG: setupGPURenderer EDT: about to showView(VIEW)");
                         showView("VIEW");
                         startRenderLoop(); // 定期再描画を回す
-                        System.out.println("3D Rendering Ready. Mode: CPU");
+                        // System.out.println("3D Rendering Ready. Mode: CPU");
                     } catch (Throwable t) {
-                        System.err.println("DEBUG: EXCEPTION in setupGPURenderer EDT block:");
+                        // System.err.println("DEBUG: EXCEPTION in setupGPURenderer EDT block:");
                         t.printStackTrace();
                         showView("VIEW"); // 例外でも VIEW に切り替えてブラックスクリーンを表示
                         startRenderLoop();
                     }
                 });
 
-                System.out.println("DEBUG: CPU renderer initialized.");
+                // System.out.println("DEBUG: CPU renderer initialized.");
             } catch (Throwable t) {
-                System.err.println("DEBUG: Error in setupGPURenderer thread:");
+                // System.err.println("DEBUG: Error in setupGPURenderer thread:");
                 t.printStackTrace();
                 SwingUtilities.invokeLater(() -> setLoadingStatus("Initialization Error: " + t.getMessage()));
             }
@@ -789,10 +792,6 @@ public class Viewer3DController extends JFrame {
     }
 
     private void showView(String viewName) {
-        System.out.println("DEBUG: showView(" + viewName + ") called. layout="
-                + (mainContainer != null ? mainContainer.getLayout().getClass().getSimpleName() : "null")
-                + " glViewer.isShowing=" + (glViewer != null ? glViewer.isShowing() : "null")
-                + " glViewer.isVisible=" + (glViewer != null ? glViewer.isVisible() : "null"));
         if (mainContainer != null && mainContainer.getLayout() instanceof CardLayout) {
             ((CardLayout) mainContainer.getLayout()).show(mainContainer, viewName);
         }
@@ -816,9 +815,10 @@ public class Viewer3DController extends JFrame {
             glViewer.revalidate();
             glViewer.repaint();
         }
-        System.out.println("DEBUG: showView(" + viewName + ") done."
-                + " glViewer.isShowing=" + (glViewer != null ? glViewer.isShowing() : "null")
-                + " glViewer.isVisible=" + (glViewer != null ? glViewer.isVisible() : "null"));
+        // System.out.println("DEBUG: showView(" + viewName + ") done."
+        // + " glViewer.isShowing=" + (glViewer != null ? glViewer.isShowing() : "null")
+        // + " glViewer.isVisible=" + (glViewer != null ? glViewer.isVisible() :
+        // "null"));
     }
 
     private byte[] computeGradients(int zStep, int tz) {
@@ -1317,7 +1317,8 @@ public class Viewer3DController extends JFrame {
 
         // 4. Shading
         JPanel contentShading = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JPanel groupShading = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.shading"), contentShading);
+        JPanel groupShading = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.shading"),
+                contentShading);
 
         JCheckBox chkShading = new JCheckBox(com.oculus.jj.utils.LanguageManager.get("vr.shading"), true);
         chkShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
@@ -1363,7 +1364,8 @@ public class Viewer3DController extends JFrame {
             repaint();
         });
         contentStereo.add(stereoCheck);
-        JPanel groupStereo = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.stereo"), contentStereo);
+        JPanel groupStereo = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.stereo"),
+                contentStereo);
         vrToolbar.add(groupStereo);
 
         // 5. Perspective & Filters
@@ -1475,7 +1477,7 @@ public class Viewer3DController extends JFrame {
         btnROIManager.setFocusable(false);
         btnROIManager.addActionListener(e -> {
             // HOROS-20240407準拠: [roiGetManager:] - ROI Manager ウィンドウ表示
-            System.out.println("[VR] Opening ROI Manager...");
+            // System.out.println("[VR] Opening ROI Manager...");
             // TODO: Show ROI management dialog linked to current series ROIs
         });
         contentTools.add(btnROIManager);
@@ -1535,9 +1537,9 @@ public class Viewer3DController extends JFrame {
         contentTools.add(btnRevert);
 
         String[] extraTools2 = {
-        com.oculus.jj.utils.LanguageManager.get("vr.extra.dicomFile"),
-        com.oculus.jj.utils.LanguageManager.get("vr.extra.flyThru")
-    };
+                com.oculus.jj.utils.LanguageManager.get("vr.extra.dicomFile"),
+                com.oculus.jj.utils.LanguageManager.get("vr.extra.flyThru")
+        };
         for (String label : extraTools2) {
             JButton btn = new JButton(label);
             btn.setFont(new Font("SansSerif", Font.PLAIN, 10));
@@ -1913,7 +1915,8 @@ public class Viewer3DController extends JFrame {
         viewer.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentShown(java.awt.event.ComponentEvent e) {
-                System.out.println("DEBUG: glViewer shown, size=" + viewer.getWidth() + "x" + viewer.getHeight());
+                // System.out.println("DEBUG: glViewer shown, size=" + viewer.getWidth() + "x" +
+                // viewer.getHeight());
                 if (canvas == viewer) {
                     try {
                         viewer.render();
@@ -1969,7 +1972,8 @@ public class Viewer3DController extends JFrame {
                 glConfigIndex++;
                 gpuInitialized = false;
                 gpuContextUnsupported = false;
-                System.err.println("DEBUG: Retrying GPU initialization with GL config index=" + glConfigIndex);
+                // System.err.println("DEBUG: Retrying GPU initialization with GL config index="
+                // + glConfigIndex);
                 if (loadingLabel != null) {
                     setLoadingStatus("Retrying GPU context with compatible GL profile...");
                 }
@@ -1978,7 +1982,7 @@ public class Viewer3DController extends JFrame {
                 activateGPUMode();
             } else {
                 gpuContextUnsupported = true;
-                System.err.println("DEBUG: All GL configs failed. GPU mode unavailable.");
+                // System.err.println("DEBUG: All GL configs failed. GPU mode unavailable.");
                 if (glViewer != null) {
                     glViewer.setEngine(GLViewer3D.ENGINE_CPU);
                     glViewer.requestCpuRender();
@@ -2803,7 +2807,8 @@ public class Viewer3DController extends JFrame {
             }
         }
 
-        System.out.println("Bone Removal: Removed " + count + " connected bone voxels.");
+        // System.out.println("Bone Removal: Removed " + count + " connected bone
+        // voxels.");
 
         if (glViewer != null) {
             glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
@@ -3267,11 +3272,11 @@ public class Viewer3DController extends JFrame {
 
     /** HOROS-20240407準拠: Endoscopy Viewer (未実装プレースホルダ) */
     public static void openEndoscopy(ViewerController viewer) {
-        System.out.println("[VR] Endoscopy Viewer - not yet implemented");
+        // System.out.println("[VR] Endoscopy Viewer - not yet implemented");
     }
 
     /** HOROS-20240407準拠: Structured Report Viewer (未実装プレースホルダ) */
     public static void openSR(ViewerController viewer) {
-        System.out.println("[VR] SR Viewer - not yet implemented");
+        // System.out.println("[VR] SR Viewer - not yet implemented");
     }
 }

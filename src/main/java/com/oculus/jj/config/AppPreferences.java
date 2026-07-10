@@ -296,7 +296,7 @@ public class AppPreferences {
     public static void setDicomFolder(String path) { prefs.put(KEY_DICOM_FOLDER, path); }
 
     public static String getDatabaseFolder() { return prefs.get(KEY_DATABASE_FOLDER, getDefaultDatabaseFolder()); }
-    public static void setDatabaseFolder(String path) { prefs.put(KEY_DATABASE_FOLDER, path); }
+    public static void setDatabaseFolder(String path) { String oldPath = prefs.get(KEY_DATABASE_FOLDER, getDefaultDatabaseFolder()); if (!path.equals(oldPath)) { com.oculus.jj.model.DicomDatabase.resetCachedDatabases(); } prefs.put(KEY_DATABASE_FOLDER, path); }
 
     /** すべての設定を強制的に保存 */
     public static void saveAll() {

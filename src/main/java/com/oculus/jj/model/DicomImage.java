@@ -317,26 +317,61 @@ public class DicomImage {
     }
 
     // DICOM metadata getters/setters (HOROS-20240407準拠: DicomPix.m 対応項目)
-    public String getPatientID() { return patientID; }
-    public void setPatientID(String v) { this.patientID = v; }
+    public String getPatientID() {
+        return patientID;
+    }
 
-    public String getStudyDescription() { return studyDescription; }
-    public void setStudyDescription(String v) { this.studyDescription = v; }
+    public void setPatientID(String v) {
+        this.patientID = v;
+    }
 
-    public String getSeriesDescription() { return seriesDescription; }
-    public void setSeriesDescription(String v) { this.seriesDescription = v; }
+    public String getStudyDescription() {
+        return studyDescription;
+    }
 
-    public Integer getSeriesNumber() { return seriesNumber; }
-    public void setSeriesNumber(Integer v) { this.seriesNumber = v; }
+    public void setStudyDescription(String v) {
+        this.studyDescription = v;
+    }
 
-    public String getSopClassUID() { return sopClassUID; }
-    public void setSopClassUID(String v) { this.sopClassUID = v; }
+    public String getSeriesDescription() {
+        return seriesDescription;
+    }
 
-    public String getInstanceComments() { return instanceComments; }
-    public void setInstanceComments(String v) { this.instanceComments = v; }
+    public void setSeriesDescription(String v) {
+        this.seriesDescription = v;
+    }
 
-    public String getAccessionNumber() { return accessionNumber; }
-    public void setAccessionNumber(String v) { this.accessionNumber = v; }
+    public Integer getSeriesNumber() {
+        return seriesNumber;
+    }
+
+    public void setSeriesNumber(Integer v) {
+        this.seriesNumber = v;
+    }
+
+    public String getSopClassUID() {
+        return sopClassUID;
+    }
+
+    public void setSopClassUID(String v) {
+        this.sopClassUID = v;
+    }
+
+    public String getInstanceComments() {
+        return instanceComments;
+    }
+
+    public void setInstanceComments(String v) {
+        this.instanceComments = v;
+    }
+
+    public String getAccessionNumber() {
+        return accessionNumber;
+    }
+
+    public void setAccessionNumber(String v) {
+        this.accessionNumber = v;
+    }
 
     public void setSopInstanceUID(String sopInstanceUID) {
         this.sopInstanceUID = sopInstanceUID;
@@ -977,34 +1012,51 @@ public class DicomImage {
             }
 
             if ("dcm".equals(extension)) {
-                // HOROS-20240407準拠: [self setPrimitiveValue: [NSNumber numberWithInt: [p
-                // intValue]] forKey:@"pathNumber"]; (988行目)
-                // HOROS-20240407準拠: intValueは文字列の先頭から数値を読み取り、数値でない文字が現れたら停止
-                // 例: "0001" -> 1, "IM-0001-0001" -> 0 (先頭が数値でないため)
-                // HOROS-20240407準拠: intValueが0でもpathNumberに0を設定する
+                // HOROS-20240407準拠: UIDベースの名前（例: 1.2.392...7019.dcm）は数値抽出で壊れるため、
+                // 完全な相対パスを pathString に保持する。
                 String pathWithoutExt = p.substring(0, lastDot);
-                int intValue = 0;
-                try {
-                    // 先頭から数値を読み取る（HOROS-20240407準拠: intValueの動作）
-                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^\\s*(\\d+)");
-                    java.util.regex.Matcher matcher = pattern.matcher(pathWithoutExt);
-                    if (matcher.find()) {
-                        intValue = Integer.parseInt(matcher.group(1));
+                if (pathWithoutExt.contains(".")) {
+                    // UIDベースの名前（ドットを含む）→ 数値抽出をスキップし完全な相対パスを保持
+                    pathNumber = null;
+                    pathString = p;
+                } else {
+                    // HOROS-20240407準拠: [self setPrimitiveValue: [NSNumber numberWithInt: [p
+                    // intValue]] forKey:@"pathNumber"
+                    // 先頭から数値を読み取る（HOROS: intValue は非数値文字で停止）
+                    int intValue = 0;
+                    boolean parsed = false;
+                    try {
+                        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^\\s*(\\d+)");
+                        java.util.regex.Matcher matcher = pattern.matcher(pathWithoutExt);
+                        if (matcher.find()) {
+                            intValue = Integer.parseInt(matcher.group(1));
+                            parsed = true;
+                        }
+                    } catch (NumberFormatException e) {
+                        // 数値パースに失敗
+                    }
 
-                        // 数値が見つかった場合のみpathNumberを設定
+                    if (parsed && intValue > 0) {
+                        // HOROS-20240407準拠: 数値抽出成功 → pathNumber + "%d.dcm" で再構築
                         pathNumber = intValue;
                         pathString = null;
-                        return;
+                    } else {
+                        // HOROS 準拠フォールバック: .dcm だが先頭が数値でない場合（例: IM-0001-0001.dcm）
+                        // pathString にファイル名（.dcm 付き）を保存し、completePath() でそのまま返す
+                        pathNumber = null;
+                        pathString = p;
                     }
-                } catch (NumberFormatException e) {
-                    // 数値パースに失敗した場合は数値以外として扱う
                 }
+            } else {
+                // HOROS-20240407準拠: .dcm 以外 → pathString にフルパスを保存
+                pathNumber = null;
+                pathString = p;
             }
+        } else {
+            // HOROS-20240407準拠: 絶対パス → pathString に設定
+            pathNumber = null;
+            pathString = p;
         }
-
-        // 数値として扱えない場合、または絶対パスの場合はpathStringに設定
-        pathNumber = null;
-        pathString = p;
     }
 
     /**
