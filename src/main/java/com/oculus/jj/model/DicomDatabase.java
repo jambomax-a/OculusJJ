@@ -2418,6 +2418,11 @@ public class DicomDatabase {
                             if (study.getDate() == null || study.getDate().isBefore(studyDateLocal)) {
                                 study.setDate(studyDateLocal);
                             }
+                    } else {
+                        // HOROS-20240407??: StudyDate???????????????????????
+                        if (study.getDate() == null) {
+                            study.setDate(today);
+                        }
                         }
                     }
 

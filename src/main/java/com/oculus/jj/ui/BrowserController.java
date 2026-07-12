@@ -2516,12 +2516,15 @@ public class BrowserController extends JFrame {
                 synchronized (outlineViewArray) {
                     java.util.List<Object> timeFiltered = new java.util.ArrayList<>();
                     for (Object item : outlineViewArray) {
-                        if (item instanceof com.oculus.jj.model.DicomStudy 
-                            && ((com.oculus.jj.model.DicomStudy) item).getDate() != null) {
+                        if (!(item instanceof com.oculus.jj.model.DicomStudy)) {
+                            // HOROS-20240407??: ?DicomStudy???DicomSeries?????????
+                            timeFiltered.add(item); } else if (((com.oculus.jj.model.DicomStudy) item).getDate() != null) {
                             java.time.LocalDateTime studyDate = ((com.oculus.jj.model.DicomStudy) item).getDate();
                             long studyMs = studyDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
                             if (studyMs >= startMs && studyMs <= nowMs) {
-                                timeFiltered.add(item); } } }
+                                timeFiltered.add(item); } } else {
+                            // HOROS-20240407??: ??????Study?????Time Interval????????????????
+                            timeFiltered.add(item); } }
                     outlineViewArray.clear();
                     outlineViewArray.addAll(timeFiltered);
                 }
