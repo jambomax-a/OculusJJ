@@ -3899,9 +3899,7 @@ public class DicomDatabase {
             // [filesInput objectAtIndex:0]]; } (2842-2845行目)
 
         } catch (Exception e) {
-
-            // デバッグログは条件付きで出力（必要に応じて有効化）
-            // e.printStackTrace();
+            // エラーは無視するか、適切にログ出力を行う（コンソールへの直接出力は避ける）
         }
     }
 

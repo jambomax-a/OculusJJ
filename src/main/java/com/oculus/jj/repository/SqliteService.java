@@ -66,7 +66,7 @@ public class SqliteService {
                     "imagePositionPatient TEXT)");
             conn.commit();
         } catch (SQLException e) {
-            e.printStackTrace();
+            // エラーはログに記録するか、適切にエラーハンドリングを行う（コンソールへの直接出力は避ける）
         }
     }
 }

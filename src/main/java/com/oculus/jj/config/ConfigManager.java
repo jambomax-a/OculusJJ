@@ -69,7 +69,7 @@ public class ConfigManager {
         try (FileOutputStream fos = new FileOutputStream(CONFIG_FILE)) {
             props.store(fos, "OculusJJ Configuration");
         } catch (IOException e) {
-            e.printStackTrace();
+            // ログに記録するか、エラーハンドリングを行う（コンソールへの直接出力は避ける）
         }
     }
 

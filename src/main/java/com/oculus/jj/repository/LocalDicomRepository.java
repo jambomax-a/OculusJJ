@@ -27,12 +27,14 @@ public class LocalDicomRepository implements DicomRepository {
     public LocalDicomRepository(DicomPathService pathService) {
         this.pathService = pathService;
     }
+
     private String cleanString(String s) {
-        if (s == null) return "";
+        if (s == null)
+            return "";
         String cleaned = s.trim();
         cleaned = cleaned.replace("^", " "); // ^ -> スペース
-        cleaned = cleaned.replace("/", "-");   // / -> ハイフン
-        cleaned = cleaned.replace(":", "-");   // : -> ハイフン
+        cleaned = cleaned.replace("/", "-"); // / -> ハイフン
+        cleaned = cleaned.replace(":", "-"); // : -> ハイフン
         return cleaned;
     }
 
@@ -56,8 +58,10 @@ public class LocalDicomRepository implements DicomRepository {
                 study.setPatientID(rs.getString("patientID"));
                 study.setName(rs.getString("studyName"));
                 study.setModality(rs.getString("modality"));
-                study.setDate(rs.getTimestamp("studyDate") != null ? rs.getTimestamp("studyDate").toLocalDateTime() : null);
-                study.setDateAdded(rs.getTimestamp("dateAdded") != null ? rs.getTimestamp("dateAdded").toLocalDateTime() : null);
+                study.setDate(
+                        rs.getTimestamp("studyDate") != null ? rs.getTimestamp("studyDate").toLocalDateTime() : null);
+                study.setDateAdded(
+                        rs.getTimestamp("dateAdded") != null ? rs.getTimestamp("dateAdded").toLocalDateTime() : null);
                 study.setInstitutionName(rs.getString("institutionName"));
                 study.setPerformingPhysician(rs.getString("performingPhysician"));
                 study.setReferringPhysician(rs.getString("referringPhysician"));
@@ -65,7 +69,7 @@ public class LocalDicomRepository implements DicomRepository {
                 return Optional.of(study);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            // エラーはログに記録するか、適切にエラーハンドリングを行う
         }
         return Optional.empty();
     }
@@ -125,8 +129,8 @@ public class LocalDicomRepository implements DicomRepository {
 
         try (Stream<Path> paths = Files.walk(targetDir.toPath(), 1)) {
             paths.filter(Files::isRegularFile)
-                 .filter(path -> isDicomFile(path.toString()))
-                 .forEach(path -> loadAndCacheImage(path.toString()));
+                    .filter(path -> isDicomFile(path.toString()))
+                    .forEach(path -> loadAndCacheImage(path.toString()));
         } catch (IOException e) {
             // エラーログ等の処理（必要に応じて）
         }
@@ -135,7 +139,8 @@ public class LocalDicomRepository implements DicomRepository {
     private void saveStudyToDb(DicomStudy study) {
         try (java.sql.Connection conn = SqliteService.getConnection()) {
             java.sql.PreparedStatement stmt = conn.prepareStatement("INSERT OR REPLACE INTO studies " +
-                    "(studyInstanceUID, patientUID, patientName, patientID, accessionNumber, studyDate, dateAdded, modality, numberOfImages, studyName, institutionName, performingPhysician, referringPhysician, reportURL) " +
+                    "(studyInstanceUID, patientUID, patientName, patientID, accessionNumber, studyDate, dateAdded, modality, numberOfImages, studyName, institutionName, performingPhysician, referringPhysician, reportURL) "
+                    +
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             stmt.setString(1, study.getStudyInstanceUID());
             stmt.setString(2, study.getPatientUID());
@@ -169,7 +174,8 @@ public class LocalDicomRepository implements DicomRepository {
     private void saveSeriesToDb(DicomSeries series) {
         try (java.sql.Connection conn = SqliteService.getConnection()) {
             java.sql.PreparedStatement stmt = conn.prepareStatement("INSERT OR REPLACE INTO series " +
-                    "(seriesInstanceUID, studyInstanceUID, seriesDescription, modality, numberOfImages, seriesNumber, seriesName) " +
+                    "(seriesInstanceUID, studyInstanceUID, seriesDescription, modality, numberOfImages, seriesNumber, seriesName) "
+                    +
                     "VALUES (?, ?, ?, ?, ?, ?, ?)");
             stmt.setString(1, series.getSeriesInstanceUID());
             stmt.setString(2, series.getStudy() != null ? series.getStudy().getStudyInstanceUID() : null);
@@ -187,7 +193,8 @@ public class LocalDicomRepository implements DicomRepository {
     private void saveImageToDb(DicomImage image) {
         try (java.sql.Connection conn = SqliteService.getConnection()) {
             java.sql.PreparedStatement stmt = conn.prepareStatement("INSERT OR REPLACE INTO images " +
-                    "(sopInstanceUID, seriesInstanceUID, filePath, instanceNumber, sliceLocation, imagePositionPatient) " +
+                    "(sopInstanceUID, seriesInstanceUID, filePath, instanceNumber, sliceLocation, imagePositionPatient) "
+                    +
                     "VALUES (?, ?, ?, ?, ?, ?)");
             stmt.setString(1, image.getSopInstanceUID());
             stmt.setString(2, image.getSeriesInstanceUID());
@@ -204,7 +211,8 @@ public class LocalDicomRepository implements DicomRepository {
     public List<DicomStudy> findStudiesByDateRange(java.time.LocalDateTime start, java.time.LocalDateTime end) {
         List<DicomStudy> result = new ArrayList<>();
         try (java.sql.Connection conn = SqliteService.getConnection()) {
-            java.sql.PreparedStatement stmt = conn.prepareStatement("SELECT * FROM studies WHERE studyDate BETWEEN ? AND ?");
+            java.sql.PreparedStatement stmt = conn
+                    .prepareStatement("SELECT * FROM studies WHERE studyDate BETWEEN ? AND ?");
             stmt.setTimestamp(1, start != null ? java.sql.Timestamp.valueOf(start) : null);
             stmt.setTimestamp(2, end != null ? java.sql.Timestamp.valueOf(end) : null);
             java.sql.ResultSet rs = stmt.executeQuery();
@@ -256,7 +264,8 @@ public class LocalDicomRepository implements DicomRepository {
     }
 
     private boolean isDicomFile(String path) {
-        if (path == null) return false;
+        if (path == null)
+            return false;
         String lowerPath = path.toLowerCase();
         return lowerPath.endsWith(".dcm") || lowerPath.endsWith(".ima");
     }
@@ -277,7 +286,7 @@ public class LocalDicomRepository implements DicomRepository {
             String instanceUID = attrs.getString(org.dcm4che3.data.Tag.SOPInstanceUID);
 
             if (studyUID == null || seriesUID == null || instanceUID == null) {
-                 return null;
+                return null;
             }
 
             DicomImage image = new DicomImage();
@@ -288,7 +297,7 @@ public class LocalDicomRepository implements DicomRepository {
             // 位置情報などの追加抽出
             String ipp = attrs.getString(org.dcm4che3.data.Tag.ImagePositionPatient);
             image.setImagePositionPatient(ipp);
-            
+
             // 画像のサイズとウィンドウ情報の抽出
             if (attrs.contains(org.dcm4che3.data.Tag.Rows) && attrs.contains(org.dcm4che3.data.Tag.Columns)) {
                 image.setHeight(attrs.getInt(org.dcm4che3.data.Tag.Rows, -1));

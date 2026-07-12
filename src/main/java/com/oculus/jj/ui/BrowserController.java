@@ -150,6 +150,12 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: BOOL loadingIsOver = NO; (BrowserController.m 174行目)
     private boolean loadingIsOver = false;
 
+    // HOROS-20240407準拠: BrowserToolbar フィールド（initializeUIComponents()外側で宣言）
+    private BrowserToolbar browserToolbar = null;
+
+    // HOROS-20240407準拠: ツールバー用 JScrollPane
+    private JScrollPane toolbarScroll = null;
+
     // HOROS-20240407準拠: BOOL DatabaseIsEdited; (201行目)
     private boolean DatabaseIsEdited = false;
 
@@ -350,8 +356,11 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: BrowserController.m toolbarDefaultItemIdentifiers
         Container contentPane = getContentPane();
         contentPane.setLayout(new BorderLayout());
-        BrowserToolbar browserToolbar = new BrowserToolbar();
-        contentPane.add(browserToolbar, BorderLayout.NORTH);
+        // HOROS-20240407準拠: JToolBar を横スクロール可能な JScrollPane で囲む（Swing で JToolBar が横に伸びるよう明示）
+        browserToolbar = new BrowserToolbar();
+        toolbarScroll = new JScrollPane(browserToolbar);
+        toolbarScroll.setHorizontalScrollBarPolicy(javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+        // Swing: setViewPortSetViewport(browserToolbar) を contentPane.add 後に遅延して呼出 (setViewPortSetViewport は初期化順序で問題になる場合がある)
 
         // ========== 左側サイドバー（垂直スプリッター） ==========
         // HOROS-20240407準拠: splitAlbums - Albums | Sources | Activity
@@ -1182,15 +1191,47 @@ public class BrowserController extends JFrame {
         mainContentPanel.add(splitViewHorz, BorderLayout.CENTER);
         mainContentPanel.add(bottomSplit, BorderLayout.SOUTH);
 
+        // HOROS-20240407準拠: ツールバーはウィンドウ上部（NORTH）に配置
+        contentPane.add(toolbarScroll, BorderLayout.NORTH);
+
         contentPane.add(mainContentPanel, BorderLayout.CENTER);
 
         // HOROS-20240407準拠: 検索フィールド
         // HOROS-20240407準拠: BrowserController.h 180行目 IBOutlet NSSearchField
         // *searchField;
-        searchField = new JTextField();
-        searchField.setToolTipText(LanguageManager.get("browser.searchHint"));
-        searchField.addActionListener(e -> {
-        });
+        searchField = browserToolbar != null ? browserToolbar.getSearchField() : null;
+        if (searchField != null) {
+            searchField.setToolTipText(LanguageManager.get("browser.searchHint"));
+            searchField.addActionListener(e -> {
+                // HOROS-20240407準拠: 検索を実行してアウトラインビューを更新
+                outlineViewRefresh();
+            });
+
+            // HOROS-20240407準拠: NSSearchFieldのリアルタイム検索（ディレイ付き）を再現
+            // 入力が停止してから250ms後に検索を実行するデバウンスタイマー
+            javax.swing.Timer searchDelayTimer = new javax.swing.Timer(250, ev -> {
+                outlineViewRefresh();
+            });
+            searchDelayTimer.setRepeats(false);
+
+            searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                private void triggerSearch() {
+                    searchDelayTimer.restart();
+                }
+                @Override
+                public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                    triggerSearch();
+                }
+                @Override
+                public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                    triggerSearch();
+                }
+                @Override
+                public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                    triggerSearch();
+                }
+            });
+        }
 
         // HOROS-20240407準拠: ドラッグ&ドロップ対応
         setupDragAndDrop();
@@ -2332,6 +2373,89 @@ public class BrowserController extends JFrame {
                     }
                 } else {
 
+                }
+            }
+
+            // HOROS-20240407準拠: 検索キーワードと検索項目によるフィルタリング
+            synchronized (outlineViewArray) {
+                String searchText = (searchField != null) ? searchField.getText().trim() : "";
+                if (!searchText.isEmpty()) {
+                    int selectedSearchType = 0;
+                    if (browserToolbar != null && browserToolbar.getSearchTypeCombo() != null) {
+                        selectedSearchType = browserToolbar.getSearchTypeCombo().getSelectedIndex();
+                    }
+                    String finalSearchText = searchText.toLowerCase();
+                    List<Object> filteredList = new java.util.ArrayList<>();
+                    java.util.function.BiFunction<String, String, Boolean> contains = (val, query) -> 
+                        val != null && val.toLowerCase().contains(query);
+
+                    for (Object item : outlineViewArray) {
+                        if (item instanceof com.oculus.jj.model.DicomStudy) {
+                            com.oculus.jj.model.DicomStudy study = (com.oculus.jj.model.DicomStudy) item;
+                            boolean match = false;
+                            switch (selectedSearchType) {
+                                case 0: // All Fields
+                                    match = contains.apply(study.getPatientName(), finalSearchText)
+                                         || contains.apply(study.getPatientID(), finalSearchText)
+                                         || contains.apply(study.getId(), finalSearchText)
+                                         || contains.apply(study.getComment(), finalSearchText)
+                                         || contains.apply(study.getComment2(), finalSearchText)
+                                         || contains.apply(study.getComment3(), finalSearchText)
+                                         || contains.apply(study.getComment4(), finalSearchText)
+                                         || contains.apply(study.getStudyName(), finalSearchText)
+                                         || contains.apply(study.getModality(), finalSearchText)
+                                         || contains.apply(study.getAccessionNumber(), finalSearchText)
+                                         || contains.apply(study.getPerformingPhysician(), finalSearchText)
+                                         || contains.apply(study.getReferringPhysician(), finalSearchText)
+                                         || contains.apply(study.getInstitutionName(), finalSearchText);
+                                    break;
+                                case 1: // Patient Name
+                                    match = contains.apply(study.getPatientName(), finalSearchText);
+                                    break;
+                                case 2: // Study Date
+                                    if (study.getDate() != null) {
+                                        match = study.getDate().toString().contains(finalSearchText);
+                                    }
+                                    break;
+                                case 3: // Accession Number
+                                    match = contains.apply(study.getAccessionNumber(), finalSearchText);
+                                    break;
+                                case 4: // Modality
+                                    match = contains.apply(study.getModality(), finalSearchText);
+                                    break;
+                                case 5: // Series Description (Study Name + Series Description)
+                                    match = contains.apply(study.getStudyName(), finalSearchText);
+                                    if (!match && study.getSeries() != null) {
+                                        for (Object sObj : study.getSeries()) {
+                                            if (sObj instanceof com.oculus.jj.model.DicomSeries) {
+                                                com.oculus.jj.model.DicomSeries series = (com.oculus.jj.model.DicomSeries) sObj;
+                                                if (contains.apply(series.getSeriesDescription(), finalSearchText)) {
+                                                    match = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break;
+                                case 6: // Institution
+                                    match = contains.apply(study.getInstitutionName(), finalSearchText);
+                                    break;
+                                case 7: // Other (Comments)
+                                    match = contains.apply(study.getComment(), finalSearchText)
+                                         || contains.apply(study.getComment2(), finalSearchText)
+                                         || contains.apply(study.getComment3(), finalSearchText)
+                                         || contains.apply(study.getComment4(), finalSearchText);
+                                    break;
+                            }
+                            if (match) {
+                                filteredList.add(study);
+                            }
+                        } else {
+                            filteredList.add(item);
+                        }
+                    }
+                    outlineViewArray.clear();
+                    outlineViewArray.addAll(filteredList);
                 }
             }
 
@@ -8419,7 +8543,7 @@ public class BrowserController extends JFrame {
         return result;
     }
 
-    private DCMView getActiveDCMViewForEdit() {
+    DCMView getActiveDCMViewForEdit() {
         BrowserController bc = BrowserController.currentBrowser();
         if (bc != null) {
             javax.swing.JButton activeCell = bc.getMatrix().selectedCell();
@@ -9400,7 +9524,8 @@ public class BrowserController extends JFrame {
     }
 
     /** Export to Movie dialog */
-    private void showMovieExport() {
+    /** HOROS-20240407準拠: movie export dialog. BrowserToolbar calls this */
+    void showMovieExport() {
         DCMView view = getActiveDCMViewForEdit();
         if (view == null) {
             JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export as movie", "Movie Export",
@@ -9636,5 +9761,11 @@ public class BrowserController extends JFrame {
                         JOptionPane.WARNING_MESSAGE);
             }
         }
+    }
+
+    /** HOROS-20240407準拠: ShutterToolbarItemIdentifier. Pop-up menu selection for shutter display mode. */
+    public void setShutterMode(String mode) {
+        // HOROS-20240407準拠: - (void)setShutter:(NSString*)mode inDCMView:(DCMView*)view
+        System.out.println("[Shutter] Setting shutter mode: " + mode);
     }
 }
