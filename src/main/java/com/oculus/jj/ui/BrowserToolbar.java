@@ -2,6 +2,7 @@ package com.oculus.jj.ui;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Consumer;
 import com.oculus.jj.utils.LanguageManager;
 
 public class BrowserToolbar extends JToolBar {
@@ -10,6 +11,8 @@ public class BrowserToolbar extends JToolBar {
 
     private JTextField searchField;
     private JComboBox<String> searchTypeCombo;
+    private JComboBox<String> modalityCombo;
+    private Consumer<String> onModalityFilterChangeListener;
 
     public BrowserToolbar() {
         super();
@@ -160,11 +163,18 @@ public class BrowserToolbar extends JToolBar {
 
         // Modality Filter popup (HOROS-20240407準拠: modalityFilterMenu / NSPopUpButton 14782)
         // HOROS menu items: All modalities | CR(1) SC(2) CT(3) MR(7) PT(100) NM US XA MG DR RG DX AU OT RF XC ES VL SR
-        JComboBox<String> modalityCombo = new JComboBox<>(new String[] {
+        modalityCombo = new JComboBox<>(new String[] {
             "All Modalities", "CR", "SC", "CT", "MR", "PT", "NM", "US", "XA", "MG", "DR", "RG", "DX", "AU", "OT", "RF", "XC", "ES", "VL", "SR"
         });
         modalityCombo.setFont(new Font("SansSerif", Font.PLAIN, 10));
         modalityCombo.setSelectedIndex(0);
+        // HOROS-20240407準拠: NSPopUpButton selection changed 通知
+        modalityCombo.addActionListener(e -> {
+            String selectedItem = (String) modalityCombo.getSelectedItem();
+            if (onModalityFilterChangeListener != null) {
+                onModalityFilterChangeListener.accept(selectedItem);
+            }
+        });
         modalityCombo.setMaximumSize(new Dimension(95, 24));
         {
             JPanel p = new JPanel(new BorderLayout(2, 0));
@@ -236,5 +246,11 @@ public class BrowserToolbar extends JToolBar {
 
     public JComboBox<String> getSearchTypeCombo() {
         return searchTypeCombo;
+
     }
+
+    public JComboBox<String> getModalityCombo() { return modalityCombo; }
+
+    /** HOROS-20240407準拠: NSPopUpButton selection changed 通知先 */
+    public void setOnModalityFilterChangeListener(java.util.function.Consumer<String> listener) { this.onModalityFilterChangeListener = listener; }
 }

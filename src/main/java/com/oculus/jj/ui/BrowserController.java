@@ -363,6 +363,10 @@ public class BrowserController extends JFrame {
         // Swing: setViewPortSetViewport(browserToolbar) を contentPane.add 後に遅延して呼出 (setViewPortSetViewport は初期化順序で問題になる場合がある)
 
         // ========== 左側サイドバー（垂直スプリッター） ==========
+        // HOROS-20240407準拠: NSPopUpButton selection changed listener (setModalityFilter: equivalent)
+        browserToolbar.setOnModalityFilterChangeListener(mod -> {
+            outlineViewRefresh();
+        });
         // HOROS-20240407準拠: splitAlbums - Albums | Sources | Activity
         // HOROS-20240407準拠: BrowserController.h 111行目 IBOutlet NSSplitView
         // *splitAlbums;
@@ -2457,6 +2461,28 @@ public class BrowserController extends JFrame {
                     outlineViewArray.clear();
                     outlineViewArray.addAll(filteredList);
                 }
+
+            // HOROS-20240407準拠: Modality Filter (15261行目辺り NSPredicate modality CONTAINS)
+            if (browserToolbar != null && browserToolbar.getModalityCombo() != null) {
+                String selectedModality = (String) browserToolbar.getModalityCombo().getSelectedItem();
+                if (selectedModality != null && !"".equals(selectedModality)) {
+                    final String modCode = selectedModality;
+                    synchronized (outlineViewArray) {
+                        java.util.List<Object> modalityFiltered = new java.util.ArrayList<>();
+                        for (Object item : outlineViewArray) {
+                            if (item instanceof com.oculus.jj.model.DicomStudy 
+                                && ((com.oculus.jj.model.DicomStudy) item).getModality() != null 
+                                && ((com.oculus.jj.model.DicomStudy) item).getModality().contains(modCode)) {
+                                modalityFiltered.add(item);
+                            } else if (!(item instanceof com.oculus.jj.model.DicomStudy)) {
+                                modalityFiltered.add(item); // DicomSeries etc. はそのまま
+                            }
+                        }
+                        outlineViewArray.clear();
+                        outlineViewArray.addAll(modalityFiltered);
+                    }
+                }
+            }
             }
 
             // HOROS-20240407準拠: ソート処理 (BrowserController.m 3193-3265行目)

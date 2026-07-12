@@ -7,7 +7,7 @@
 
 | カテゴリ | 状態 | 備考 |
 |--------|---------|------|
-| **Browser Toolbar** | ✔️ 完了 | Search / ModalityFilter / TimeInterval + scroll panel 実装済 |
+| **Browser Toolbar** | ✔️ 完了 | Search / **ModalityFilter (filter logic実装済)** / TimeInterval + scroll panel
 | **2D Viewer Toolbar (ToolbarPanel)** | ⚠️ 一部未実装 | Annotations popup に updateAnnotationType メソッド追加したが、一部の項目がダイアログのみのまま |
 | **MPR/3D Viewer** | 🔧 実装待ち/プレースホルダ | UIは存在するがロジックの実装が伴っていないものが多い |
 
@@ -44,7 +44,7 @@
 | # | HOROS ID | Java現在 | ステータス |
 |---|-----------|---------|-----------|
 | 12 | TimeIntervalToolbarItemIdentifier | ✅ JComboBox popup | 2026-07-11 追加済 |
-| 13 | ModalityFilterToolbarItemIdentifier | ✅ JComboBox popup | 2026-07-11 追加済 |
+| 13 | ModalityFilterToolbarItemIdentifier | ✅ filter logic実装済 | BrowserController + BrowserToolbar連携完成
 | 14 | SearchToolbarItemIdentifier | ✅ JTextField + JComboBox | 2026-07-11 追加済 |
 
 | -- | QTSaveToolbarItemIdentifier | Movie Export | ✅完了 | showMovieExport() |
