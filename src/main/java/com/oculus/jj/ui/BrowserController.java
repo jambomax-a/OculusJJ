@@ -2342,7 +2342,7 @@ public class BrowserController extends JFrame {
         isRefreshingOutline = true;
 
         try {
-            if (database == null || albumTable == null) {
+                if (database == null || albumTable == null) {
 
                 return;
             }
