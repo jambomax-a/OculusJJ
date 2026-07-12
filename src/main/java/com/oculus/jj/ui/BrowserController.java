@@ -2341,7 +2341,8 @@ public class BrowserController extends JFrame {
             return;
         isRefreshingOutline = true;
 
-        try {
+        synchronized (outlineViewArray) {
+            try {
                 if (database == null || albumTable == null) {
 
                 return;
@@ -2587,11 +2588,12 @@ public class BrowserController extends JFrame {
                     databaseOutline.repaint();
 
                 });
-            }
+            } // synchronized (outlineViewArray) END — sync start was BEFORE try-finally
         } finally {
             isRefreshingOutline = false;
         }
     }
+        }
 
     /**
      * マトリックスを更新
