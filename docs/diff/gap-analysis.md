@@ -7,7 +7,7 @@
 
 | カテゴリ | 状態 | 備考 |
 |--------|---------|------|
-| **Browser Toolbar** | ✔️ 完了 | Search / **ModalityFilter (filter logic実装済)** / TimeInterval + scroll panel
+| **Browser Toolbar** | ✔️ 完了 | Search / **ModalityFilter (filter logic実装済)** / **Time Interval Filter**（Time Interval + scroll panel）
 | **2D Viewer Toolbar (ToolbarPanel)** | ⚠️ 一部未実装 | Annotations popup に updateAnnotationType メソッド追加したが、一部の項目がダイアログのみのまま |
 | **MPR/3D Viewer** | 🔧 実装待ち/プレースホルダ | UIは存在するがロジックの実装が伴っていないものが多い |
 
@@ -43,7 +43,7 @@
 
 | # | HOROS ID | Java現在 | ステータス |
 |---|-----------|---------|-----------|
-| 12 | TimeIntervalToolbarItemIdentifier | ✅ JComboBox popup | 2026-07-11 追加済 |
+| 12 | TimeIntervalToolbarItemIdentifier | ✅ **filter logic実装済**（不具合報告→修正） | 日付未設定項目のデフォルト値処理 + フィルタ条件分岐改善
 | 13 | ModalityFilterToolbarItemIdentifier | ✅ filter logic実装済 | BrowserController + BrowserToolbar連携完成
 | 14 | SearchToolbarItemIdentifier | ✅ JTextField + JComboBox | 2026-07-11 追加済 |
 
@@ -88,3 +88,5 @@
 - gap-analysis.md: P2項目3件を更新
 - BrowserController.java: toolbarScroll のフィールド宣言 + initializeUIComponents() 内の重複コード修正 + HORIZONTAL_SCROLLBAR_ALWAYS 設定 + NORTHレイアウト
 - エラー数: 0
+
+
