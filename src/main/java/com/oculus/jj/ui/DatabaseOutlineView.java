@@ -2080,21 +2080,11 @@ public class DatabaseOutlineView extends JXTreeTable {
         public Object getChild(Object parent, int index) {
             if (parent == getRoot()) {
                 // HOROS-20240407準拠: ルートの子はStudy
-                // outlineViewArrayが空でない場合はそれを使用、そうでない場合は直接データベースから取得
+                // 常に最新のフィルタ・ソート結果であるoutlineViewArrayを使用
                 List<Object> outlineArray = browserController.getOutlineViewArray();
-                if (outlineArray != null && !outlineArray.isEmpty()) {
-                    // HOROS-20240407準拠: スマートアルバムの場合、outlineViewArrayを使用
+                if (outlineArray != null) {
                     if (index >= 0 && index < outlineArray.size()) {
                         return outlineArray.get(index);
-                    }
-                } else {
-                    // HOROS-20240407準拠: 通常のアルバムの場合、直接データベースから取得
-                    DicomDatabase database = browserController.getDatabase();
-                    if (database != null) {
-                        List<com.oculus.jj.model.DicomStudy> allStudies = database.getAllStudies();
-                        if (index >= 0 && index < allStudies.size()) {
-                            return allStudies.get(index);
-                        }
                     }
                 }
             } else if (parent instanceof DicomStudy) {
@@ -2114,17 +2104,10 @@ public class DatabaseOutlineView extends JXTreeTable {
         @Override
         public int getChildCount(Object parent) {
             if (parent == getRoot()) {
-                // HOROS-20240407準拠: outlineViewArrayが空でない場合はそれを使用、そうでない場合は直接データベースから取得
+                // HOROS-20240407準拠: 常に最新のフィルタ・ソート結果であるoutlineViewArrayのサイズを返す
                 List<Object> outlineArray = browserController.getOutlineViewArray();
-                if (outlineArray != null && !outlineArray.isEmpty()) {
-                    // HOROS-20240407準拠: スマートアルバムの場合、outlineViewArrayを使用
+                if (outlineArray != null) {
                     return outlineArray.size();
-                } else {
-                    // HOROS-20240407準拠: 通常のアルバムの場合、直接データベースから取得
-                    DicomDatabase database = browserController.getDatabase();
-                    if (database != null) {
-                        return database.getAllStudies().size();
-                    }
                 }
                 return 0;
             } else if (parent instanceof DicomStudy) {

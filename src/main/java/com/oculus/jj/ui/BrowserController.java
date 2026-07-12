@@ -2344,15 +2344,12 @@ public class BrowserController extends JFrame {
         synchronized (outlineViewArray) {
             try {
                 if (database == null || albumTable == null) {
+                    return;
+                }
 
-                return;
-            }
+                List<com.oculus.jj.model.DicomAlbum> albumArray = getAlbumArray();
+                int selectedRow = albumTable.getSelectedRow();
 
-            // HOROS-20240407準拠: 選択されたアルバムからスタディを取得
-            List<com.oculus.jj.model.DicomAlbum> albumArray = getAlbumArray();
-            int selectedRow = albumTable.getSelectedRow();
-
-            synchronized (outlineViewArray) {
                 outlineViewArray.clear();
 
                 if (selectedRow >= 0 && selectedRow < albumArray.size()) {
@@ -2364,29 +2361,18 @@ public class BrowserController extends JFrame {
                             // HOROS-20240407準拠: Databaseアルバムは全スタディを含む
                             try {
                                 List<com.oculus.jj.model.DicomStudy> allStudies = database.getAllStudies();
-
                                 if (allStudies != null && !allStudies.isEmpty()) {
                                     outlineViewArray.addAll(allStudies);
-
-                                } else {
-
                                 }
                             } catch (Exception e) {
-                                // HOROS-20240407準拠: @catch (NSException * e) { N2LogExceptionWithStackTrace(e);
-                                // }
-
                                 e.printStackTrace();
                             }
                         } else if (selectedAlbum.getStudies() != null) {
                             // HOROS-20240407準拠: 通常のアルバムの場合はアルバムのスタディを表示
                             outlineViewArray.addAll(selectedAlbum.getStudies());
-
                         }
                     }
-                } else {
-
                 }
-            }
 
             // HOROS-20240407準拠: 検索キーワードと検索項目によるフィルタリング
             synchronized (outlineViewArray) {
@@ -2469,11 +2455,12 @@ public class BrowserController extends JFrame {
                     outlineViewArray.clear();
                     outlineViewArray.addAll(filteredList);
                 }
+            }
 
             // HOROS-20240407準拠: Modality Filter (15261行目辺り NSPredicate modality CONTAINS)
             if (browserToolbar != null && browserToolbar.getModalityCombo() != null) {
                 String selectedModality = (String) browserToolbar.getModalityCombo().getSelectedItem();
-                if (selectedModality != null && !"".equals(selectedModality)) {
+                if (selectedModality != null && !"".equals(selectedModality) && !"All Modalities".equals(selectedModality)) {
                     final String modCode = selectedModality;
                     synchronized (outlineViewArray) {
                         java.util.List<Object> modalityFiltered = new java.util.ArrayList<>();
@@ -2491,7 +2478,6 @@ public class BrowserController extends JFrame {
                     }
                 }
             }
-            }
 
 
             // HOROS-20240407準拠: Time Interval Filter (outlineViewRefresh equivalent)
@@ -2499,32 +2485,35 @@ public class BrowserController extends JFrame {
                 long nowMs = System.currentTimeMillis();
                 long startMs = Long.MIN_VALUE;
                 switch (timeIntervalType) {
-                    case 1: startMs = nowMs - 3600_000L; break;               // 1 hour
-                    case 2: startMs = nowMs - 21_600_000L; break;            // 6 hours
-                    case 3: startMs = nowMs - 43_200_000L; break;            // 12 hours
-                    case 7: startMs = nowMs - 86_400_000L; break;            // 24 hours
-                    case 8: startMs = nowMs - 172_800_000L; break;           // 48 hours
-                    case 4: {                                                   // Today (start of day)
+                    case 1: startMs = nowMs - 3600_000L; break;               // 1 hour (index 1)
+                    case 2: startMs = nowMs - 21_600_000L; break;            // 6 hours (index 2)
+                    case 3: startMs = nowMs - 43_200_000L; break;            // 12 hours (index 3)
+                    case 4: startMs = nowMs - 86_400_000L; break;            // 24 hours (index 4)
+                    case 5: startMs = nowMs - 172_800_000L; break;           // 48 hours (index 5)
+                    case 6: {                                                   // Today (start of day, index 6)
                         java.time.LocalDateTime now = java.time.LocalDateTime.now();
                         startMs = now.toLocalDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
                         break; }
-                    case 5: startMs = nowMs - 604_800_000L; break;           // 7 days (One Week)
-                    case 6: startMs = nowMs - 2_592_000_000L; break;         // 30 days (One Month)
-                    case -1: break; // sentinel fallback (no match) — never reached
+                    case 7: startMs = nowMs - 604_800_000L; break;           // 7 days (One Week, index 7)
+                    case 8: startMs = nowMs - 2_592_000_000L; break;         // 30 days (One Month, index 8)
                 }
 
                 synchronized (outlineViewArray) {
                     java.util.List<Object> timeFiltered = new java.util.ArrayList<>();
                     for (Object item : outlineViewArray) {
                         if (!(item instanceof com.oculus.jj.model.DicomStudy)) {
-                            // HOROS-20240407??: ?DicomStudy???DicomSeries?????????
-                            timeFiltered.add(item); } else if (((com.oculus.jj.model.DicomStudy) item).getDate() != null) {
-                            java.time.LocalDateTime studyDate = ((com.oculus.jj.model.DicomStudy) item).getDate();
-                            long studyMs = studyDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-                            if (studyMs >= startMs && studyMs <= nowMs) {
-                                timeFiltered.add(item); } } else {
-                            // HOROS-20240407??: ??????Study?????Time Interval????????????????
-                            timeFiltered.add(item); } }
+                            timeFiltered.add(item);
+                        } else {
+                            com.oculus.jj.model.DicomStudy study = (com.oculus.jj.model.DicomStudy) item;
+                            if (study.getDate() != null) {
+                                java.time.LocalDateTime studyDate = study.getDate();
+                                long studyMs = studyDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                                if (studyMs >= startMs) {
+                                    timeFiltered.add(item);
+                                }
+                            }
+                        }
+                    }
                     outlineViewArray.clear();
                     outlineViewArray.addAll(timeFiltered);
                 }
@@ -2591,12 +2580,12 @@ public class BrowserController extends JFrame {
                     databaseOutline.repaint();
 
                 });
-            } // synchronized (outlineViewArray) END — sync start was BEFORE try-finally
+            }
         } finally {
             isRefreshingOutline = false;
         }
+      }
     }
-        }
 
     /**
      * マトリックスを更新
