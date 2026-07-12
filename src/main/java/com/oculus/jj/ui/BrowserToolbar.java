@@ -3,6 +3,7 @@ package com.oculus.jj.ui;
 import javax.swing.*;
 import java.awt.*;
 import java.util.function.Consumer;
+import java.util.function.Consumer;
 import com.oculus.jj.utils.LanguageManager;
 
 public class BrowserToolbar extends JToolBar {
@@ -13,6 +14,10 @@ public class BrowserToolbar extends JToolBar {
     private JComboBox<String> searchTypeCombo;
     private JComboBox<String> modalityCombo;
     private Consumer<String> onModalityFilterChangeListener;
+
+    /** HOROS-20240407準拠: timeIntervalView (NSPopUpButton tag=0..100) */
+    private JComboBox<String> intervalCombo;
+    private Consumer<Integer> onTimeIntervalChangeListener;
 
     public BrowserToolbar() {
         super();
@@ -141,12 +146,18 @@ public class BrowserToolbar extends JToolBar {
 
         // Time Interval popup (HOROS-20240407準拠: timeIntervalView / NSPopUpButton 11619)
         // HOROS menu items by tag: None(0), 1 hour(1), 6 hours(2), 12 hours(3), 24 hours(7), 48 hours(8), Today(4), Last 7 days(5), One month(6), Custom(100)
-        JComboBox<String> intervalCombo = new JComboBox<>(new String[] {
+        intervalCombo = new JComboBox<>(new String[] {
             "None", "1 Hour", "6 Hours", "12 Hours", "24 Hours", "48 Hours", "Today", "Last 7 Days", "One Month"
         });
         intervalCombo.setFont(new Font("SansSerif", Font.PLAIN, 10));
         intervalCombo.setSelectedIndex(0);
         intervalCombo.setMaximumSize(new Dimension(95, 24));
+
+        // HOROS-20240407準拠: NSPopUpButton selection changed (setTimeIntervalFrom:)
+        intervalCombo.addActionListener(e -> {
+            int selectedIdx = intervalCombo.getSelectedIndex();
+            if (onTimeIntervalChangeListener != null) onTimeIntervalChangeListener.accept(selectedIdx);
+        });
         {
             JPanel p = new JPanel(new BorderLayout(2, 0));
             p.setOpaque(false);
@@ -253,4 +264,10 @@ public class BrowserToolbar extends JToolBar {
 
     /** HOROS-20240407準拠: NSPopUpButton selection changed 通知先 */
     public void setOnModalityFilterChangeListener(java.util.function.Consumer<String> listener) { this.onModalityFilterChangeListener = listener; }
+
+    /** HOROS-20240407準拠: getTimeIntervalView equivalent */
+    public JComboBox<String> getIntervalCombo() { return intervalCombo; }
+
+    /** HOROS-20240407準拠: NSPopUpButton selection changed notification target */
+    public void setOnTimeIntervalChangeListener(java.util.function.Consumer<Integer> listener) { this.onTimeIntervalChangeListener = listener; }
 }

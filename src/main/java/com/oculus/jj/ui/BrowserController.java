@@ -358,6 +358,11 @@ public class BrowserController extends JFrame {
         contentPane.setLayout(new BorderLayout());
         // HOROS-20240407準拠: JToolBar を横スクロール可能な JScrollPane で囲む（Swing で JToolBar が横に伸びるよう明示）
         browserToolbar = new BrowserToolbar();
+        // HOROS-20240407準拠: NSPopUpButton selection changed → outlineViewRefresh (setTimeIntervalFrom:)
+        browserToolbar.setOnTimeIntervalChangeListener(selectedIdx -> {
+            timeIntervalType = selectedIdx;
+            SwingUtilities.invokeLater(this::outlineViewRefresh);
+        });
         toolbarScroll = new JScrollPane(browserToolbar);
         toolbarScroll.setHorizontalScrollBarPolicy(javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
         // Swing: setViewPortSetViewport(browserToolbar) を contentPane.add 後に遅延して呼出 (setViewPortSetViewport は初期化順序で問題になる場合がある)
@@ -2319,6 +2324,8 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: NSArray *outlineViewArray, *originalOutlineViewArray;
     // (124行目)
     private List<Object> outlineViewArray = new ArrayList<>();
+    /** HOROS-20240407準拠: int timeIntervalType (NSPopUpButton tag, default=0=None) */
+    private int timeIntervalType = 0;
 
     /**
      * アウトラインビューを更新
@@ -2483,6 +2490,40 @@ public class BrowserController extends JFrame {
                     }
                 }
             }
+            }
+
+
+            // HOROS-20240407準拠: Time Interval Filter (outlineViewRefresh equivalent)
+            if (timeIntervalType != 0) {
+                long nowMs = System.currentTimeMillis();
+                long startMs = Long.MIN_VALUE;
+                switch (timeIntervalType) {
+                    case 1: startMs = nowMs - 3600_000L; break;               // 1 hour
+                    case 2: startMs = nowMs - 21_600_000L; break;            // 6 hours
+                    case 3: startMs = nowMs - 43_200_000L; break;            // 12 hours
+                    case 7: startMs = nowMs - 86_400_000L; break;            // 24 hours
+                    case 8: startMs = nowMs - 172_800_000L; break;           // 48 hours
+                    case 4: {                                                   // Today (start of day)
+                        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                        startMs = now.toLocalDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                        break; }
+                    case 5: startMs = nowMs - 604_800_000L; break;           // 7 days (One Week)
+                    case 6: startMs = nowMs - 2_592_000_000L; break;         // 30 days (One Month)
+                    case -1: break; // sentinel fallback (no match) — never reached
+                }
+
+                synchronized (outlineViewArray) {
+                    java.util.List<Object> timeFiltered = new java.util.ArrayList<>();
+                    for (Object item : outlineViewArray) {
+                        if (item instanceof com.oculus.jj.model.DicomStudy 
+                            && ((com.oculus.jj.model.DicomStudy) item).getDate() != null) {
+                            java.time.LocalDateTime studyDate = ((com.oculus.jj.model.DicomStudy) item).getDate();
+                            long studyMs = studyDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                            if (studyMs >= startMs && studyMs <= nowMs) {
+                                timeFiltered.add(item); } } }
+                    outlineViewArray.clear();
+                    outlineViewArray.addAll(timeFiltered);
+                }
             }
 
             // HOROS-20240407準拠: ソート処理 (BrowserController.m 3193-3265行目)
