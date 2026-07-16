@@ -32,11 +32,9 @@ public class ThumbnailsListPanel extends JFrame {
     // ViewerController *viewer;
     private ViewerController viewer;
 
-    // HOROS-20240407準拠: ThumbnailsListPanel.m 53行目 - fixedWidth
+    // HOROS-20240407準拠: ThumbnailsListPanel.m 53行目 - fixedWidth / Horos ThumbnailsList.xib equivalent 327px
     public static int getFixedWidth() {
-        float w = ThumbnailButton.getThumbnailCellWidth();
-        w += 20; // Javaのスクロールバー分を考慮して+10から+20に増やす
-        return (int) w;
+        return 327; // HOROS ThumbnailsList.xib width=327 equivalent (Horos準拠)
     }
 
     /**

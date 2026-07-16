@@ -1,0 +1,6 @@
+--- src/main/java/com/oculus/jj/ui/ToolbarPanel.java
++++ src/main/java/com/oculus/jj/ui/ToolbarPanel.java
+@@ -85,2 +85,3 @@
+         addToolButton(toolbar, "btn_select", "tt.btn_select", () -> DCMView.currentTool = DCMView.ToolMode.tPlain);
++        addToolButton(toolbar, "btn_translate", "tt.btn_translate", () -> DCMView.currentTool = DCMView.ToolMode.tTranslate);
+         addToolButton(toolbar, "btn_curved", "tt.btn_curved", () -> DCMView.currentTool = DCMView.ToolMode.tCurvedROI);

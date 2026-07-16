@@ -79,6 +79,19 @@ public class AppPreferences {
     public static final String KEY_DICOM_PRINT_AUTO_RESIZE = "dicomPrint.autoResizeWindow";
 
     // === Listener preference keys ===
+    public static final String KEY_BROWSER_FONT_SIZE = "browser.fontSize";  // HOROS-20240407準拠: dbFontSize
+    public static final String KEY_DB_DEFAULT_FOLDER_SIZE = "database.defaultFolderSize"; // HOROS-20240407準拠: DefaultFolderSizeForDB
+    public static final String KEY_SEARCH_TYPE = "browser.searchType";  // HOROS-20240407準拠: searchType (0..4)
+    public static final String KEY_HIDE_PATIENT_NAME = "browser.hidePatientName"; // HOROS-20240407準拠: HIDEPATIENTNAME
+    public static final String KEY_LAST_URL = "web.lastURL";  // HOROS-20240407準拠: LASTURL (最後に使用したWADO URL)
+    public static final String KEY_AUTO_TILING = "browser.autoTiling"; // HOROS-20240407準拠: AUTOTILING
+    public static final String KEY_AUTO_HIDE_MATRIX = "browser.autoHideMatrix";  // HOROS-20240407準拠: AUTOHIDEMATRIX
+    public static final String KEY_CLEAR_SEARCH_WHEN_SELECTING_ALBUM = "browser.clearSearchWhenSelectingAlbum";  // HOROS-20240407準拠: clearSearchAndTimeIntervalWhenSelectingAlbum
+    public static final String KEY_COMMENT_AUTOFILL = "comments.autoFill"; // HOROS-20240407準拠: COMMENTSAUTOFILL
+    public static final String KEY_COMMENT_AUTOFILL_STUDY_LEVEL = "comments.autoFillStudyLevel";  // HOROS-20240407準拠: COMMENTSAUTOFILLStudyLevel
+    public static final String KEY_COMMENT_AUTOFILL_SERIES_LEVEL = "comments.autoFillSeriesLevel";  // HOROS-20240407準拠: COMMENTSAUTOFILLSeriesLevel
+    public static final String KEY_ANNOTATION_FONT_BOLD = "annotations.fontBold";  // HOROS equivalent (annotationFontBold)
+    public static final String KEY_ANNOTATION_FONT_SIZE = "annotations.fontSize";  // HOROS equivalent (annotationFontSize)
     public static final String KEY_LISTENER_AETITLE = "listener.aetitle";
     public static final String KEY_LISTENER_PORT = "listener.port";
     public static final String KEY_LISTENER_AUTO_START = "listener.autoStart";

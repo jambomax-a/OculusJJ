@@ -38,6 +38,7 @@ import com.oculus.jj.model.DicomDatabase;
 import com.oculus.jj.model.DicomPix;
 import com.oculus.jj.threads.ThreadsManager;
 import com.oculus.jj.utils.LanguageManager;
+import com.oculus.jj.config.AppPreferences;
 
 /**
  * BrowserController - ブラウザウィンドウコントローラー
@@ -5760,7 +5761,7 @@ public class BrowserController extends JFrame {
 
         // HOROS-20240407準拠: AUTOTILING処理
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(ViewerController.class);
-        boolean autoTiling = prefs.getBoolean("AUTOTILING", true);
+        boolean autoTiling = prefs.getBoolean(AppPreferences.KEY_AUTO_TILING, true);
         if (autoTiling) {
             javax.swing.SwingUtilities.invokeLater(() -> {
                 ViewerController.tileWindows();
@@ -7289,8 +7290,8 @@ public class BrowserController extends JFrame {
                 return;
             }
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class);
-            boolean currentBold = prefs.getBoolean("annotationFontBold", false);
-            prefs.putBoolean("annotationFontBold", !currentBold);
+            boolean currentBold = prefs.getBoolean(AppPreferences.KEY_ANNOTATION_FONT_BOLD, false);
+            prefs.putBoolean(AppPreferences.KEY_ANNOTATION_FONT_BOLD, !currentBold);
             try {
                 prefs.flush();
             } catch (Exception ex) {
@@ -7324,9 +7325,9 @@ public class BrowserController extends JFrame {
                 return;
             }
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class);
-            int currentSize = prefs.getInt("annotationFontSize", 12);
+            int currentSize = prefs.getInt(AppPreferences.KEY_ANNOTATION_FONT_SIZE, 12);
             int newSize = Math.min(currentSize + 2, 48);
-            prefs.putInt("annotationFontSize", newSize);
+            prefs.putInt(AppPreferences.KEY_ANNOTATION_FONT_SIZE, newSize);
             try {
                 prefs.flush();
             } catch (Exception ex) {
@@ -7346,9 +7347,9 @@ public class BrowserController extends JFrame {
                 return;
             }
             java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class);
-            int currentSize = prefs.getInt("annotationFontSize", 12);
+            int currentSize = prefs.getInt(AppPreferences.KEY_ANNOTATION_FONT_SIZE, 12);
             int newSize = Math.max(currentSize - 2, 6);
-            prefs.putInt("annotationFontSize", newSize);
+            prefs.putInt(AppPreferences.KEY_ANNOTATION_FONT_SIZE, newSize);
             try {
                 prefs.flush();
             } catch (Exception ex) {

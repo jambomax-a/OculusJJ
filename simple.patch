@@ -1,0 +1,8 @@
+*** Begin Patch
+*** Update File: src/main/java/com/oculus/jj/ui/ToolbarPanel.java
+@@ -10,6 +10,7 @@
+ public class ToolbarPanel extends JFrame {
+
++    private int test = 1;
+     private static final int FIXED_HEIGHT = 90; // ツールバー高さ（Math.maxで最小値確保）
+*** End Patch

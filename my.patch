@@ -1,0 +1,12 @@
+*** Begin Patch
+*** Update File: src/main/java/com/oculus/jj/ui/ToolbarPanel.java
+@@ -103,6 +103,9 @@
+         addToolButton(toolbar, "tools_roi.poly_open", "tt.tools_roi.poly_open", () -> DCMView.currentTool = DCMView.ToolMode.tOPolygon);
+
++        addToolButton(toolbar, "btn_database", "tt.btn_database", () -> {
++            if (BrowserController.currentBrowser() != null) BrowserController.currentBrowser().toggleDatabaseOutlineVisibility();
++        });
++        addToolButton(toolbar, "btn_sync_series", "tt.btn_sync_series", viewer::toggleSyncSeries);
+
+         toolbar.addSeparator();
+*** End Patch
