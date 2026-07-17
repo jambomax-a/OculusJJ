@@ -88,3 +88,4 @@
 - gap-analysis.md: P2項目3件を更新
 - BrowserController.java: toolbarScroll のフィールド宣言 + initializeUIComponents() 内の重複コード修正 + HORIZONTAL_SCROLLBAR_ALWAYS 設定 + NORTHレイアウト
 - エラー数: 0
+
