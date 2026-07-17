@@ -79,3 +79,7 @@ weasis-native/
 
 # Maven local cache
 .m2-local/
+
+# Python temp scripts
+*.py
+python_temp/
