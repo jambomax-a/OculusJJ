@@ -16,7 +16,7 @@ public class BurnerDialog extends JDialog {
     private ButtonGroup compressionGroup, destinationGroup;
     private JRadioButton[] compressionRadios, destinationRadios;
     private JComboBox<String> usbVolumeCombo;
-    private JCheckBox anonymizeCheck, reportsCheck, suppFolderCheck, weasisCheck, htmlCheck, encryptCheck;
+    private JCheckBox anonymizeCheck, reportsCheck, suppFolderCheck, weasisCheck, horosLiteCheck, htmlCheck, encryptCheck;
     private JButton estimateBtn, burnBtn, cancelBtn;
     private String cdName = "DICOMCD";
     private int compressionMode = 0, burnDestination = 0;
@@ -98,6 +98,12 @@ public class BurnerDialog extends JDialog {
         if (AppPreferences.getBurnEncryptCD()) encryptCheck.setSelected(true);
         mi.add(encryptCheck);
 
+
+        // HOROS-20240407準拠: DiscBurningOptions.mm includeOsirixLite checkbox ("Include Horos Lite viewer")
+        horosLiteCheck = new JCheckBox(LanguageManager.get("burn_dialog.include_horos_lite", "Include Horos Lite viewer"));
+        horosLiteCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
+        if (AppPreferences.getBurnIncludeHorosLite()) horosLiteCheck.setSelected(true);
+        mi.add(horosLiteCheck);
         // Supplementary folder checkbox
         JPanel so = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         so.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));

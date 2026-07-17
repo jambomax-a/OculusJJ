@@ -39,6 +39,9 @@ public class AppPreferences {
     public static final String KEY_BURN_INCLUDE_WEASIS = "burn.includeWeasis";
     public static final String KEY_BURN_ENCRYPT_CD = "burn.encryptCD";
 
+
+    // HOROS-20240407準拠: DiscBurningOptionsIncludeOsirixLiteArchivingKey
+    public static final String KEY_BURN_INCLUDE_HOROS_LITE = "includeOsirixLite";
     // === Hanging Protocol preference keys ===
     public static final String KEY_HANGING_MODALITY = "hanging.defaultModality";
     public static final String KEY_HANGING_TILING = "hanging.defaultTiling";
@@ -296,6 +299,16 @@ public class AppPreferences {
     public static void setBurnEncryptCD(boolean encrypt) {
         prefs.putBoolean(KEY_BURN_ENCRYPT_CD, encrypt);
     }
+
+    // HOROS-20240407準拠: DiscBurningOptionsIncludeOsirixLiteArchivingKey (@"includeOsirixLite")
+    public static boolean getBurnIncludeHorosLite() {
+        return prefs.getBoolean(KEY_BURN_INCLUDE_HOROS_LITE, false);
+    }
+
+    public static void setBurnIncludeHorosLite(boolean include) {
+        prefs.putBoolean(KEY_BURN_INCLUDE_HOROS_LITE, include);
+    }
+
 
     // --- Hanging Protocols ---
     public static int getHangingModalityIndex() {
