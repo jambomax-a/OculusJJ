@@ -7787,6 +7787,18 @@ public class BrowserController extends JFrame {
         findPrevKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
         viewer2DMenu.add(findPrevKeyItem);
 
+        // HOROS-20240407準拠: Subtraction toolbar item added to viewer2D menu (ViewerController.m 6356行目)
+        javax.swing.JMenuItem subtractItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("toolbar.subtraction", "Subtraction"));
+        subtractItem.addActionListener(e -> subtractImages(null));
+        viewer2DMenu.add(subtractItem);
+
+        // HOROS-20240407準拠: Status Display toolbar item added to viewer2D menu (ViewerController.m 6420行目)
+        javax.swing.JMenuItem statusItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("toolbar.status_display", "Status and Comments"));
+        statusItem.addActionListener(e -> openStatusDisplay(null));
+        viewer2DMenu.add(statusItem);
+
         // 注: 2D Viewerメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
         // 残りの項目（Subtraction、Annotations、Window Width & Level、Color Look Up Table、Image
         // Tiling、Windows Tiling、Save/Load Workspace Stateなど）は後で実装
@@ -9847,4 +9859,15 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: - (void)setShutter:(NSString*)mode inDCMView:(DCMView*)view
         System.out.println("[Shutter] Setting shutter mode: " + mode);
     }
+
+    // HOROS-20240407準拠: Subtraction feature toggle - stub implementation (BrowserController.java)
+    private void subtractImages(Object sender) {
+        JOptionPane.showMessageDialog(this, "Subtraction feature in development", "Subtraction", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // HOROS-20240407準拠: Status Display feature toggle - stub implementation (BrowserController.java)
+    private void openStatusDisplay(Object sender) {
+        JOptionPane.showMessageDialog(this, "Status and Comments feature in development", "Status and Comments", JOptionPane.INFORMATION_MESSAGE);
+    }
+
 }

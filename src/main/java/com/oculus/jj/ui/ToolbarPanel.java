@@ -239,5 +239,15 @@ public class ToolbarPanel extends JFrame {
         }
     }
 
+
+    // HOROS-20240407準拠: Subtraction toolbar item toggle - stub implementation
+    private void toggleSubtractionMode() {
+        JOptionPane.showMessageDialog(this, "Subtraction feature in development", "Subtraction", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // HOROS-20240407準拠: Status Display toolbar item toggle - stub implementation
+    private void openStatusDisplay(Object sender) {
+        JOptionPane.showMessageDialog(this, "Status and Comments feature in development", "Status and Comments", JOptionPane.INFORMATION_MESSAGE);
+    }
 } // close ToolbarPanel class
 
