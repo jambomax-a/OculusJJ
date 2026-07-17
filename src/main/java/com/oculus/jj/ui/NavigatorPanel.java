@@ -1,101 +1,115 @@
 package com.oculus.jj.ui;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import javax.swing.JPanel;
 
 /**
- * NavigatorWindow - HOROS NavigatorWindowController 相当。
- * DCMView のミニマップ/ナビゲータパネル。
+ * NavigatorPanel - HOROS NavigatorWindowController / NavigatorView 相当。
+ * DCMView のシリーズ全スライスをサムネイルで表示し、アクティブなスライス位置をハイライトする。
  */
 public class NavigatorPanel extends JPanel {
 
     private static final long serialVersionUID = 1L;
-    private ImageIcon thumbnailImage;
-    private Rectangle visibleRect;
-    private boolean showNavigator = false;
+
+    // HOROS-20240407準拠: NavigatorView.h thumbnailWidth / thumbnailHeight (68x75)
+    private static final int THUMB_WIDTH = 68;
+    private static final int THUMB_HEIGHT = 75;
+
+    /** 全スライスのサムネイル画像 */
+    private BufferedImage[] thumbImages;
+
+    /** 現在のアクティブインデックス (-1 = 選択なし) */
+    private int activeIndex = -1;
 
     public NavigatorPanel() {
         setOpaque(true);
-        setBackground(new Color(30, 30, 30));
-        setVisible(false);
-        
-        // Hover to expand
-        addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                showNavigator = true;
-                repaint();
-            }
-        });
-
-        setPreferredSize(new Dimension(150, 120));
+        setBackground(new Color(35, 35, 35));
     }
 
-    /** ナビゲータの表示/非表示 */
-    public void toggle() {
-        showNavigator = !showNavigator;
-        setVisible(showNavigator);
+    /** サムネイル画像とアクティブインデックスをセット（再描画） */
+    public void setThumbnails(BufferedImage[] images, int activeIdx) {
+        this.thumbImages = images;
+        this.activeIndex = activeIdx;
         repaint();
     }
 
-    /** サムネイル画像と可視領域をセット */
-    public void setThumbnail(ImageIcon thumbnail, Rectangle visible) {
-        this.thumbnailImage = thumbnail;
-        this.visibleRect = visible;
+    /** アクティブインデックスだけを更新 */
+    public void setActiveIndex(int activeIdx) {
+        if (this.activeIndex == activeIdx) return;
+        this.activeIndex = activeIdx;
         repaint();
     }
 
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        if (!showNavigator || thumbnailImage == null) return;
-
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        if (thumbImages == null || thumbImages.length == 0) {
+            // 最小表示（ラベルのみ）
+            g2.setColor(new Color(50, 50, 50));
+            g2.fillRect(0, 0, getWidth(), getHeight());
+            g2.setColor(Color.GRAY.brighter());
+            g2.setFont(g2.getFont().deriveFont(java.awt.Font.PLAIN, 10f));
+            g2.drawString("Navigator", 6, 14);
+            g2.dispose();
+            return;
+        }
 
         int w = getWidth();
         int h = getHeight();
 
-        // Mini-map background
-        g2.setColor(new Color(40, 40, 40));
-        g2.fillRect(0, 0, w, h);
+        // ===== サムネイルを横に並べて描画 =====
+        int totalThumbWidth = thumbImages.length * THUMB_WIDTH + (thumbImages.length - 1) * 3;
+        int startX = (w - Math.min(totalThumbWidth, w)) / 2;
+        if (startX < 0) startX = 0;
 
-        // Draw thumbnail scaled to panel size
-        int imgW = thumbnailImage.getIconWidth();
-        int imgH = thumbnailImage.getIconHeight();
-        float scale = (float) Math.min((w - 4) / (double) imgW, (h - 4) / (double) imgH);
-        
-        int drawW = (int)(imgW * scale);
-        int drawH = (int)(imgH * scale);
-        int xOff = (w - drawW) / 2;
-        int yOff = (h - drawH) / 2;
-        
-        g2.drawImage(thumbnailImage.getImage(), xOff, yOff, drawW, drawH, this);
+        for (int i = 0; i < thumbImages.length; i++) {
+            BufferedImage img = thumbImages[i];
+            float scaleX = THUMB_WIDTH / (float)(img != null ? img.getWidth() : 1);
+            int scaledH = Math.max(1, (int)(img.getHeight() * scaleX));
+            int drawY = h - scaledH;
 
-        // Draw visible rectangle overlay
-        if (visibleRect != null) {
-            double vrScaleX = drawW / (double) imgW;
-            double vrScaleY = drawH / (double) imgH;
-            
-            int vrX = xOff + (int)(visibleRect.getX() * vrScaleX);
-            int vrY = yOff + (int)(visibleRect.getY() * vrScaleY);
-            int vrW = (int)(visibleRect.getWidth() * vrScaleX);
-            int vrH = (int)(visibleRect.getHeight() * vrScaleY);
-
-            g2.setColor(new Color(0, 180, 255, 120));
-            g2.drawRect(vrX, vrY, vrW, vrH);
-            
-            // Make the border more visible
-            g2.setColor(Color.CYAN);
-            g2.setStroke(new BasicStroke(1.5f));
-            g2.drawRect(vrX + 1, vrY + 1, vrW - 2, vrH - 2);
+            if (img != null) {
+                g2.drawImage(img, startX + i * (THUMB_WIDTH + 3), drawY, THUMB_WIDTH, scaledH, this);
+            } else {
+                g2.setColor(new Color(40, 40, 40));
+                g2.fillRect(startX + i * (THUMB_WIDTH + 3), drawY, THUMB_WIDTH, scaledH);
+            }
         }
 
-        // Label
-        g2.setColor(new Color(200, 200, 200, 180));
-        g2.setFont(new Font("SansSerif", Font.PLAIN, 9));
-        g2.drawString("Navigator", 4, 12);
+        // ===== アクティブスライスのハイライト =====
+        if (activeIndex >= 0 && activeIndex < thumbImages.length) {
+            int x = startX + activeIndex * (THUMB_WIDTH + 3);
+            g2.setColor(new Color(10, 140, 220));
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRect(x, h - THUMB_HEIGHT, THUMB_WIDTH, THUMB_HEIGHT);
+
+            // アクティブラベル
+            String label = "Slide " + (activeIndex + 1) + "/" + thumbImages.length;
+            java.awt.FontMetrics fm = g2.getFontMetrics(g2.getFont().deriveFont(java.awt.Font.BOLD, 8f));
+            int tw = fm.stringWidth(label);
+            // Label background with rounded rect
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRoundRect(x + 2, h - THUMB_HEIGHT - 14, tw + 6, 13, 3, 3);
+            g2.setColor(Color.WHITE);
+            g2.setFont(g2.getFont().deriveFont(java.awt.Font.BOLD, 8f));
+            g2.drawString(label, x + 5, h - THUMB_HEIGHT - 4);
+        }
+
+        // ===== ラベル（左上） =====
+        if (thumbImages != null && thumbImages.length > 0) {
+            g2.setColor(Color.GRAY.brighter());
+            g2.setFont(g2.getFont().deriveFont(java.awt.Font.PLAIN, 10f));
+            g2.drawString("Navigator", 4, 12);
+        }
 
         g2.dispose();
     }

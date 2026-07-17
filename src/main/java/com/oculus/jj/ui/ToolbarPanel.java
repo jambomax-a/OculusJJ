@@ -207,7 +207,16 @@ public class ToolbarPanel extends JFrame {
     }
 
     private void toggleNavigatorPanel() {
-        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.navigator", "Navigator panel - feature in development"), "Navigator", JOptionPane.INFORMATION_MESSAGE);
+        NavigatorController nc = NavigatorController.navigatorWindowController();
+        if (!nc.isShowing()) {
+            if (viewer != null && viewer.getImageView() != null) {
+                DCMView dcm = viewer.getImageView();
+                nc.updateNavigator(dcm);
+                nc.showWindow(this);
+            }
+        } else {
+            nc.closeWindow();
+        }
     }
 
     private void toggleFusionMode() {

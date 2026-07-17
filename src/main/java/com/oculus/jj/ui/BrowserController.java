@@ -8803,6 +8803,15 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) navigator: (id) sender
      */
     public void navigator(Object sender) {
+        // HOROS-20240407準拠: BrowserController.m - (IBAction)navigator:
+        NavigatorController nc = NavigatorController.navigatorWindowController();
+        if (!nc.isShowing()) {
+            DCMView dcm = getActiveDCMViewForEdit();
+            nc.updateNavigator(dcm);
+            nc.showWindow(this);
+        } else {
+            nc.closeWindow();
+        }
     }
 
     /**
