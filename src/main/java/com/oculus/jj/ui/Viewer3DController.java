@@ -1109,6 +1109,23 @@ public class Viewer3DController extends JFrame {
         pnlMid.add(btn8);
         pnlMid.add(btn16);
         contentWLWW.add(pnlMid);
+        // HOROS-20240407準拠: VR.xib CLUTEditorsView の roundRect ボタン動作に相当。btn8→AddCLUT:, btn16→showCLUTOpacityPanel:
+        btn8.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                currentTF.setClutMode(TransferFunction.CLUT_MODE_8BIT);
+                System.out.println("[VR] CLUT Mode switched to 8-bit");
+                // TODO: AddCLUT: → ColorTransferView エディタ (次回実装)
+            }
+        });
+
+        btn16.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                currentTF.setClutMode(TransferFunction.CLUT_MODE_16BIT);
+                System.out.println("[VR] CLUT Mode switched to 16-bit");
+                // TODO: showCLUTOpacityPanel: → clutOpacityView カーブエディタ (次回実装)
+            }
+        });
+
 
         JButton btnPresets = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.presets"));
         btnPresets.setFont(new Font("SansSerif", Font.PLAIN, 10));

@@ -19,6 +19,12 @@ public class TransferFunction {
     public static final float HU_MAX = 3072.0f;
     public static final int TF_SIZE = 256;
 
+    /** CLUT ビットモード定数 */
+    // HOROS-20240407準拠: VR.xib / CLUTEditorsView の roundRect ボタン (btn8=8bit, btn16=16bit)
+    public static final int CLUT_MODE_8BIT = 0;        // 標準 8-bit CLUT (256 エントリ)
+    public static final int CLUT_MODE_16BIT = 1;       // 高度な 16-bit CLUT (カーブエディタ使用)
+    private int currentClutMode = CLUT_MODE_8BIT;      // デフォルトは 8-bit
+
     /** 色の制御点 */
     public static class ColorPoint {
         public float huValue; // HU値
@@ -618,6 +624,20 @@ public class TransferFunction {
                 addColor(HU_MIN, 0.0f, 0.0f, 0.0f);
                 addColor(HU_MAX, 1.0f, 1.0f, 1.0f);
                 break;
+        }
+    }
+
+    public int getCurrentClutMode() {
+        return currentClutMode;
+    }
+
+    /**
+     * CLUT 表示モードを切り替える。8bit / 16bit のいずれかを選択する。
+     * HOROS-20240407準拠: VR.xib CLUTEditorsView (btn8/btn16) の roundRect ボタン動作に相当
+     */
+    public void setClutMode(int mode) {
+        if (mode == CLUT_MODE_8BIT || mode == CLUT_MODE_16BIT) {
+            this.currentClutMode = mode;
         }
     }
 
