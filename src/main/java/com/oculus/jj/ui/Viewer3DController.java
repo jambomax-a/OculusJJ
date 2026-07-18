@@ -1048,10 +1048,14 @@ public class Viewer3DController extends JFrame {
             if (clut == null || clut.startsWith("-"))
                 return;
 
-            if (currentTF == null) {
-                currentTF = TransferFunction.createVRMusclesBones();
+            // HOROS-20240407準拠: CLUT bit モード切替btn8/btn16 と整合
+            if ("8-bit CLUT Editor".equals(clut)) {
+                currentTF.setClutMode(TransferFunction.CLUT_MODE_8BIT);
+            } else if ("16-bit CLUT Editor".equals(clut)) {
+                currentTF.setClutMode(TransferFunction.CLUT_MODE_16BIT);
+            } else {
+                currentTF.setColorType(clut);
             }
-            currentTF.setColorType(clut);
 
             if (glViewer != null) {
                 glViewer.setTransferFunction(currentTF);
@@ -1113,16 +1117,18 @@ public class Viewer3DController extends JFrame {
         btn8.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 currentTF.setClutMode(TransferFunction.CLUT_MODE_8BIT);
-                System.out.println("[VR] CLUT Mode switched to 8-bit");
-                // TODO: AddCLUT: → ColorTransferView エディタ (次回実装)
+                if (cbCLUT != null) cbCLUT.setSelectedItem("8-bit CLUT Editor");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
             }
         });
 
         btn16.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 currentTF.setClutMode(TransferFunction.CLUT_MODE_16BIT);
-                System.out.println("[VR] CLUT Mode switched to 16-bit");
-                // TODO: showCLUTOpacityPanel: → clutOpacityView カーブエディタ (次回実装)
+                if (cbCLUT != null) cbCLUT.setSelectedItem("16-bit CLUT Editor");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                repaint();
             }
         });
 
