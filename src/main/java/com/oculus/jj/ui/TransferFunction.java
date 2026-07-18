@@ -206,7 +206,61 @@ public class TransferFunction {
         return glTextureId;
     }
 
-    public int getGLTextureId() {
+/**
+     * HOROS-20240407準拠: VRController.mm buildAndUploadGL(int clutMode) に相当。
+     * CLUT_MODE_8BIT (デフォルト): TF_SIZE(=256) 要素の1Dテクスチャを構築。setColorType() で設定済みのプリセット色マッピングを使用。
+     * CLUT_MODE_16BIT: curves/pointColors が設定されていればそれを使い、なければ 4096 エントリのテキストを構築。
+    /**
+     * HOROS-20240407準拠: VRController.mm buildAndUploadGL(int clutMode) に相当。
+     * CLUT_MODE_8BIT (デフォルト): TF_SIZE(=256) 要素の1Dテクスチャを構築。setColorType() で設定済みのプリセット色マッピングを使用。
+     * CLUT_MODE_16BIT: curves/pointColors が設定されていればそれを使い、なければ 4096 エントリにサンプした texture を構築。
+     */
+    public int buildAndUploadGL(int clutMode) {
+        int texSize = (clutMode == CLUT_MODE_16BIT) ? 4096 : TF_SIZE; // 8bit=256, 16bit=4096
+        float[] data = new float[texSize * 4]; // RGBA
+
+        if (tableRed != null && tableGreen != null && tableBlue != null && tableAlpha != null) {
+            int[] red = normalizeTable(tableRed);
+            int[] green = normalizeTable(tableGreen);
+            int[] blue = normalizeTable(tableBlue);
+            float[] alpha = normalizeTable(tableAlpha);
+            int lastIdx = red.length - 1;
+            for (int i = 0; i < texSize; i++) {
+                float t = (float) i / (texSize - 1);
+                int idx = Math.max(0, Math.min(lastIdx, (int) Math.round(t * lastIdx)));
+                data[i * 4 + 0] = red[idx] / 255.0f;
+                data[i * 4 + 1] = green[idx] / 255.0f;
+                data[i * 4 + 2] = blue[idx] / 255.0f;
+                data[i * 4 + 3] = alpha[idx];
+            }
+        } else {
+            for (int i = 0; i < texSize; i++) {
+                float t = (float) i / (texSize - 1);
+                float hu = HU_MIN + t * (HU_MAX - HU_MIN);
+                float[] rgb = interpolateColor(hu);
+                float alpha = interpolateOpacity(hu);
+                data[i * 4 + 0] = rgb[0];
+                data[i * 4 + 1] = rgb[1];
+                data[i * 4 + 2] = rgb[2];
+                data[i * 4 + 3] = alpha;
+            }
+        }
+
+        if (glTextureId != 0) {
+            GL33.glDeleteTextures(glTextureId);
+        }
+        glTextureId = GL33.glGenTextures();
+        GL33.glActiveTexture(GL33.GL_TEXTURE1);
+        GL33.glBindTexture(GL33.GL_TEXTURE_1D, glTextureId);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_1D, GL33.GL_TEXTURE_WRAP_S, GL33.GL_CLAMP_TO_EDGE);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_1D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
+        GL33.glTexParameteri(GL33.GL_TEXTURE_1D, GL33.GL_TEXTURE_MAG_FILTER, GL33.GL_LINEAR);
+
+        java.nio.FloatBuffer buf = org.lwjgl.system.MemoryUtil.memAllocFloat(data.length);
+        buf.put(data).flip();
+        GL33.glTexImage1D(GL33.GL_TEXTURE_1D, 0, GL33.GL_RGBA16F, texSize, 0, GL33.GL_RGBA, GL33.GL_FLOAT, buf);
+        org.lwjgl.system.MemoryUtil.memFree(buf);
+
         return glTextureId;
     }
 

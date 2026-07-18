@@ -1114,6 +1114,7 @@ public class Viewer3DController extends JFrame {
         pnlMid.add(btn16);
         contentWLWW.add(pnlMid);
         // HOROS-20240407準拠: VR.xib CLUTEditorsView の roundRect ボタン動作に相当。btn8→AddCLUT:, btn16→showCLUTOpacityPanel:
+
         btn8.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 currentTF.setClutMode(TransferFunction.CLUT_MODE_8BIT);
