@@ -1115,22 +1115,146 @@ public class Viewer3DController extends JFrame {
         contentWLWW.add(pnlMid);
         // HOROS-20240407準拠: VR.xib CLUTEditorsView の roundRect ボタン動作に相当。btn8→AddCLUT:, btn16→showCLUTOpacityPanel:
 
-        btn8.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                currentTF.setClutMode(TransferFunction.CLUT_MODE_8BIT);
-                if (cbCLUT != null) cbCLUT.setSelectedItem("8-bit CLUT Editor");
-                if (glViewer != null) glViewer.setTransferFunction(currentTF);
-                repaint();
+        btn8.addActionListener(e -> {
+            // HOROS-20240407準拠: AddCLUT: -- clutView を JDialog で開く (VR.xib userLabel=“AddCLUT” に相当)
+            JPanel editor = new JPanel(new BorderLayout(6, 6));
+            editor.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+            editor.setBackground(Color.DARK_GRAY);
+
+            // Top: preset CLUT buttons matching HOROS clutPopup items (subset)
+            String[] presets = {"No CLUT", "B/W Inverse", "BlackBody", "Endoscopy", "Flow", "French", "GEcolor",
+                "GrayRainbow", "HotGreen", "HotIron", "HotMetal", "Hue1", "Hue2", "ired", "Jet", "NIH",
+                "Perfusion", "PET", "PPU Inferno", "PPU Magma", "PPU Plasma", "PPU Viridis", "Rainbow",
+                "Rainbow2", "Rainbow3", "Ratio", "Spectrum", "Stern", "UCLA"};
+            JPanel presetPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+            for (String p : presets) {
+                JButton b = new JButton(p);
+                b.setFont(new Font("SansSerif", Font.PLAIN, 8));
+                b.setPreferredSize(new Dimension(90, 22));
+                final String presetName = p;
+                b.addActionListener(ev -> {
+                    currentTF.setColorType(presetName);
+                    if (cbCLUT != null) cbCLUT.setSelectedItem(presetName);
+                    if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                    ((JDialog) SwingUtilities.getWindowAncestor(editor)).dispose();
+                });
+                presetPanel.add(b);
             }
+
+            // Center: custom RGB slider for user-defined CLUT (simplified 3-color gradient editor)
+            JSlider rSlider = new JSlider(0, 255, 128);
+            JSlider gSlider = new JSlider(0, 255, 128);
+            JSlider bSlider = new JSlider(0, 255, 128);
+            rSlider.setPreferredSize(new Dimension(300, 25));
+            gSlider.setPreferredSize(new Dimension(300, 25));
+            bSlider.setPreferredSize(new Dimension(300, 25));
+            rSlider.setLabelTable(rSlider.createStandardLabels(5));
+            gSlider.setLabelTable(gSlider.createStandardLabels(5));
+            bSlider.setLabelTable(bSlider.createStandardLabels(5));
+            JPanel sliderPanel = new JPanel(new GridLayout(3, 2, 4, 4));
+            sliderPanel.add(new JLabel("Red:")); sliderPanel.add(rSlider);
+            sliderPanel.add(new JLabel("Green:")); sliderPanel.add(gSlider);
+            sliderPanel.add(new JLabel("Blue:")); sliderPanel.add(bSlider);
+
+            // Preview label showing current color
+            JLabel previewLabel = new JLabel("Preview", SwingConstants.CENTER);
+            previewLabel.setOpaque(true);
+            previewLabel.setBackground(Color.GRAY);
+            previewLabel.setBorder(BorderFactory.createLineBorder(Color.WHITE));
+
+            // Bottom: OK / Cancel
+            JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
+            JButton okBtn = new JButton("Apply");
+            JButton cancelBtn = new JButton("Cancel");
+            btnPanel.add(okBtn);
+            btnPanel.add(cancelBtn);
+
+            editor.add(presetPanel, BorderLayout.NORTH);
+            JPanel centerArea = new JPanel(new BorderLayout(6, 6));
+            centerArea.add(sliderPanel, BorderLayout.CENTER);
+            centerArea.add(previewLabel, BorderLayout.SOUTH);
+            editor.add(centerArea, BorderLayout.CENTER);
+            editor.add(btnPanel, BorderLayout.SOUTH);
+
+            JDialog dlg = new JDialog(Viewer3DController.this, "Add CLUT (8-bit)", false);
+            dlg.setContentPane(editor);
+            dlg.pack();
+            dlg.setLocationRelativeTo(Viewer3DController.this);
+            dlg.setVisible(true);
+
+            okBtn.addActionListener(ev -> {
+                currentTF.setClutMode(TransferFunction.CLUT_MODE_8BIT);
+                int r = rSlider.getValue(), g = gSlider.getValue(), b = bSlider.getValue();
+                for (int i = 0; i < TransferFunction.TF_SIZE; i++) {
+                    float t = (float) i / (TransferFunction.TF_SIZE - 1);
+                    currentTF.addColor(TransferFunction.HU_MIN + t * (TransferFunction.HU_MAX - TransferFunction.HU_MIN), r / 255.0f, g / 255.0f, b / 255.0f);
+                }
+                if (cbCLUT != null) cbCLUT.setSelectedItem("Custom");
+                if (glViewer != null) glViewer.setTransferFunction(currentTF);
+                dlg.dispose();
+            });
+
+            cancelBtn.addActionListener(ev -> dlg.dispose());
+
+            previewLabel.addMouseListener(new MouseAdapter() {
+                @Override public void mouseMoved(MouseEvent e) {
+                    int r = rSlider.getValue(), g = gSlider.getValue(), b = bSlider.getValue();
+                    previewLabel.setBackground(new Color(r, g, b));
+                    previewLabel.repaint();
+                }
+            });
+
         });
 
-        btn16.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent e) {
+
+
+
+        btn16.addActionListener(e -> {
+            // HOROS-20240407準拠: showCLUTOpacityPanel: — clutOpacityView / CLUTOpacityView を JDialog で開く。
+            // VRController.mm lines 2776-2830: setVolumePointer, computeMinMax, HU range セット、Drawer 表示に相当。
+            CLUTOpacityView editor = new CLUTOpacityView();
+            
+
+            
+            JDialog dlg = new JDialog(Viewer3DController.this, "CLUT Opacity Editor (16-bit)", false);
+            dlg.setContentPane(editor);
+            dlg.pack();
+            dlg.setSize(new Dimension(900, 700));
+            dlg.setLocationRelativeTo(Viewer3DController.this);
+            
+            // OK button at bottom to apply changes
+            JPanel btnPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+            JButton applyBtn = new JButton("Apply");
+            JButton closeBtn = new JButton("Close");
+            btnPanel.add(applyBtn);
+            btnPanel.add(closeBtn);
+            dlg.getRootPane().setDefaultButton(applyBtn);
+            
+            // Panel for bottom buttons (below CLUTOpacityView)
+            javax.swing.JLayeredPane layered = new javax.swing.JLayeredPane();
+            layered.setLayout(new java.awt.BorderLayout());
+            layered.add(editor, java.awt.BorderLayout.CENTER);
+            layered.add(btnPanel, java.awt.BorderLayout.SOUTH);
+            dlg.setContentPane(layered);
+            
+            applyBtn.addActionListener(ev -> {
+                // 1. Set CLUT mode to 16bit  
                 currentTF.setClutMode(TransferFunction.CLUT_MODE_16BIT);
-                if (cbCLUT != null) cbCLUT.setSelectedItem("16-bit CLUT Editor");
+                
+                // 2. Transfer curves/pointColors from CLUTOpacityView back to TransferFunction
+                java.util.List<float[]> curves = editor.getCurvesAsArrays();
+                int[][] colors = editor.getPointColorsAsTable();
+                if (colors != null && colors.length > 0) {
+                    currentTF.setPointColors(colors);
+                }
+                
+                // 3. Rebuild the transfer function with the new data
                 if (glViewer != null) glViewer.setTransferFunction(currentTF);
                 repaint();
-            }
+            });
+            
+            closeBtn.addActionListener(ev -> dlg.dispose());
+            dlg.setVisible(true);
         });
 
 

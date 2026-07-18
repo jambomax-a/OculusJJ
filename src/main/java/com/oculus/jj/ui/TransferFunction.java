@@ -57,6 +57,8 @@ public class TransferFunction {
     private int[] tableGreen;
     private int[] tableBlue;
     private float[] tableAlpha;
+    // HOROS-20240407準拠: clutOpacityView の 16-bit pointColors データを保持 (VRController.mm equivalent)
+    private int[][] pointColors; // [CLUT_SIZE][3] RGB values (16bit range 0..65535)
 
     public TransferFunction(String name) {
         this.name = name;
@@ -232,6 +234,13 @@ public class TransferFunction {
                 data[i * 4 + 1] = green[idx] / 255.0f;
                 data[i * 4 + 2] = blue[idx] / 255.0f;
                 data[i * 4 + 3] = alpha[idx];
+            }
+        } else if ((currentClutMode == CLUT_MODE_16BIT) && pointColors != null) { // HOROS-20240407準拠: VRController.mm 16-bit CLUT path — clutOpacityView の pointColors を使用。
+            for (int i = 0; i < texSize && i < pointColors.length; i++) {
+                data[i * 4 + 0] = Math.min(255, Math.max(0, pointColors[i][0])) / 255.0f;
+                data[i * 4 + 1] = Math.min(255, Math.max(0, pointColors[i][1])) / 255.0f;
+                data[i * 4 + 2] = Math.min(255, Math.max(0, pointColors[i][2])) / 255.0f;
+                data[i * 4 + 3] = interpolateOpacity((float) i / (texSize - 1));
             }
         } else {
             for (int i = 0; i < texSize; i++) {
@@ -692,6 +701,31 @@ public class TransferFunction {
     public void setClutMode(int mode) {
         if (mode == CLUT_MODE_8BIT || mode == CLUT_MODE_16BIT) {
             this.currentClutMode = mode;
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: clutOpacityView の getPointColorsAsTable() から 16bit カラーデータを受領。
+     * VRController.mm lines 907-912: curves/pointColors が設定されていればそれを使うロジックに対応。
+     */
+    public void setPointColors(int[][] colors) {
+        if (colors != null && colors.length > 0) {
+            int expectedLen = (currentClutMode == CLUT_MODE_16BIT) ? 4096 : TF_SIZE;
+            pointColors = new int[expectedLen][3];
+            for (int i = 0; i < Math.min(colors.length, expectedLen); i++) {
+                if (i < colors[i].length) {
+                    pointColors[i] = new int[]{
+                        Math.min(65535, Math.max(0, colors[i][0])),
+                        Math.min(65535, Math.max(0, colors[i][1])),
+                        Math.min(65535, Math.max(0, colors[i][2]))
+                    };
+                } else {
+                    pointColors[i] = new int[]{32768, 32768, 32768};
+                }
+            }
+            for (int i = colors.length; i < expectedLen; i++) {
+                pointColors[i] = new int[]{32768, 32768, 32768};
+            }
         }
     }
 
