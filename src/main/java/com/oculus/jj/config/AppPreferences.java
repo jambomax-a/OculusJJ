@@ -25,6 +25,13 @@ public class AppPreferences {
     public static final String KEY_DISPLAY_TYPE = "general.displayType";
     public static final String KEY_CHECK_UPDATES = "general.checkUpdatesAtStartup";
     public static final String KEY_SEPARATE_WINDOW = "general.separateWindowPerStudy";
+    // === Database auto-cleaning preference keys (HOROS-20240407準拠: AUTOCLEANINGDATEPRODUCED etc.) ===
+    public static final String KEY_AUTO_CLEANING_DATE_PRODUCED = "db.autoCleaningDateProduced";
+    public static final String KEY_AUTO_CLEANING_DATE_OPENED = "db.autoCleaningDateOpened";
+    public static final String KEY_AUTO_CLEANING_COMMENTS = "db.autoCleaningComments";
+    public static final String KEY_AUTO_CLEANING_DELETE_ORIGINAL = "db.autoCleaningDeleteOriginal";
+    public static final String KEY_PACS_MERGE_ON_IMPORT = "pacs.mergeOnImport";
+    public static final String KEY_ERASE_DB_AT_STARTUP = "database.eraseEntireDBAtStartup";
 
     // === CD/DVD preference keys ===
     public static final String KEY_CDDVD_EJECT_AFTER_COPY = "cddvd.ejectAfterCopy";
