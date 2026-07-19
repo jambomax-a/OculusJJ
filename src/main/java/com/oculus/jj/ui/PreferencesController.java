@@ -557,51 +557,155 @@ public static synchronized PreferencesController getInstance() {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6); gbc.anchor = GridBagConstraints.WEST; int row = 0;
         
+        // HOROS-20240407準拠: OSIListenerPreferencePanePref.m (application AETitle)
         gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Application AETitle:"), gbc);
-        gbc.gridx = 1; JTextField aetF = new JTextField("OCULUSJJ", 20); pane.add(aetF, gbc);
+        gbc.gridx = 1; JTextField aetF = new JTextField(AppPreferences.getListenerAETitle(), 20); pane.add(aetF, gbc);
         row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Listen on Port:"), gbc);
-        gbc.gridx = 1; pane.add(new JTextField("11112", 8), gbc);
-        row++; gbc.gridy = row; pane.add(new JCheckBox("Automatically start listener on launch"), gbc);
+        
+        // HOROS-20240407準拠: listener listens on port 104 (DICOM Standard) + 11112 (AutoRouting/PACS On-Demand)
+        JPanel portsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JTextField portMainF = new JTextField(String.valueOf(AppPreferences.getListenerPort()), 6);
+        JLabel portLabel = new JLabel("(main DICOM, default 104 or custom e.g. 11112)");
+        portsPanel.add(portMainF);
+        portsPanel.add(portLabel);
+        gbc.gridx = 1; pane.add(portsPanel, gbc);
+        
+        row++; gbc.gridy = row; JCheckBox chkAutoStart = new JCheckBox("Automatically start listener on launch", AppPreferences.isListenerAutoStart());
+        gbc.gridwidth = 2; pane.add(chkAutoStart, gbc); gbc.gridwidth = 1;
+
+        // HOROS-20240407準拠: TLS/SSL settings for DICOM communication (TLS Authentication)
+        row++; gbc.gridy = row; gbc.gridwidth = 2;
+        JSectionBox tlsBox = new JSectionBox("DICOM Security");
+        pane.add(tlsBox);
+
+        JPanel tlsPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbt = new GridBagConstraints(); gbt.insets = new Insets(4, 4, 4, 4); gbt.anchor = GridBagConstraints.WEST; int tRow = 0;
+        
+        JCheckBox chkTlsEnabled = new JCheckBox("Enable TLS authentication");
+        JTextField certPathField = new JTextField(25);
+        JButton certBrowseBtn = new JButton("Browse...");
+        certBrowseBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            if (chooser.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
+                certPathField.setText(chooser.getSelectedFile().getPath());
+            }
+        });
+        
+        gbt.gridx = 0; gbt.gridy = tRow++; tlsPanel.add(chkTlsEnabled, gbt);
+        gbt.gridx = 0; gbt.gridy = tRow++; tlsPanel.add(new JLabel("Certificate Path:"), gbt);
+        gbt.gridx = 1; gbt.gridy = tRow - 1; tlsPanel.add(certPathField, gbt);
+        gbt.gridx = 2; gbt.gridy = tRow - 1; tlsPanel.add(certBrowseBtn, gbt);
+
+        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(tlsPanel, gbc);
 
         contentPanel.add(new JScrollPane(pane), "Listener");
     }
 
     private void createLocationsPane() {
         JPanel locationsPane = new JPanel(new BorderLayout());
+        
+        // HOROS-20240407準拠: OSILocationsPreferencePanePref.h (characterSetPopup, dicomNodes DNDArrayController)
+        JSectionBox locBox = new JSectionBox("DICOM Nodes");
+        locationsPane.add(locBox, BorderLayout.NORTH);
+
+        JPanel tablePanel = new JPanel(new BorderLayout());
         String[] cols = {"Name", "AETitle", "Address", "Port"};
         DefaultTableModel model = new DefaultTableModel(cols, 0);
-        JTable table = new JTable(model);
+        
+        // HOROS-20240407準拠: serversArray / dicomNodes (stored in OSILocationsPreferencePanePref.m)
+        // Java初期値として localhost を追加（実データは DicomNodeManager から取得）
         model.addRow(new Object[]{"Localhost","OCULUSJJ","localhost","11112"});
 
-        locationsPane.add(new JScrollPane(table), BorderLayout.CENTER);
+        JTable table = new JTable(model);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
 
-        JPanel btnPanel = new JPanel();
-        JButton addBtn = new JButton("Add");
+        // HOROS-20240407準拠: addServerDICOM / verifyPing / searchDICOMBonJourNodes (addServerSharing)
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        
+        JButton addBtn = new JButton("Add Node");
         addBtn.addActionListener(e -> {
             DicomNode node = new DicomNode();
             showNodeEditor(node, () -> 
                 model.addRow(new Object[]{node.getName(), node.getAeTitle(), node.getAddress(), String.valueOf(node.getPort())}));
         });
         btnPanel.add(addBtn);
+
+        JButton editBtn = new JButton("Edit");
+        editBtn.addActionListener(e -> {
+            int r = table.getSelectedRow(); if (r < 0) return;
+            DicomNode node = new DicomNode();
+            node.setName((String)model.getValueAt(r, 0));
+            node.setAeTitle((String)model.getValueAt(r, 1));
+            node.setAddress((String)model.getValueAt(r, 2));
+            try { node.setPort(Integer.parseInt((String)model.getValueAt(r, 3))); } catch (NumberFormatException ex) {}
+            showNodeEditor(node, () -> 
+                model.setValueAt(new Object[]{node.getName(), node.getAeTitle(), node.getAddress(), String.valueOf(node.getPort())}, r, 0));
+        });
+        btnPanel.add(editBtn);
+
         JButton delBtn = new JButton("Delete");
         delBtn.addActionListener(e -> { int r = table.getSelectedRow(); if (r >= 0) model.removeRow(r); });
         btnPanel.add(delBtn);
-        JButton verifyBtn = new JButton("Verify");
+
+        JButton verifyBtn = new JButton("Verify (Echo)");
         verifyBtn.addActionListener(e -> {
             int r = table.getSelectedRow(); if (r < 0) return;
             String addr = (String)model.getValueAt(r,2);
-            int port = Integer.parseInt((String)model.getValueAt(r,3));
-            DicomNode node = new DicomNode();
-            node.setAddress(addr); node.setPort(port);
-            new Thread(() -> {
-                try { boolean ok = DicomService.getInstance().echo(node);
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(PreferencesController.this, ok?"Echo Success!":"Echo Failed"));
-                } catch(Exception ex) {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(PreferencesController.this,"Error: "+ex.getMessage()));
-                }
-            }).start();
+            try { int port = Integer.parseInt((String)model.getValueAt(r,3));
+                DicomNode node = new DicomNode();
+                node.setAddress(addr); node.setPort(port);
+                new Thread(() -> {
+                    try { boolean ok = DicomService.getInstance().echo(node);
+                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(PreferencesController.this, ok?"Echo Success!":"Echo Failed", "Result", ok ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE));
+                    } catch(Exception ex) {
+                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(PreferencesController.this,"Error: "+ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE));
+                    }
+                }).start();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(PreferencesController.this, "Invalid port number.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
         });
         btnPanel.add(verifyBtn);
+
+        JButton findBtn = new JButton("Find on Network");
+        findBtn.addActionListener(e -> {
+            // HOROS-20240407準拠: searchDICOMBonJourNodes - Bonjour/DNS-SD auto-discovery of DICOM nodes
+            // Java実装では jmdns / mDNS-Java を使用して mDNS/Bonjour ノードを検出する（stub）
+            JOptionPane.showMessageDialog(PreferencesController.this, 
+                "Network discovery requires Bonjour/DNS-SD support (jmdns library).\nThis is a stub implementation.", 
+                "Find on Network", JOptionPane.INFORMATION_MESSAGE);
+        });
+        btnPanel.add(findBtn);
+
+        // HOROS-20240407準拠: saveAs / loadFrom (ノードリストのファイルへの保存/ロード)
+        JButton saveBtn = new JButton("Save Nodes To File...");
+        saveBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            if (chooser.showSaveDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
+                try (java.io.PrintWriter writer = new java.io.PrintWriter(new java.io.FileWriter(chooser.getSelectedFile()))) {
+                    for (int i = 0; i < model.getRowCount(); i++) {
+                        writer.println(((String)model.getValueAt(i,0)) + "|" + ((String)model.getValueAt(i,1)) + "|" + ((String)model.getValueAt(i,2)) + "|" + ((String)model.getValueAt(i,3)));
+                    }
+                } catch (java.io.IOException ex) { JOptionPane.showMessageDialog(PreferencesController.this, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE); }
+            }
+        });
+        btnPanel.add(saveBtn);
+
+        JButton loadBtn = new JButton("Load Nodes From File...");
+        loadBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            if (chooser.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(chooser.getSelectedFile()))) {
+                    String line; while ((line = reader.readLine()) != null) {
+                        String[] parts = line.split("\\|"); if (parts.length >= 4) model.addRow(parts);
+                    }
+                } catch (java.io.IOException ex) { JOptionPane.showMessageDialog(PreferencesController.this, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE); }
+            }
+        });
+        btnPanel.add(loadBtn);
+
+        locationsPane.add(tablePanel, BorderLayout.CENTER);
         locationsPane.add(btnPanel, BorderLayout.SOUTH);
 
         contentPanel.add(locationsPane, "Locations");
@@ -609,15 +713,74 @@ public static synchronized PreferencesController getInstance() {
 
     private void createRoutingPane() {
         JPanel pane = new JPanel(new BorderLayout());
-        pane.add(new JLabel("DICOM Autorouting Rules"), BorderLayout.NORTH);
-        DefaultTableModel model = new DefaultTableModel(new String[]{"Rule","Source AE","Destination","Filter"}, 0) {
-            @Override public boolean isCellEditable(int r, int c) { return false; }
-        };
+        
+        // HOROS-20240407準拠: OSIAutoroutingPreferencePanePref.h (routesTable, serverPopup, previousPopup)
+        JSectionBox routingBox = new JSectionBox("DICOM Autorouting Rules");
+        pane.add(routingBox, BorderLayout.NORTH);
+
+        // HOROS-20240407準拠: OSIAutoroutingPreferencePanePref.m (routesArray, serversArray, filterType)
+        JPanel tablePanel = new JPanel(new BorderLayout());
+        String[] cols = {"Rule Name", "Source AE", "Destination AETitle", "Filter"};
+        DefaultTableModel model = new DefaultTableModel(cols, 0);
+        
+        // HOROS-20240407準拠: デフォルトルーティングルール（Default Store / * → destination）
         model.addRow(new Object[]{"Default Store","*","OCULUSJJ","*"});
-        pane.add(new JScrollPane(new JTable(model)), BorderLayout.CENTER);
-        JPanel controls = new JPanel();
-        controls.add(new JButton("Add Rule")); controls.add(new JButton("Remove Rule"));
-        pane.add(controls, BorderLayout.SOUTH);
+        model.addRow(new Object[]{"PACS Transfer","CT","PACS_SERVER","*/CT"});
+
+        JTable table = new JTable(model);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        
+        pane.add(tablePanel, BorderLayout.CENTER);
+
+        // HOROS-20240407準拠: endNewRoute (Add Rule) / deleteSelectedRow (Remove Rule) / selectServer (Select Server)
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        
+        JButton addBtn = new JButton("Add Rule");
+        addBtn.addActionListener(e -> {
+            // HOROS-20240407準拠: OSIAutoroutingPreferencePanePref.h -newRoute:(id)sender (新規ルーティング設定ダイアログ)
+            JDialog dialog = new JDialog(PreferencesController.this, "New Routing Rule", true);
+            dialog.setSize(450, 300);
+            dialog.setLocationRelativeTo(PreferencesController.this);
+            dialog.setLayout(new GridBagLayout());
+            GridBagConstraints gbc = new GridBagConstraints(); gbc.insets = new Insets(6, 6, 6, 6); gbc.anchor = GridBagConstraints.WEST; int rRow = 0;
+
+            JTextField nameF = new JTextField(15), srcAeF = new JTextField(10), dstAeF = new JTextField(10), filterF = new JTextField(10);
+            
+            gbc.gridx = 0; gbc.gridy = rRow++; dialog.add(new JLabel("Rule Name:"), gbc);
+            gbc.gridx = 1; dialog.add(nameF, gbc);
+            gbc.gridx = 0; gbc.gridy = rRow++; dialog.add(new JLabel("Source AE:"), gbc);
+            gbc.gridx = 1; dialog.add(srcAeF, gbc);
+            gbc.gridx = 0; gbc.gridy = rRow++; dialog.add(new JLabel("Destination AETitle:"), gbc);
+            gbc.gridx = 1; dialog.add(dstAeF, gbc);
+            gbc.gridx = 0; gbc.gridy = rRow++; dialog.add(new JLabel("Filter (C-Find/Store):"), gbc);
+            gbc.gridx = 1; dialog.add(filterF, gbc);
+
+            JButton saveBtn2 = new JButton("Save");
+            saveBtn2.addActionListener(ev -> {
+                if (!nameF.getText().isEmpty() && !srcAeF.getText().isEmpty()) {
+                    model.addRow(new Object[]{nameF.getText(), srcAeF.getText(), dstAeF.getText(), filterF.getText()});
+                }
+                dialog.dispose();
+            });
+            
+            JButton cancelBtn = new JButton("Cancel");
+            cancelBtn.addActionListener(ev -> dialog.dispose());
+
+            gbc.gridx = 0; gbc.gridy = rRow + 1; gbc.gridwidth = 2;
+            JPanel btnPanel2 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            btnPanel2.add(saveBtn2); btnPanel2.add(cancelBtn);
+            dialog.add(btnPanel2, gbc);
+
+            dialog.setVisible(true);
+        });
+        btnPanel.add(addBtn);
+
+        JButton removeBtn = new JButton("Remove Rule");
+        removeBtn.addActionListener(e -> { int r = table.getSelectedRow(); if (r >= 0) model.removeRow(r); });
+        btnPanel.add(removeBtn);
+
+        pane.add(btnPanel, BorderLayout.SOUTH);
         contentPanel.add(pane, "Routing");
     }
 
@@ -626,10 +789,42 @@ public static synchronized PreferencesController getInstance() {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5); gbc.anchor = GridBagConstraints.WEST; int row = 0;
         
-        gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Web Server Port:"), gbc); gbc.gridx = 1; pane.add(new JTextField("8080",5), gbc);
-        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("WADO Support:"), gbc); gbc.gridx = 1; pane.add(new JCheckBox("Enable WADO",true), gbc);
-        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("STOW-RS Support:"), gbc); gbc.gridx = 1; pane.add(new JCheckBox("Enable STOW-RS",false), gbc);
-        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Base URL:"), gbc); gbc.gridx = 1; pane.add(new JTextField("http://localhost:8080",25), gbc);
+        // HOROS-20240407準拠: OSIWebSharingPreferencePanePref.h (WADOPort, WADOTransferSyntax, WADOUrl)
+        gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Web Server Port:"), gbc); gbc.gridx = 1; pane.add(new JTextField(String.valueOf(AppPreferences.getWebServerPort()), 5), gbc);
+        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("WADO Support:"), gbc); gbc.gridx = 1; pane.add(new JCheckBox("Enable WADO", AppPreferences.isWadoEnabled()), gbc);
+        
+        // HOROS-20240407準拠: WADO HTTPS (OSILocationsPreferencePanePref.h に WADOhttps プロパティがある)
+        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Use HTTPS for WADO:"), gbc); gbc.gridx = 1; pane.add(new JCheckBox("Enable HTTPS", false), gbc);
+
+        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("STOW-RS Support:"), gbc); gbc.gridx = 1; pane.add(new JCheckBox("Enable STOW-RS", AppPreferences.isStowrsEnabled()), gbc);
+        
+        // HOROS-20240407準拠: base URL (http://localhost:<port>) - Web Server settings panel
+        row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Base URL:"), gbc); gbc.gridx = 1; pane.add(new JTextField(AppPreferences.getWebBaseUrl(), 25), gbc);
+
+        // HOROS-20240407準拠: TLS certificate and cipher suite configuration (TLS/SSL security for web services)
+        row++; gbc.gridy = ++row; gbc.gridwidth = 2;
+        JSectionBox tlsBox = new JSectionBox("Web Service Security");
+        pane.add(tlsBox);
+
+        JPanel tlsPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbt = new GridBagConstraints(); gbt.insets = new Insets(4, 4, 4, 4); gbt.anchor = GridBagConstraints.WEST; int tRow = 0;
+        
+        JCheckBox chkTlsEnabled = new JCheckBox("Enable TLS/SSL for Web Services");
+        JTextField certPathField = new JTextField(25);
+        JButton certBrowseBtn = new JButton("Browse...");
+        certBrowseBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            if (chooser.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
+                certPathField.setText(chooser.getSelectedFile().getPath());
+            }
+        });
+
+        gbt.gridx = 0; gbt.gridy = tRow++; tlsPanel.add(chkTlsEnabled, gbt);
+        gbt.gridx = 0; gbt.gridy = ++tRow; tlsPanel.add(new JLabel("TLS Certificate Path:"), gbt);
+        gbt.gridx = 1; gbt.gridy = tRow - 1; tlsPanel.add(certPathField, gbt);
+        gbt.gridx = 2; gbt.gridy = tRow - 1; tlsPanel.add(certBrowseBtn, gbt);
+
+        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(tlsPanel, gbc);
 
         contentPanel.add(new JScrollPane(pane), "Web Server");
     }

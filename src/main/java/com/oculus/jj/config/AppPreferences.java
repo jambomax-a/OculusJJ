@@ -525,7 +525,7 @@ public class AppPreferences {
         prefs.putInt(KEY_WEB_SERVER_PORT, port);
     }
 
-    public static boolean isWADOEnabled() {
+    public static boolean isWadoEnabled() {
         return prefs.getBoolean(KEY_WEB_WADO_ENABLED, true);
     }
 
@@ -533,11 +533,11 @@ public class AppPreferences {
         prefs.putBoolean(KEY_WEB_WADO_ENABLED, wado);
     }
 
-    public static boolean isSTOWRSEnabled() {
+    public static boolean isStowrsEnabled() {
         return prefs.getBoolean(KEY_WEB_STOWRS_ENABLED, false);
     }
 
-    public static void setSTOWRSEnabled(boolean stowrs) {
+    public static void setStowrsEnabled(boolean stowrs) {
         prefs.putBoolean(KEY_WEB_STOWRS_ENABLED, stowrs);
     }
 
