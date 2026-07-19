@@ -156,9 +156,21 @@ public static synchronized PreferencesController getInstance() {
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
         JSectionBox ifaceBox = new JSectionBox("Interface");
-        String[] langs = {"English (en)", "Japanese (ja)"};
+        
+        // HOROS-20240407準拠: languagesToMoveWhenQuitting で active/inactive 言語リストを動的スキャンする
+        String[] langs;
+        try {
+            java.util.Locale[] supportedLocales = {java.util.Locale.ENGLISH, new java.util.Locale("ja")};
+            langs = new String[supportedLocales.length];
+            for (int i = 0; i < supportedLocales.length; i++) {
+                langs[i] = supportedLocales[i].getDisplayName() + " (" + supportedLocales[i].getLanguage() + ")";
+            }
+        } catch (Exception e) {
+            langs = new String[]{"English (en)", "Japanese (ja)"}; // fallback
+        }
         langCombo = new JComboBox<>(langs);
         langCombo.setSelectedItem(com.oculus.jj.config.AppPreferences.getAppLanguage().equals("ja") ? "Japanese (ja)" : "English (en)");
+
         String[] displayTypes = {"Original Pixel Data", "Gray Scale", "Displayed Pixel Data"};
         JComboBox<String> displayTypeCombo = new JComboBox<>(displayTypes);
 
@@ -176,6 +188,23 @@ public static synchronized PreferencesController getInstance() {
         JCheckBox chkCheckUpdates = new JCheckBox("Automatically check for application updates at startup", false);
         pane.add(chkCheckUpdates);
 
+        // HOROS-20240407準拠: -resetPreferences: IBAction (全設定リセット)
+        pane.add(Box.createVerticalStrut(16));
+        JButton resetBtn = new JButton("Reset All Preferences to Defaults...");
+        resetBtn.addActionListener(e -> {
+            int result = JOptionPane.showConfirmDialog(
+                PreferencesController.this, "Are you sure you want to reset ALL preferences? This cannot be undone.",
+                "Reset Preferences", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (result == JOptionPane.YES_OPTION) {
+                try {
+                    java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userRoot().node("com.oculus.jj");
+                    for (String key : prefs.keys()) { prefs.remove(key); }
+                    JOptionPane.showMessageDialog(PreferencesController.this, "All preferences have been reset to defaults.", "Reset Complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (java.util.prefs.BackingStoreException ex) { JOptionPane.showMessageDialog(PreferencesController.this, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE); }
+            }
+        });
+        pane.add(resetBtn);
+
         contentPanel.add(new JScrollPane(pane), "General");
     }
 
@@ -188,6 +217,7 @@ public static synchronized PreferencesController getInstance() {
 
         int row = 0;
         
+        // === Database & DICOM folder paths (HOROS-20240407準拠: OSIDatabasePreferencePanePref.m) ===
         gbc.gridx = 0; gbc.gridy = row;
         pane.add(new JLabel("Database Folder:"), gbc);
         gbc.gridx = 1;
@@ -224,13 +254,83 @@ public static synchronized PreferencesController getInstance() {
         });
         pane.add(browseDicomBtn, gbc);
 
+        // === Auto-cleaning (HOROS-20240407準拠: AUTOCLEANINGDATEPRODUCED/OCTOBER/COMMENTS etc.) ===
         row++; gbc.gridy = row; gbc.gridx = 0; gbc.gridwidth = 3;
-        JCheckBox chkAutoRefresh = new JCheckBox("Automatically refresh database on startup", true);
-        pane.add(chkAutoRefresh, gbc);
+        JCheckBox chkAutoClean = new JCheckBox("Automatically clean up old studies", true);
+        pane.add(chkAutoClean, gbc);
+
+        JPanel autoCleanPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gcb = new GridBagConstraints(); gcb.insets = new Insets(4, 4, 4, 4); gcb.anchor = GridBagConstraints.WEST; int cRow = 0;
+        
+        JCheckBox chkDateProduced = new JCheckBox("Remove studies produced more than:", true);
+        JTextField daysField = new JTextField(5);
+        JLabel daysLabel = new JLabel("days");
+        JComboBox<String> dateTypeCombo = new JComboBox<>(new String[]{"Produced Date", "Opened Date"});
+        gcb.gridx = 0; gcb.gridy = cRow++; autoCleanPanel.add(chkDateProduced, gcb);
+        gcb.gridx = 1; autoCleanPanel.add(daysField, gcb);
+        gcb.gridx = 2; autoCleanPanel.add(daysLabel, gcb);
+        gcb.gridx = 3; autoCleanPanel.add(dateTypeCombo, gcb);
+
+        JCheckBox chkCommentsFilter = new JCheckBox("Remove studies whose comments do not contain:");
+        JTextField commentsText = new JTextField(15);
+        JComboBox<String> commentsMatchCombo = new JComboBox<>(new String[]{"any field", "primary comment"});
+        gcb.gridx = 0; gcb.gridy = ++cRow; autoCleanPanel.add(chkCommentsFilter, gcb);
+        gcb.gridx = 1; autoCleanPanel.add(commentsText, gcb);
+        gcb.gridx = 2; autoCleanPanel.add(new JLabel("in"), gcb);
+        gcb.gridx = 3; autoCleanPanel.add(commentsMatchCombo, gcb);
+
+        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(autoCleanPanel, gbc);
+        
+        JCheckBox chkDeleteOriginal = new JCheckBox("Also delete original DICOM files after import", false);
+        gbc.gridx = 0; gbc.gridy = ++row; gbc.gridwidth = 3; pane.add(chkDeleteOriginal, gbc);
+
+        // === Patient UID generation (HOROS-20240407準拠: newUsePatientID/BirthDate/NameForUID) ===
+        row++; gbc.gridy = row; gbc.gridx = 0; gbc.gridwidth = 3;
+        JSectionBox uidBox = new JSectionBox("Generate Patient UID from");
+        pane.add(uidBox);
+
+        JPanel uidPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gcu = new GridBagConstraints(); gcu.insets = new Insets(4, 4, 4, 4); gcu.anchor = GridBagConstraints.WEST; int uRow = 0;
+        
+        JCheckBox chkUidPatientID = new JCheckBox("Use Patient ID", true);
+        JCheckBox chkUidBirthDate = new JCheckBox("Use Patient Birth Date");
+        JCheckBox chkUidName = new JCheckBox("Use Patient Name");
+        gcu.gridx = 0; gcu.gridy = uRow++; uidPanel.add(chkUidPatientID, gcu);
+        gcu.gridx = 0; gcu.gridy = uRow++; uidPanel.add(chkUidBirthDate, gcu);
+        gcu.gridx = 0; gcu.gridy = uRow++; uidPanel.add(chkUidName, gcu);
+
+        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(uidPanel, gbc);
+
+        // === Comments auto-fill (HOROS-20240407準拠: commentFieldForAutoFill) ===
+        row++; gbc.gridy = row; gbc.gridwidth = 3;
+        JSectionBox commentsBox = new JSectionBox("Comments Auto-Fill");
+        pane.add(commentsBox);
+
+        JPanel commentsPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gcw = new GridBagConstraints(); gcw.insets = new Insets(4, 4, 4, 4); gcw.anchor = GridBagConstraints.WEST; int wRow = 0;
+        
+        JComboBox<String> commentFieldCombo = new JComboBox<>(new String[]{"Primary Comment (comment)", "Comment Field 2", "Comment Field 3", "Comment Field 4"});
+        gcw.gridx = 0; gcw.gridy = wRow++; commentsPanel.add(new JLabel("Auto-fill into:"), gcw);
+        gcw.gridx = 1; gcw.gridy = wRow - 1; commentsPanel.add(commentFieldCombo, gcw);
+
+        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(commentsPanel, gbc);
+
+        // === Report Mode (HOROS-20240407準拠: buildPluginsMenu / setReportMode:) ===
+        row++; gbc.gridy = row; gbc.gridwidth = 3;
+        JSectionBox reportBox = new JSectionBox("Reports");
+        pane.add(reportBox);
+
+        JPanel reportPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gcr = new GridBagConstraints(); gcr.insets = new Insets(4, 4, 4, 4); gcr.anchor = GridBagConstraints.WEST; int rRow = 0;
+        
+        JComboBox<String> reportModeCombo = new JComboBox<>(new String[]{"Standard", "No Reports"});
+        gcr.gridx = 0; gcr.gridy = rRow++; reportPanel.add(new JLabel("Report Mode:"), gcr);
+        gcr.gridx = 1; gcr.gridy = rRow - 1; reportPanel.add(reportModeCombo, gcr);
+
+        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(reportPanel, gbc);
 
         contentPanel.add(new JScrollPane(pane), "Database");
     }
-
     private void createCDpvPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
@@ -600,4 +700,3 @@ public static synchronized PreferencesController getInstance() {
         }
     }
 }
-
