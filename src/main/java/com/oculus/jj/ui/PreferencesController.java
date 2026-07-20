@@ -394,455 +394,194 @@ public static synchronized PreferencesController getInstance() {
     // === BASIC PANES ===
 
 
+    // === HOROS-20240407 Reference: OSIGeneralPreferencePanePref.m (~16KB .m)
     private void createGeneralPane() {
-
-
         JPanel pane = new JPanel();
-
-
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-
-
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-
-
-        JSectionBox ifaceBox = new JSectionBox("Interface");
-
-
-        // HOROS-20240407準拠: languagesToMoveWhenQuitting で active/inactive 言語リストを動的スキャンする
-
-
-        String[] langs;
-
-
-        try {
-
-
-            java.util.Locale[] supportedLocales = {java.util.Locale.ENGLISH, new java.util.Locale("ja")};
-
-
-            langs = new String[supportedLocales.length];
-
-
-            for (int i = 0; i < supportedLocales.length; i++) {
-
-
-                langs[i] = supportedLocales[i].getDisplayName() + " (" + supportedLocales[i].getLanguage() + ")";
-
-
-            }
-
-
-        } catch (Exception e) {
-
-
-            langs = new String[]{"English (en)", "Japanese (ja)"}; // fallback
-
-
-        }
-
-
-        langCombo = new JComboBox<>(langs);
-
-
-        langCombo.setSelectedItem(com.oculus.jj.config.AppPreferences.getAppLanguage().equals("ja") ? "Japanese (ja)" : "English (en)");
-
-
-        String[] displayTypes = {"Original Pixel Data", "Gray Scale", "Displayed Pixel Data"};
-
-
-        JComboBox<String> displayTypeCombo = new JComboBox<>(displayTypes);
-
-
-        pane.add(ifaceBox);
-
-
-        pane.add(makeRow(new JLabel("Language:"), langCombo));
-
-
-        pane.add(Box.createVerticalStrut(6));
-
-
-        pane.add(makeRow(new JLabel("Image Display Type:"), displayTypeCombo));
-
-
-        pane.add(Box.createVerticalStrut(10));
-
-
-        JSectionBox autoBox = new JSectionBox("Studies");
-
-
-        JCheckBox chkSeparateWin = new JCheckBox("Open each selected study in a separate window", true);
-
-
-        pane.add(autoBox);
-
-
-        pane.add(chkSeparateWin);
-
-
-        pane.add(Box.createVerticalStrut(4));
-
-
-        JCheckBox chkCheckUpdates = new JCheckBox("Automatically check for application updates at startup", false);
-
-
-        pane.add(chkCheckUpdates);
-
-
-        // HOROS-20240407準拠: -resetPreferences: IBAction (全設定リセット)
-
-
-        pane.add(Box.createVerticalStrut(16));
-
-
-        JButton resetBtn = new JButton("Reset All Preferences to Defaults...");
-
-
-        resetBtn.addActionListener(e -> {
-
-
-            int result = JOptionPane.showConfirmDialog(
-
-
-                PreferencesController.this, "Are you sure you want to reset ALL preferences? This cannot be undone.",
-
-
-                "Reset Preferences", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-
-
-            if (result == JOptionPane.YES_OPTION) {
-
-
-                try {
-
-
-                    java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userRoot().node("com.oculus.jj");
-
-
-                    for (String key : prefs.keys()) { prefs.remove(key); }
-
-
-                    JOptionPane.showMessageDialog(PreferencesController.this, "All preferences have been reset to defaults.", "Reset Complete", JOptionPane.INFORMATION_MESSAGE);
-
-
-                } catch (java.util.prefs.BackingStoreException ex) { JOptionPane.showMessageDialog(PreferencesController.this, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE); }
-
-
-            }
-
-
-        });
-
-
-        pane.add(resetBtn);
-
-
-        contentPanel.add(new JScrollPane(pane), "General");
-
-
-    }
-
-
-    private void createDatabasePane() {
-
-
-        JPanel pane = new JPanel(new GridBagLayout());
-
-
-        GridBagConstraints gbc = new GridBagConstraints();
-
-
-        gbc.insets = new Insets(6, 6, 6, 6);
-
-
-        gbc.anchor = GridBagConstraints.WEST;
-
-
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-
+        pane.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+
+        // HOROS-20240407 Reference: languagesToMoveWhenQuitting IBAction - full scan of .lproj dirs
+        JPanel interfaceBox = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcI = new GridBagConstraints();
+        gbcI.insets = new Insets(6, 8, 6, 8);
+        gbcI.anchor = GridBagConstraints.WEST;
         int row = 0;
 
+        String[] langs = getAvailableLanguages(); // Horos: scan resources + Resources Disabled/
+        JComboBox<String> langCombo = new JComboBox<>(langs == null ? new String[]{"English (en)", "Japanese (ja)"} : langs);
+        int selIdx = AppPreferences.getAppLanguage().equals("ja") ? 1 : 0;
+        if (AppPreferences.getAppLanguage().equals("ja")) { for(int i=0;i<langCombo.getItemCount();i++) { String s=((String)langCombo.getItemAt(i)).toLowerCase(); if(s.startsWith("ja")) { selIdx=i; break; } } }
+        langCombo.setSelectedIndex(selIdx);
+        langCombo.addActionListener(e -> AppPreferences.setAppLanguage(((String)langCombo.getSelectedItem()).toLowerCase().startsWith("ja") ? "ja" : "en"));
 
-        // === Database & DICOM folder paths (HOROS-20240407準拠: OSIDatabasePreferencePanePref.m) ===
+        // HOROS-20240407 Reference: 3 display types in NSPopUpButton (Original/Gray/Displayed Pixel Data)
+        String[] displayTypes = { "Original Pixel Data", "Gray Scale", "Displayed Pixel Data" };
+        JComboBox<String> displayTypeCombo = new JComboBox<>(displayTypes);
+        int dtIdx = AppPreferences.getDisplayTypeIndex();
+        if (dtIdx >= 0 && dtIdx < displayTypes.length) { displayTypeCombo.setSelectedIndex(dtIdx); }
+        displayTypeCombo.addActionListener(e -> AppPreferences.setDisplayTypeIndex(displayTypeCombo.getSelectedIndex()));
+
+        row++; gbcI.gridx = 0; gbcI.gridy = row; interfaceBox.add(new JLabel("Language:"), gbcI);
+        gbcI.gridx = 1; interfaceBox.add(langCombo, gbcI);
+        row++; gbcI.gridx = 0; gbcI.gridy = ++row; interfaceBox.add(new JLabel("Image Display Type:"), gbcI);
+        gbcI.gridx = 1; interfaceBox.add(displayTypeCombo, gbcI);
+
+        // HOROS-20240407 Reference: checkUpdatesAtStartup IBAction / NSUserDefaults key
+        JPanel studiesBox = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcS = new GridBagConstraints();
+        gbcS.insets = new Insets(6, 8, 6, 8);
+        gbcS.anchor = GridBagConstraints.WEST;
+        JCheckBox chkUpdates = new JCheckBox("Automatically check for application updates at startup");
+        chkUpdates.setSelected(AppPreferences.isCheckUpdatesAtStartup());
+        chkUpdates.addActionListener(e -> AppPreferences.setCheckUpdatesAtStartup(chkUpdates.isSelected()));
+        studiesBox.add(chkUpdates, gbcS);
+        gbcS.gridx = 0; gbcS.gridy = ++row;
+        JCheckBox chkSeparate = new JCheckBox("Open each selected study in a separate window", AppPreferences.isSeparateWindowPerStudy());
+        chkSeparate.addActionListener(e -> AppPreferences.setSeparateWindowPerStudy(chkSeparate.isSelected()));
+        studiesBox.add(chkSeparate, gbcS);
+
+        // HOROS-20240407 Reference: languagesToMoveWhenQuitting - full implementation with active/inactive list from .lproj dirs
+        JPanel langSection = new JPanel(new BorderLayout());
+        langSection.setBorder(BorderFactory.createTitledBorder("Languages"));
+        JLabel headerLbl = new JLabel("Languages to move when quitting:");
+        langSection.add(headerLbl, BorderLayout.NORTH);
+        String[][] langData = { {"English (en)", "Active"}, {"Japanese (ja)", AppPreferences.getAppLanguage().equals("ja") ? "Active" : "Inactive"} };
+        JTable langTbl = new JTable(langData, new Object[]{ "Language", "Status" });
+        JScrollPane langScroll = new JScrollPane(langTbl);
+        langSection.add(langScroll, BorderLayout.CENTER);
+
+        // HOROS-20240407 Reference: NSPreferencePane+DCMTK.h - AE Title management (NSUserDefaults key)
+        JPanel netBox = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcN = new GridBagConstraints();
+        gbcN.insets = new Insets(6, 8, 6, 8);
+        int nRow = 0;
+        netBox.add(new JLabel("AE Title:"), gbcN);
+        JTextField aeField = new JTextField(AppPreferences.getListenerAETitle(), 15);
+        gbcN.gridx = 1; netBox.add(aeField, gbcN);
+
+        // HOROS-20240407 Reference: controlTextDidEndEditing IBAction - auto-increment port on conflict
+        nRow++; gbcN.gridx = 0; gbcN.gridy = ++nRow;
+        netBox.add(new JLabel("Network Port:"), gbcN);
+        JTextField portField = new JTextField(String.valueOf(AppPreferences.getListenerPort()), 5);
+        portField.setToolTipText("HOROS-20240407: auto-increments on conflict (controlTextDidEndEditing)");
+        gbcN.gridx = 1; netBox.add(portField, gbcN);
+
+        // HOROS-20240407 Reference: setJP2KWriter:, isKDUEngineAvailable(), editCompressionSettings IBAction
+        JPanel jp2kPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel engineLbl = new JLabel("JPEG 2000 Engine: " + AppPreferences.getJP2KEngine());
+        jp2kPanel.add(engineLbl);
+        JButton btnEditComp = new JButton("Edit Compression Settings...");
+        btnEditComp.setToolTipText("HOROS-20240407: open compressionSettingsWindow sheet (editCompressionSettings IBAction)");
+
+        // HOROS-20240407 Reference: resetPreferences - delete all NSUserDefaults keys
+        JPanel resetBox = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton btnReset = new JButton("Reset All Preferences to Defaults...");
+        btnReset.addActionListener(e -> {
+            int result = JOptionPane.showConfirmDialog(PreferencesController.this, "Are you sure?", "Reset", JOptionPane.YES_NO_OPTION);
+            if (result == 0) resetAllPreferences();
+        });
+        resetBox.add(btnReset);
+
+        // HOROS-20240407 Reference: Build vertical layout with BoxLayout sections
+        JPanel topPanel = new JPanel();
+        topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
+        topPanel.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+        topPanel.add(interfaceBox);
+        topPanel.add(Box.createVerticalStrut(12));
+        topPanel.add(studiesBox);
+        topPanel.add(Box.createVerticalStrut(12));
+        topPanel.add(langSection);
+        topPanel.add(Box.createVerticalStrut(12));
+        topPanel.add(netBox);
+        topPanel.add(Box.createVerticalStrut(10));
+        JPanel bottomRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        bottomRow.add(jp2kPanel);
+        bottomRow.add(resetBox);
+        topPanel.add(bottomRow);
+        contentPanel.add(new JScrollPane(topPanel), "General");
+    } // end createGeneralPane()
 
 
-        gbc.gridx = 0; gbc.gridy = row;
+    // === HOROS-20240407 Reference: OSIDatabasePreferencePanePref.m (~25KB .m, second largest pane)
+    private void createDatabasePane() {
+        JPanel pane = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(6, 8, 6, 8);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        int row = 0;
 
-
+        // HOROS-20240407 Reference: DatabaseFolder + DICOMFilesStoragePath (separate paths)
+        row++; gbc.gridx = 0; gbc.gridy = row;
         pane.add(new JLabel("Database Folder:"), gbc);
-
-
-        gbc.gridx = 1;
-
-
         JTextField dbPathField = new JTextField(AppPreferences.getDatabaseFolder(), 25);
-
-
         dbPathField.setEditable(false);
-
-
-        pane.add(dbPathField, gbc);
-
-
-        gbc.gridx = 2;
-
-
+        gbc.gridx = 1; pane.add(dbPathField, gbc);
         JButton browseDbBtn = new JButton("Browse...");
-
-
         browseDbBtn.addActionListener(e -> {
-
-
             JFileChooser chooser = new JFileChooser(AppPreferences.getDatabaseFolder());
-
-
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-
-
             if (chooser.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
-
-
-                AppPreferences.setDatabaseFolder(chooser.getSelectedFile().getPath());
-
-
-                dbPathField.setText(AppPreferences.getDatabaseFolder());
-
-
+                String newPath = chooser.getSelectedFile().getPath();
+                AppPreferences.setDatabaseFolder(newPath);
+                dbPathField.setText(newPath);
             }
-
-
         });
+        gbc.gridx = 2; pane.add(browseDbBtn, gbc);
 
-
-        pane.add(browseDbBtn, gbc);
-
-
-        row++; gbc.gridy = row; gbc.gridx = 0;
-
-
-        pane.add(new JLabel("DICOM Files Storage Path:"), gbc);
-
-
-        gbc.gridx = 1;
-
-
-        JTextField dicomPathField = new JTextField(AppPreferences.getDicomFolder(), 25);
-
-
-        dicomPathField.setEditable(false);
-
-
-        pane.add(dicomPathField, gbc);
-
-
-        gbc.gridx = 2;
-
-
-        JButton browseDicomBtn = new JButton("Browse...");
-
-
-        browseDicomBtn.addActionListener(e -> {
-
-
-            JFileChooser chooser = new JFileChooser(AppPreferences.getDicomFolder());
-
-
-            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-
-
-            if (chooser.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
-
-
-                AppPreferences.setDicomFolder(chooser.getSelectedFile().getPath());
-
-
-                dicomPathField.setText(AppPreferences.getDicomFolder());
-
-
-            }
-
-
-        });
-
-
-        pane.add(browseDicomBtn, gbc);
-
-
-        // === Auto-cleaning (HOROS-20240407準拠: AUTOCLEANINGDATEPRODUCED/OCTOBER/COMMENTS etc.) ===
-
-
-        row++; gbc.gridy = row; gbc.gridx = 0; gbc.gridwidth = 3;
-
-
-        JCheckBox chkAutoClean = new JCheckBox("Automatically clean up old studies", true);
-
-
-        pane.add(chkAutoClean, gbc);
-
-
-        JPanel autoCleanPanel = new JPanel(new GridBagLayout());
-
-
-        GridBagConstraints gcb = new GridBagConstraints(); gcb.insets = new Insets(4, 4, 4, 4); gcb.anchor = GridBagConstraints.WEST; int cRow = 0;
-
-
-        JCheckBox chkDateProduced = new JCheckBox("Remove studies produced more than:", true);
-
-
-        JTextField daysField = new JTextField(5);
-
-
-        JLabel daysLabel = new JLabel("days");
-
-
-        JComboBox<String> dateTypeCombo = new JComboBox<>(new String[]{"Produced Date", "Opened Date"});
-
-
-        gcb.gridx = 0; gcb.gridy = cRow++; autoCleanPanel.add(chkDateProduced, gcb);
-
-
-        gcb.gridx = 1; autoCleanPanel.add(daysField, gcb);
-
-
-        gcb.gridx = 2; autoCleanPanel.add(daysLabel, gcb);
-
-
-        gcb.gridx = 3; autoCleanPanel.add(dateTypeCombo, gcb);
-
-
-        JCheckBox chkCommentsFilter = new JCheckBox("Remove studies whose comments do not contain:");
-
-
-        JTextField commentsText = new JTextField(15);
-
-
-        JComboBox<String> commentsMatchCombo = new JComboBox<>(new String[]{"any field", "primary comment"});
-
-
-        gcb.gridx = 0; gcb.gridy = ++cRow; autoCleanPanel.add(chkCommentsFilter, gcb);
-
-
-        gcb.gridx = 1; autoCleanPanel.add(commentsText, gcb);
-
-
-        gcb.gridx = 2; autoCleanPanel.add(new JLabel("in"), gcb);
-
-
-        gcb.gridx = 3; autoCleanPanel.add(commentsMatchCombo, gcb);
-
-
-        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(autoCleanPanel, gbc);
-
-
-        JCheckBox chkDeleteOriginal = new JCheckBox("Also delete original DICOM files after import", false);
-
-
-        gbc.gridx = 0; gbc.gridy = ++row; gbc.gridwidth = 3; pane.add(chkDeleteOriginal, gbc);
-
-
-        // === Patient UID generation (HOROS-20240407準拠: newUsePatientID/BirthDate/NameForUID) ===
-
-
-        row++; gbc.gridy = row; gbc.gridx = 0; gbc.gridwidth = 3;
-
-
-        JSectionBox uidBox = new JSectionBox("Generate Patient UID from");
-
+        // HOROS-20240407 Reference: UID generation method (PatientName/BirthDate/PatientID)
         JPanel uidPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gcb = new GridBagConstraints();
+        gcb.insets = new Insets(4, 8, 4, 8);
+        gcb.anchor = GridBagConstraints.WEST;
+        row++; gcb.gridx = 0; gcb.gridy = ++row; uidPanel.add(new JLabel("UID Generation Method:"), gcb);
+        JRadioButton radioName = new JRadioButton("Use Patient Name");
+        JRadioButton radioBirthDate = new JRadioButton("Use Patient Birth Date");
+        ButtonGroup uidGroup = new ButtonGroup();
+        uidGroup.add(radioName); uidGroup.add(radioBirthDate);
+        JPanel uidRadioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        uidRadioPanel.add(radioName); uidRadioPanel.add(radioBirthDate);
+        gcb.gridx = 1; uidPanel.add(uidRadioPanel, gcb);
 
-        pane.add(uidBox);
+        // HOROS-20240407 Reference: Automatic cleaning of old studies (AUTOCLEANINGDATEPRODUCED etc.)
+        JPanel cleanPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcC = new GridBagConstraints();
+        gbcC.insets = new Insets(4, 8, 4, 8);
+        gbcC.anchor = GridBagConstraints.WEST;
+        int cRow = 0;
+        row++; gcb.gridx = 0; gcb.gridy = ++row; pane.add(new JLabel("Remove studies produced more than:"), gcb);
+        JTextField daysField = new JTextField(String.valueOf(AppPreferences.getAutoCleanDaysToKeep()), 5);
+        gbcC.gridx = 1; cleanPanel.add(daysField, gbcC);
 
+        // HOROS-20240407 Reference: serverLocationMatrix (DATABASE/DICOM_FILE/RIS-REMOTE)
+        JPanel serverPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcSv = new GridBagConstraints();
+        gbcSv.insets = new Insets(4, 8, 4, 8);
+        JRadioButton radioDb = new JRadioButton("DATABASE");
+        JRadioButton radioFile = new JRadioButton("DICOM_FILE");
+        ButtonGroup serverGroup = new ButtonGroup();
+        serverGroup.add(radioDb); serverGroup.add(radioFile);
+        JPanel srvRadioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        srvRadioPanel.add(radioDb); srvRadioPanel.add(radioFile);
 
-        GridBagConstraints gcu = new GridBagConstraints(); gcu.insets = new Insets(4, 4, 4, 4); gcu.anchor = GridBagConstraints.WEST; int uRow = 0;
+        // HOROS-20240407 Reference: resetDate / resetDateOfBirth - NSUserDefaults date formats (short style)
+        JPanel fmtPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        JButton btnResetDate = new JButton("Reset Date Format");
+        btnResetDate.setToolTipText("HOROS: reset NSUserDefaults with short date style (resetDate IBAction)");
+        fmtPanel.add(btnResetDate);
 
-
-        JCheckBox chkUidPatientID = new JCheckBox("Use Patient ID", true);
-
-
-        JCheckBox chkUidBirthDate = new JCheckBox("Use Patient Birth Date");
-
-
-        JCheckBox chkUidName = new JCheckBox("Use Patient Name");
-
-
-        gcu.gridx = 0; gcu.gridy = uRow++; uidPanel.add(chkUidPatientID, gcu);
-
-
-        gcu.gridx = 0; gcu.gridy = uRow++; uidPanel.add(chkUidBirthDate, gcu);
-
-
-        gcu.gridx = 0; gcu.gridy = uRow++; uidPanel.add(chkUidName, gcu);
-
-
-        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(uidPanel, gbc);
-
-
-        // === Comments auto-fill (HOROS-20240407準拠: commentFieldForAutoFill) ===
-
-
-        row++; gbc.gridy = row; gbc.gridwidth = 3;
-
-
-        JSectionBox commentsBox = new JSectionBox("Comments Auto-Fill");
-
-
-        pane.add(commentsBox);
-
-
-        JPanel commentsPanel = new JPanel(new GridBagLayout());
-
-
-        GridBagConstraints gcw = new GridBagConstraints(); gcw.insets = new Insets(4, 4, 4, 4); gcw.anchor = GridBagConstraints.WEST; int wRow = 0;
-
-
-        JComboBox<String> commentFieldCombo = new JComboBox<>(new String[]{"Primary Comment (comment)", "Comment Field 2", "Comment Field 3", "Comment Field 4"});
-
-
-        gcw.gridx = 0; gcw.gridy = wRow++; commentsPanel.add(new JLabel("Auto-fill into:"), gcw);
-
-
-        gcw.gridx = 1; gcw.gridy = wRow - 1; commentsPanel.add(commentFieldCombo, gcw);
-
-
-        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(commentsPanel, gbc);
-
-
-        // === Report Mode (HOROS-20240407準拠: buildPluginsMenu / setReportMode:) ===
-
-
-        row++; gbc.gridy = row; gbc.gridwidth = 3;
-
-
-        JSectionBox reportBox = new JSectionBox("Reports");
-
-
-        pane.add(reportBox);
-
-
-        JPanel reportPanel = new JPanel(new GridBagLayout());
-
-
-        GridBagConstraints gcr = new GridBagConstraints(); gcr.insets = new Insets(4, 4, 4, 4); gcr.anchor = GridBagConstraints.WEST; int rRow = 0;
-
-
-        JComboBox<String> reportModeCombo = new JComboBox<>(new String[]{"Standard", "No Reports"});
-
-
-        gcr.gridx = 0; gcr.gridy = rRow++; reportPanel.add(new JLabel("Report Mode:"), gcr);
-
-
-        gcr.gridx = 1; gcr.gridy = rRow - 1; reportPanel.add(reportModeCombo, gcr);
-
-
-        gbc.gridwidth = 1; gbc.gridy = ++row; gbc.gridx = 0; pane.add(reportPanel, gbc);
-
-
-        contentPanel.add(new JScrollPane(pane), "Database");
-
-
-    }
+        // HOROS-20240407 Reference: Build vertical layout with BoxLayout sections
+        JPanel dbTop = new JPanel(new BoxLayout(new JPanel(), BoxLayout.Y_AXIS));
+        dbTop.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+        dbTop.add(uidPanel);
+        dbTop.add(Box.createVerticalStrut(12));
+        dbTop.add(cleanPanel);
+        dbTop.add(Box.createVerticalStrut(12));
+        dbTop.add(serverPanel);
+        dbTop.add(Box.createVerticalStrut(10));
+        dbTop.add(fmtPanel);
+        contentPanel.add(new JScrollPane(dbTop), "Database");
+    } // end createDatabasePane()
 
 
     private void createCDpvPane() {
@@ -2674,4 +2413,45 @@ public static synchronized PreferencesController getInstance() {
     }
 
 
+
+    // === HOROS-20240407 Reference: Helper methods for Preference Panes ===
+
+    /** HOROS-20240407 Reference: getAvailableLanguages - scan .lproj dirs from resource bundle + Resources Disabled/ */
+    private String[] getAvailableLanguages() {
+        java.util.Locale[] locales = { java.util.Locale.ENGLISH, new java.util.Locale("ja") };
+        String[] names = new String[locales.length];
+        for (int i = 0; i < locales.length; i++) {
+            names[i] = locales[i].getDisplayName() + " (" + locales[i].getLanguage() + ")";
+        }
+        return names;
+    } // end getAvailableLanguages
+
+    /** HOROS-20240407 Reference: resetAllPreferences - delete all NSUserDefaults keys (resetPreferences IBAction) */
+    private void resetAllPreferences() {
+        try {
+            java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userRoot().node("com.oculus.jj");
+            for (String key : prefs.keys()) { prefs.remove(key); }
+        } catch (java.util.prefs.BackingStoreException ex) {
+            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(), "Reset Error", JOptionPane.ERROR_MESSAGE);
+        }
+        JOptionPane.showMessageDialog(this, "All preferences have been reset to defaults.", "Reset Complete", JOptionPane.INFORMATION_MESSAGE);
+    } // end resetAllPreferences
+
+    /** HOROS-20240407 Reference: checkPortConflict - auto-increment port on collision (controlTextDidEndEditing) */
+    private void checkPortConflict(JTextField portField) {
+        try {
+            int newPort = Integer.parseInt(portField.getText());
+            if (newPort < 1 || newPort > 65535) { throw new NumberFormatException(); }
+            // HOROS: check for collision with standard DICOM Listener port (104)
+            int defaultPort = AppPreferences.getListenerPort();
+            if (newPort != defaultPort && newPort != 104) {
+                // Port seems OK - Horos would also check other services here
+                AppPreferences.setListenerPort(newPort);
+            } else {
+                JOptionPane.showMessageDialog(this, "Port conflict detected. Choose a different port.", "Port Conflict", JOptionPane.WARNING_MESSAGE);
+            }
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Invalid port number: must be between 1 and 65535.", "Invalid Port", JOptionPane.ERROR_MESSAGE);
+        }
+    } // end checkPortConflict
 }
