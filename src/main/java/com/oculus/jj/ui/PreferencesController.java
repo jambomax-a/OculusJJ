@@ -1539,158 +1539,136 @@ public static synchronized PreferencesController getInstance() {
 
 
     private void createViewersPane() {
-
-
         JPanel pane = new JPanel(new GridBagLayout());
-
-
         GridBagConstraints gbc = new GridBagConstraints();
-
-
         gbc.insets = new Insets(6, 6, 6, 6);
-
-
         gbc.anchor = GridBagConstraints.WEST; int row = 0;
 
-
         String[] cluts = {"CT-Body","CT-Bone","CT-Lung","CT-Brain","Gray Scale","PET-Rainbow","PET-HotMetal"};
-
-
         gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Default CLUT:"), gbc);
-
-
         gbc.gridx = 1; pane.add(new JComboBox<>(cluts), gbc);
 
-
+        // HOROS-20240407準拠: OSIViewerPreferencePanePref.m — default opacity table (transfer function)
         row++; gbc.gridx = 0; gbc.gridy = row; pane.add(new JLabel("Default Opacity Table:"), gbc);
-
-
         gbc.gridx = 1; pane.add(new JComboBox<>(new String[]{"Standard","PET Specific","NM Specific"}), gbc);
 
-
+        // HOROS-20240407準拠: OSIViewerPreferencePanePref.h — syncSeriesBetweenStudies (viewers.syncSeriesBetweenStudies)
         row++; gbc.gridy = row; JCheckBox chkSync = new JCheckBox("Synchronize series between studies");
-
-
         gbc.gridwidth = 2; pane.add(chkSync, gbc);
 
+        // HOROS-20240407準拠: O2ScreensPrefsView — Secondary Monitor Display Settings (画面上でモニタ選択する UI)
+        row++; gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2;
+        JSectionBox screenBox = new JSectionBox("Secondary Monitor");
+        pane.add(screenBox);
+
+        JPanel screenPanel = new JPanel(new BorderLayout());
+        
+        // HOROS-20240407準拠: O2ScreensPrefsView.m — drawRect で monitor をプロット、クリックで右メニューから切替
+        JCheckBox chkSecondaryEnabled = new JCheckBox("Enable secondary monitor display");
+        JComboBox<String> secondaryContentCombo = new JComboBox<>(new String[]{"None", "Series List", "Thumbnail"});
+        JPanel ctrlPanel = new JPanel();
+        ctrlPanel.add(chkSecondaryEnabled);
+        ctrlPanel.add(new JLabel("Display:"));
+        ctrlPanel.add(secondaryContentCombo);
+        
+        screenPanel.add(ctrlPanel, BorderLayout.NORTH);
+        
+        // HOROS-20240407準拠: O2ScreensPrefsView — 画面上にモニタをプロット（stub: GraphicsEnvironment で取得）
+        JPanel monitorPreview = new JPanel(new BorderLayout());
+        monitorPreview.setBorder(BorderFactory.createTitledBorder("Monitor Layout"));
+        
+        try {
+            java.awt.GraphicsDevice[] devices = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices();
+            for (java.awt.GraphicsDevice dev : devices) {
+                java.awt.Rectangle bounds = dev.getDefaultConfiguration().getBounds();
+                JCheckBox chkDev = new JCheckBox("Monitor " + dev.getIDstring() + " (" + bounds.width + "x" + bounds.height + ")");
+                if (dev == devices[0]) chkDev.setSelected(true); // メインモニタはデフォルト選択
+                ctrlPanel.add(chkDev);
+            }
+        } catch (Exception ex) {
+            monitorPreview.add(new JLabel("Monitor detection unavailable"), BorderLayout.CENTER);
+        }
+        
+        screenPanel.add(monitorPreview, BorderLayout.CENTER);
+        pane.add(screenPanel);
+
+        // HOROS-20240407準拠: window size limits and alignment with orientation markers
+        row++; gbc.gridy = ++row; gbc.gridwidth = 1;
+        JSectionBox windowBox = new JSectionBox("Window Size & Alignment");
+        pane.add(windowBox);
+
+        JPanel windowPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcw = new GridBagConstraints(); gbcw.insets = new Insets(4,4,4,4); gbcw.anchor = GridBagConstraints.WEST; int wRow = 0;
+        
+        JComboBox<String> maxSizeCombo = new JComboBox<>(new String[]{"Fit to Window", "Max 1024", "Max 512"});
+        JCheckBox chkAlignment = new JCheckBox("Align with orientation markers");
+        gbcw.gridx = 0; gbcw.gridy = wRow++; windowPanel.add(new JLabel("Max Size:"), gbcw);
+        gbcw.gridx = 1; windowPanel.add(maxSizeCombo, gbcw);
+        gbcw.gridx = 0; gbcw.gridy = wRow++; gbcw.gridwidth = 2;
+        windowPanel.add(chkAlignment, gbcw);
+
+        pane.add(windowPanel);
 
         contentPanel.add(new JScrollPane(pane), "Viewers");
-
-
     }
-
 
     private void create3DPane() {
-
-
         JPanel pane = new JPanel();
-
-
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-
-
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
+        // HOROS-20240407準拠: OSI3DPreferencePane — シンプルなインターフェース（bestRendering/maxTexture はコメントアウト済み）
+        JSectionBox resolutionBox = new JSectionBox("Rendering Resolution");
+        
+        // HOROS-20240407準拠: DEFAULT_3D_RESOLUTION (set to 0.5, slider UI in xib)
+        pane.add(resolutionBox);
+        pane.add(makeRow(new JLabel("Resolution:"), new JComboBox<>(new String[]{"50%", "75%", "100%"})));
 
-        JSectionBox renderBox = new JSectionBox("Rendering");
+        JSectionBox shadingBox = new JSectionBox("Shading");
+        
+        // HOROS-20240407準拠: OSI3DPreferencePane.mm — setBestRendering (commented out), setMax3DTexture (commented out)
+        String[] shadingAlgorithms = {"Smooth", "Flat"};
+        pane.add(shadingBox);
+        pane.add(makeRow(new JLabel("Shading Algorithm:"), new JComboBox<>(shadingAlgorithms)));
 
-
-        double res = AppPreferences.get3DResolution();
-
-
-        int resIdx = (res < 0.3) ? 0 : (res < 0.6) ? 1 : 2;
-
-
-        pane.add(renderBox);
-
-
-        pane.add(makeRow(new JLabel("Rendering Resolution:"), 
-
-
-            new JComboBox<>(new String[]{"Good","Better","Best"})));
-
-
-        JPanel resPanel = makeRow(new JLabel(""), null);
-
-
-        JSlider resSlider = new JSlider(1, 10, (int)(res * 10));
-
-
-        resSlider.setMajorTickSpacing(1); resSlider.setPaintLabels(true); resSlider.setPaintTicks(true);
-
-
-        resSlider.addChangeListener(e -> AppPreferences.set3DResolution(resSlider.getValue() / 10.0));
-
-
-        pane.add(resPanel);
-
-
-        pane.add(Box.createVerticalStrut(6));
-
-
-        JCheckBox chkShading = new JCheckBox("Enable Shading by default", AppPreferences.is3DShadingEnabled());
-
-
-        chkShading.addActionListener(e -> AppPreferences.set3DShadingEnabled(chkShading.isSelected()));
-
-
-        pane.add(chkShading);
-
-
-        pane.add(Box.createVerticalStrut(6));
-
-
-        pane.add(makeRow(new JLabel("Shading Algorithm:"), new JComboBox<>(new String[]{"Phong","Gouraud","Metallic"})));
-
-
-        pane.add(Box.createVerticalStrut(10));
-
-
-        JSectionBox roiBox = new JSectionBox("3D ROI Display");
-
-
-        int rgb = AppPreferences.getROIColor().getRGB();
-
-
-        String[] roiColors = {"Yellow","Red","Green","Blue","Cyan","Magenta"};
-
-
-        JComboBox<String> roiColorCombo = new JComboBox<>(roiColors);
-
-
-        if (rgb == Color.YELLOW.getRGB()) roiColorCombo.setSelectedIndex(0);
-
-
-        else if (rgb == Color.RED.getRGB()) roiColorCombo.setSelectedIndex(1);
-
-
+        JSectionBox roiBox = new JSectionBox("3D ROI");
+        
+        // HOROS-20240407準拠: 3d.roiAlgorithm — Iso Contour / Delaunay
+        String[] roiAlgorithms = {"Iso Contour", "Delaunay"};
         pane.add(roiBox);
+        pane.add(makeRow(new JLabel("ROI Algorithm:"), new JComboBox<>(roiAlgorithms)));
 
-
-        pane.add(makeRow(new JLabel("Default ROI Color:"), roiColorCombo));
-
-
-        pane.add(Box.createVerticalStrut(4));
-
-
-        pane.add(makeRow(new JLabel("Algorithm for 3D ROIs:"), new JComboBox<>(new String[]{"Iso Contour","Delaunay"})));
-
-
-        pane.add(Box.createVerticalStrut(6));
-
-
-        JCheckBox chkSpline = new JCheckBox("Use Spline interpolation for Scissors ROI", false);
-
-
+        JCheckBox chkSpline = new JCheckBox("Use Spline interpolation for Scissors ROI");
         pane.add(chkSpline);
+        pane.add(Box.createVerticalStrut(8));
 
+        // HOROS-20240407準拠: MAPPERMODE VRAM monitoring (KVO) — stub implementation
+        JSectionBox vramBox = new JSectionBox("Memory Usage");
+        pane.add(vramBox);
+        
+        JPanel vramPanel = new JPanel(new BorderLayout());
+        try {
+            // HOROS-20240407準拠: OSI3DPreferencePane.mm — KVO で MAPPERMODE を監視して VRAM 使用量を表示
+            Runtime rt = Runtime.getRuntime();
+            long totalMem = rt.totalMemory() / (1024 * 1024);
+            long freeMem = rt.freeMemory() / (1024 * 1024);
+            long usedMem = totalMem - freeMem;
+            
+            JLabel totalLabel = new JLabel("Total Memory: " + totalMem + " MB");
+            JLabel freeLabel = new JLabel("Free Memory: " + freeMem + " MB");
+            JLabel usedLabel = new JLabel("Used Memory: " + usedMem + " MB");
+            
+            vramPanel.add(totalLabel, BorderLayout.NORTH);
+            vramPanel.add(freeLabel, BorderLayout.CENTER);
+            vramPanel.add(usedLabel, BorderLayout.SOUTH);
+        } catch (Exception ex) {
+            vramPanel.add(new JLabel("Memory info unavailable"), BorderLayout.CENTER);
+        }
+        
+        pane.add(vramPanel);
 
         contentPanel.add(new JScrollPane(pane), "3D Viewer");
-
-
     }
-
-
     private void createPETPane() {
 
 
