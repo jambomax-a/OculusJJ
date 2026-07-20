@@ -24,14 +24,26 @@ public class AppPreferences {
     public static final String KEY_APP_LANGUAGE = "general.language";
     public static final String KEY_DISPLAY_TYPE = "general.displayType";
     public static final String KEY_CHECK_UPDATES = "general.checkUpdatesAtStartup";
+// HOROS-20240407 Reference: OSIGeneralPreferencePanePref.m - JP2K engine / compression settings
+public static final String KEY_JP2K_ENGINE = "JP2KEngine";
+public static final String KEY_COMPRESSION_SETTINGS_JSON = "CompressionSettings";
+public static final String KEY_COMPRESSION_LOW_RES_SETTINGS_JSON = "CompressionSettingsLowRes";
     public static final String KEY_SEPARATE_WINDOW = "general.separateWindowPerStudy";
     // === Database auto-cleaning preference keys (HOROS-20240407準拠: AUTOCLEANINGDATEPRODUCED etc.) ===
     public static final String KEY_AUTO_CLEANING_DATE_PRODUCED = "db.autoCleaningDateProduced";
     public static final String KEY_AUTO_CLEANING_DATE_OPENED = "db.autoCleaningDateOpened";
     public static final String KEY_AUTO_CLEANING_COMMENTS = "db.autoCleaningComments";
+// HOROS-20240407 Reference: OSIDatabasePreferencePanePref.m - DB date formats
+public static final String KEY_DB_BIRTH_DATE_FORMAT = "DBDateOfBirthFormat2";
+public static final String KEY_SPLIT_MULTI_ECHO_MR = "splitMultiEchoMR";
     public static final String KEY_AUTO_CLEANING_DELETE_ORIGINAL = "db.autoCleaningDeleteOriginal";
     public static final String KEY_PACS_MERGE_ON_IMPORT = "pacs.mergeOnImport";
     public static final String KEY_ERASE_DB_AT_STARTUP = "database.eraseEntireDBAtStartup";
+// HOROS-20240407 Reference: OSIDatabasePreferencePanePref.m - UID generation / date formats
+public static final String KEY_USE_PATIENT_NAME_FOR_UID = "usePatientNameForUID";
+public static final String KEY_AUTO_CLEAN_DAYS_TO_KEEP = "AutoCleanDaysToKeep";
+public static final String KEY_DB_DATE_FORMAT = "DBDateFormat2";
+public static final String KEY_USE_SERIES_DESCRIPTION = "useSeriesDescription";
 
     // === CD/DVD preference keys ===
     public static final String KEY_CDDVD_EJECT_AFTER_COPY = "cddvd.ejectAfterCopy";
@@ -56,6 +68,13 @@ public class AppPreferences {
 
     // === Hot Keys preference keys (stored as JSON string for simplicity) ===
     public static final String KEY_HOTKEYS = "hotkeys.bindings";
+
+// HOROS-20240407 Reference: annotations / hanging protocols / on-demand PACS
+public static final String KEY_HANGING_PROTOCOL_BODY_REGIONS_JSON = "hangingProtocolBodyRegions";
+public static final String KEY_HANGING_KEYWORDS_JSON = "hangingKeywords";
+public static final String KEY_ANNOTATION_DICOM_FIELD_MAP_JSON = "annotationDicomFieldMap";
+public static final String KEY_PET_SUV_NORMALIZE_SCANNER = "pet.suvNormalizeScanner";
+public static final String KEY_ONDEMAND_SOURCE_LIST_JSON = "pacsOnDemandSourceList";
 
     // === Viewers preference keys ===
     public static final String KEY_DEFAULT_CLUT = "viewers.defaultCLUT";
@@ -105,9 +124,27 @@ public class AppPreferences {
     public static final String KEY_LISTENER_AETITLE = "listener.aetitle";
     public static final String KEY_LISTENER_PORT = "listener.port";
     public static final String KEY_LISTENER_AUTO_START = "listener.autoStart";
+// HOROS-20240407 Reference: listener TLS per-listener
+public static final String KEY_LISTENER_AUTO_ADD_CERTIFICATE = "autoAddCertificate";
+public static final String KEY_LISTENER_PORT_TLS = "listener.portTLS";
 
+
+// HOROS-20240407 Reference: OSIListenerPreferencePanePref.mm - TLS settings
+public static final String KEY_LISTENER_TLS_ENABLED = "STORESCPTLS";
+public static final String KEY_LISTENER_TLS_CERT_AUTH = "TLSAuthenticationCertificate";
+public static final String KEY_LISTENER_TLS_CIPHER_SUITE = "TLSSupportedCipherSuite";
+public static final String KEY_LISTENER_DH_PARAM_FILE_URL = "TLSDHParameterFileURL";
     // === Web Server preference keys ===
     public static final String KEY_WEB_SERVER_PORT = "webserver.port";
+
+// HOROS-20240407 Reference: OSILocationsPreferencePane / OSIWebSharingReferencePane
+public static final String KEY_WADO_ENABLED = "WADOEnabled";
+public static final String KEY_WADO_PORT = "wadomoduleportnumber";
+public static final String KEY_WADO_URL = "wadoURL";
+public static final String KEY_WADO_TRANSFER_SYNTAX = "WADOTransferSyntaxes";
+public static final String KEY_WEB_PORTAL_URL = "WebPortalURL";
+public static final String KEY_CUSTOM_HTML_FILE_PATH = "customizedHTMLFilePaths";
+public static final String KEY_USERS_MANAGEMENT_JSON = "webUsersManagementJSON";
     public static final String KEY_WEB_WADO_ENABLED = "webserver.wadoEnabled";
     public static final String KEY_WEB_STOWRS_ENABLED = "webserver.stowrsEnabled";
     public static final String KEY_WEB_BASE_URL = "webserver.baseUrl";
@@ -618,4 +655,57 @@ public class AppPreferences {
             // エラーは無視するか、適切にログ出力を行う（コンソールへの直接出力は避ける）
         }
     }
+
+/* ========== HOROS-20240407 Reference Data Accessors (Preference Pane) ========== */
+
+// -- General pane - JP2K Engine / Compression Settings
+
+public static String getJP2KEngine() { return prefs.get(KEY_JP2K_ENGINE, "OpenJPEG"); }
+public static void setJP2KEngine(String e) { prefs.put(KEY_JP2K_ENGINE, e); }
+public static String getCompressionSettings() { return prefs.get(KEY_COMPRESSION_SETTINGS_JSON, ""); }
+public static void setCompressionSettings(String j) { prefs.put(KEY_COMPRESSION_SETTINGS_JSON, j); }
+// -- Database preferences - UID generation, auto-clean, date formats
+
+public static String getUsePatientNameForUID() { return prefs.get(KEY_USE_PATIENT_NAME_FOR_UID, ""); }
+public static void setUsePatientNameForUID(String m) { prefs.put(KEY_USE_PATIENT_NAME_FOR_UID, m); }
+public static int getAutoCleanDaysToKeep() { try { return prefs.getInt(KEY_AUTO_CLEAN_DAYS_TO_KEEP, 90); } catch (Exception e) { return 90; } }
+public static void setAutoCleanDaysToKeep(int d) { prefs.put(KEY_AUTO_CLEAN_DAYS_TO_KEEP, String.valueOf(d)); }
+// -- DB useSeriesDescription / splitMultiEchoMR (HOROS-20240407 Reference)
+
+public static boolean isUseSeriesDescription() { return prefs.getBoolean(KEY_USE_SERIES_DESCRIPTION, false); }
+public static void setUseSeriesDescription(boolean b) { prefs.putBoolean(KEY_USE_SERIES_DESCRIPTION, b); }
+// -- Listener TLS authentication / cipher suites (HOROS-20240407 Reference)
+
+public static boolean isListenerTLSEnabled() { return prefs.getBoolean(KEY_LISTENER_TLS_ENABLED, false); }
+public static void setListenerTLSEnabled(boolean b) { prefs.putBoolean(KEY_LISTENER_TLS_ENABLED, b); }
+public static String getListenerTLSAuthCertName() { return prefs.get(KEY_LISTENER_TLS_CERT_AUTH, ""); }
+public static void setListenerTLSAuthCertName(String n) { prefs.put(KEY_LISTENER_TLS_CERT_AUTH, n); }
+// -- WADO/WebServer settings (HOROS-20240407 Reference)
+
+public static int getWadoPort() { try { return prefs.getInt(KEY_WADO_PORT, 8443); } catch (Exception e) { return 8443; } }
+public static void setWadoPort(int p) { prefs.put(KEY_WADO_PORT, String.valueOf(p)); }
+// -- Web users JSON (HOROS-20240407 Reference: OSIWebSharingReferencePane)
+
+public static String getUserManagementJSON() { return prefs.get(KEY_USERS_MANAGEMENT_JSON, "[]"); }
+public static void setUserManagementJSON(String j) { prefs.put(KEY_USERS_MANAGEMENT_JSON, j); }
+// -- Other preferences (HOROS-20240407 Reference)
+
+public static String getHangingProtocolBodyRegionsJSON() { return prefs.get(KEY_HANGING_PROTOCOL_BODY_REGIONS_JSON, "[]"); }
+public static void setHangingProtocolBodyRegionsJSON(String j) { prefs.put(KEY_HANGING_PROTOCOL_BODY_REGIONS_JSON, j); }
+// -- Hot key bindings (HOROS-20240407 Reference: OSIHotKeysPref.m)
+
+public static String getHotkeyBindingsJSON() { return prefs.get("hotkeyBindingsJSON", "[]"); }
+public static void setHotkeyBindingsJSON(String j) { prefs.put("hotkeyBindingsJSON", j); }
+// -- Annotation DICOM field map (HOROS-20240407 Reference)
+
+public static String getAnnotationDicomFieldMapJSON() { return prefs.get(KEY_ANNOTATION_DICOM_FIELD_MAP_JSON, "{}"); }
+public static void setAnnotationDicomFieldMapJSON(String j) { prefs.put(KEY_ANNOTATION_DICOM_FIELD_MAP_JSON, j); }
+// -- PET/SUV scanner normalize (HOROS-20240407 Reference)
+
+public static String getPetsuvNormalizeScanner() { return prefs.get(KEY_PET_SUV_NORMALIZE_SCANNER, ""); }
+public static void setPetsuvNormalizeScanner(String s) { prefs.put(KEY_PET_SUV_NORMALIZE_SCANNER, s); }
+// -- On-demand PACS source list (HOROS-20240407 Reference)
+
+public static String getOnDemandSourceListJSON() { return prefs.get(KEY_ONDEMAND_SOURCE_LIST_JSON, "[]"); }
+public static void setOnDemandSourceListJSON(String j) { prefs.put(KEY_ONDEMAND_SOURCE_LIST_JSON, j); }
 }
