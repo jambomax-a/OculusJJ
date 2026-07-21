@@ -1,0 +1,15 @@
+﻿const fs = require("fs");
+const L = [];
+const J = (s) => { L.push(s); };
+J(`package com.oculus.jj.ui;`);
+J("");
+J("import java.io.File;");
+J("import javax.swing.*;");
+J("import javax.swing.border.EmptyBorder;");
+J("import java.awt.*;");
+J("import com.oculus.jj.config.AppPreferences;");
+J("import com.oculus.jj.model.DicomNode;");
+J("import com.oculus.jj.model.DicomNodeManager;");
+const code = L.join("\n");
+fs.writeFileSync(process.argv[2], code, "utf8");
+console.log(`wrote ${code.length} chars to ${process.argv[2]}`);
