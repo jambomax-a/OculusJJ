@@ -224,11 +224,11 @@ private JTabbedPane tabbedPane;
 
                 JComponent pane = ((JComponent) getClass().getDeclaredMethod(methodName).invoke(this));
 
-                tabbedPane.addTab(name, null, new JPanel(new FlowLayout(FlowLayout.LEFT)), name);
+                tabbedPane.addTab(name, null, pane, name);
 
             } catch (Exception e) {
 
-                tabbedPane.addTab(name, null, new JPanel(new FlowLayout(FlowLayout.LEFT)), name);
+                tabbedPane.addTab(name, null, pane, name);
 
             }
 
