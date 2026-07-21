@@ -31,6 +31,9 @@ import com.oculus.jj.model.DicomNode;
 
 
 import com.oculus.jj.model.DicomNodeManager;
+import javax.swing.table.DefaultTableModel;
+import com.oculus.jj.model.KeyBinding;
+import java.util.List;
 
 
 
@@ -1545,210 +1548,135 @@ private JTabbedPane tabbedPane;
 
 
     private JComponent createHotKeysPane() {
-
-
-
         JPanel pane = sectionBox("Hot Key Bindings");
 
+        // -- Table for displaying bindings (HOROS-20240407 Reference: DCMView.m actionForHotKey:) --
+        String[] columns = {"キー操作", "アクション名"};
+        DefaultTableModel tableModel = new DefaultTableModel(columns, 1) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
 
-
-        JTextArea displayArea = new JTextArea(8, 60);
-
-
-
-        displayArea.setEditable(false);
-
-
-
-        String jsonBindings = AppPreferences.getHotkeyBindingsJSON();
-
-
-
-        if (jsonBindings != null && !jsonBindings.isEmpty()) {
-
-
-
-            displayArea.setText(jsonBindings.length() > 200 ?
-
-
-
-                    "Bindings: JSON (" + jsonBindings.length() + " chars)" : jsonBindings);
-
-
-
-        } else {
-
-
-
-            displayArea.setText("(No hot keys configured)");
-
-
-
+        List<KeyBinding> bindings = AppPreferences.getHotkeyBindings();
+        for (KeyBinding b : bindings) {
+            Object[] row = { b.keyCombo, b.displayName };
+            tableModel.addRow(row);
         }
 
+        JTable bindingTable = new JTable(tableModel);
+        pane.add(new JScrollPane(bindingTable), BorderLayout.CENTER);
 
-
-        pane.add(new JScrollPane(displayArea));
-
-
-
-
-
-
-
-        addGap(pane);
-
-
-
-        JButton btnAdd = new JButton("Add Key Binding...");
-
-
-
-        JButton btnEdit = new JButton("Edit Selected...");
-
-
-
-        JButton btnRemove = new JButton("Remove Selected");
-
-
-
+        // -- Button area below the table (HOROS-20240407準拠: Add / Edit / Remove pattern) --
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
 
-
-
-
-
-
-
-        btnAdd.addActionListener(e -> {
-
-
-
-            String actionName = JOptionPane.showInputDialog(this,
-
-
-
-                    "Enter key binding (e.g. Ctrl+Shift+A):", "New Hot Key");
-
-
-
-            if (actionName != null && !actionName.isEmpty()) {
-
-
-
-                try {
-
-
-
-                    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-
-
-
-                    java.util.Map<String, Object> list =
-
-
-
-                            mapper.readValue(AppPreferences.getHotkeyBindingsJSON(), java.util.Map.class);
-
-
-
-                    list.put(actionName, true);
-
-
-
-                    AppPreferences.setHotkeyBindingsJSON(mapper.writeValueAsString(list));
-
-
-
-                } catch (Exception ex) {
-
-
-
-                    JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
-
-
-
-                }
-
-
-
+        JButton btnAdd = new JButton("Hot Key Add...");
+        JButton btnEdit = new JButton("Hot Key Edit...");
+        JButton btnRemove = new JButton("Hot Key Delete");
+        btnAdd.addActionListener(e -> startKeyCapture(this, bindingTable, tableModel, "New Binding"));
+        btnEdit.addActionListener(e -> {
+            if (bindingTable.getSelectedRow() >= 0) {
+                startKeyCapture(this, bindingTable, tableModel, "Editing: row " + (bindingTable.getSelectedRow() + 1));
+            } else {
+                JOptionPane.showMessageDialog(this, "Please select a key binding first.");
             }
-
-
-
+        });
+        btnRemove.addActionListener(e -> {
+            int selected = bindingTable.getSelectedRow();
+            if (selected >= 0) {
+                KeyBinding b = AppPreferences.getHotkeyBindings().get(selected);
+                String combo = b.keyCombo;
+                if (AppPreferences.removeHotkeyBinding(combo)) {
+                    tableModel.removeRow(selected);
+                    bindingTable.repaint();
+                } else {
+                    JOptionPane.showMessageDialog(this, "Failed to delete.");
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Please select a key binding first.");
+            }
         });
 
-
-
-
-
-
-
-        btnEdit.addActionListener(e -> { /* Stub */ });
-
-
-
-        btnRemove.addActionListener(e -> { /* Stub */ });
-
-
-
-
-
-
-
         btnRow.add(btnAdd);
-
-
-
         btnRow.add(btnEdit);
-
-
-
         btnRow.add(btnRemove);
-
-
-
-        pane.add(btnRow);
-
-
-
-
-
-
-
-        addSeparator(pane);
-
-
-
-        JCheckBox cbGlobal = new JCheckBox("Capture global hotkeys (requires native access)");
-
-
-
-        pane.add(cbGlobal);
-
-
-
-
-
-
+        pane.add(btnRow, BorderLayout.SOUTH);
 
         return wrapVertically(pane);
+    }
 
+    /** Key capture mode - 押されたキーをホットキーバインディングとして記録する */
+    private void startKeyCapture(final JComponent parent, final JTable bindingTable,
+            final DefaultTableModel tableModel, String title) {
+        final JPanel capturePanel = new JPanel(new BorderLayout(8, 0));
+        JLabel label = new JLabel("Press the key combination you want to assign. Press Esc to cancel.",
+                SwingConstants.CENTER);
+        label.setFont(label.getFont().deriveFont(13f));
+        JTextField displayField = new JTextField("Press keys...");
+        displayField.setEditable(false);
+        capturePanel.add(label, BorderLayout.NORTH);
+        capturePanel.add(displayField, BorderLayout.SOUTH);
 
+        JPanel wrapper = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.insets = new Insets(4, 4, 4, 4);
+        wrapper.add(capturePanel, gbc);
 
+        int result = JOptionPane.showConfirmDialog(parent, wrapper, "Key Capture - " + title,
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.CANCEL_OPTION || displayField.getText().equals("Press keys...")) {
+            return;
+        }
+
+        String combo = displayField.getText();
+        // Add to the AppPreferences and update table
+        List<KeyBinding> bindings = AppPreferences.getHotkeyBindings();
+        KeyBinding newEntry = new KeyBinding("New Binding", combo, -1);
+        boolean replaced = false;
+        for (int i = 0; i < bindings.size(); i++) {
+            if (bindings.get(i).keyCombo.equalsIgnoreCase(combo)) {
+                // Replace existing binding
+                if (!bindings.get(i).displayName.isEmpty()) {
+                    newEntry.displayName = bindings.get(i).displayName;
+                }
+                bindings.set(i, newEntry);
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            bindings.add(newEntry);
+        }
+        AppPreferences.setHotkeyBindings(bindings);
+
+        // Update the table display
+        DefaultTableModel tm2 = (DefaultTableModel) bindingTable.getModel();
+        int selectedRow = bindingTable.getSelectedRow();
+        if (selectedRow < 0 && !replaced && tm2.getRowCount() > 0) {
+            selectedRow = tm2.getRowCount() - 1;
+        }
+        // Insert at the position that was edited or append
+        boolean inserted = false;
+        int targetIdx = replaced ? bindingTable.getSelectedRow() : tm2.getRowCount();
+        for (int i = 0; i < bindings.size(); i++) {
+            if (bindings.get(i).keyCombo.equalsIgnoreCase(combo)) {
+                Object[] row = { bindings.get(i).keyCombo, bindings.get(i).displayName };
+                tm2.insertRow(Math.min(targetIdx, i), row);
+                inserted = true;
+                break;
+            }
+        }
+        // Rebuild table from AppPreferences to keep it consistent
+        tm2.setRowCount(0);
+        for (KeyBinding b : bindings) {
+            tm2.addRow(new Object[] { b.keyCombo, b.displayName });
+        }
     }
 
 
+// ===== PANE 6: Viewers (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m) =====
 
 
 
-
-
-
-
-
-
-    // ===== PANE 6: Viewers (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m) =====
 
 
 
