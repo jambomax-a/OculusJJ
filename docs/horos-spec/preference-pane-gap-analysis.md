@@ -1,4 +1,4 @@
-﻿# Preference Pane ギャップ分析レポート — HOROS-20240407 vs OculusJJ
+# Preference Pane ギャップ分析レポート — HOROS-20240407 vs OculusJJ
 
 > **作成日**: 2026-07-19  
 > **目的**: HOROS-20240407 の全 15 Preference Pane 仕様と OculusJJ 現行実装の差分を詳細に整理し、実装優先度を付与する。  
