@@ -166,6 +166,20 @@ public static final String KEY_ONDEMAND_SOURCE_LIST_JSON = "pacsOnDemandSourceLi
 
     public static final String KEY_SYNC_SERIES_BETWEEN_STUDIES = "viewers.syncSeriesBetweenStudies";
 
+    public static final String KEY_VIEWER_WINDOW_SIZE_MODE = "viewers.windowSizeMode";
+    public static final int DEFAULT_VIEWER_WINDOW_SIZE_MODE = 0;
+
+    public static final String KEY_MONITOR_INDEX = "viewers.monitorIndex";
+    public static final int DEFAULT_MONITOR_INDEX = 0;
+
+    public static final String KEY_SECONDARY_MONITOR_ENABLED = "viewers.secondaryMonitorEnabled";
+    public static final boolean DEFAULT_SECONDARY_MONITOR_ENABLED = false;
+
+    public static final String KEY_KEEP_CLUT_BARS_FOR_SECONDARY_CAPTURE = "viewers.keepCLUTBarsForSecondaryCapture";
+    public static final boolean DEFAULT_KEEP_CLUT_BARS = false;
+
+
+
 
 
     // === 3D Viewer preference keys ===
@@ -812,6 +826,56 @@ public static final String KEY_USERS_MANAGEMENT_JSON = "webUsersManagementJSON";
 
     }
 
+
+
+
+
+    public static int getViewerWindowSizeMode() {
+        return prefs.getInt(KEY_VIEWER_WINDOW_SIZE_MODE, DEFAULT_VIEWER_WINDOW_SIZE_MODE);
+    }
+
+    public static void setViewerWindowSizeMode(int mode) {
+        prefs.putInt(KEY_VIEWER_WINDOW_SIZE_MODE, mode);
+    }
+
+
+    public static String getDefaultViewerWindowSizesAsString() {
+        int mode = getViewerWindowSizeMode();
+        switch (mode) {
+            case 0: return "800x600";
+            case 1: return "1024x768";
+            case 2: return "1280x960";
+            case 3: return "1920x1080";
+            default: return "800x600";
+        }
+    }
+
+
+    public static int getMonitorIndex() {
+        return prefs.getInt(KEY_MONITOR_INDEX, DEFAULT_MONITOR_INDEX);
+    }
+
+    public static void setMonitorIndex(int index) {
+        prefs.putInt(KEY_MONITOR_INDEX, index);
+    }
+
+
+    public static boolean isSecondaryMonitorEnabled() {
+        return prefs.getBoolean(KEY_SECONDARY_MONITOR_ENABLED, DEFAULT_SECONDARY_MONITOR_ENABLED);
+    }
+
+    public static void setSecondaryMonitorEnabled(boolean enabled) {
+        prefs.putBoolean(KEY_SECONDARY_MONITOR_ENABLED, enabled);
+    }
+
+
+    public static boolean isKeepCLUTBarsForSecondCapture() {
+        return prefs.getBoolean(KEY_KEEP_CLUT_BARS_FOR_SECONDARY_CAPTURE, DEFAULT_KEEP_CLUT_BARS);
+    }
+
+    public static void setKeepCLUTBarsForSecondCapture(boolean keep) {
+        prefs.putBoolean(KEY_KEEP_CLUT_BARS_FOR_SECONDARY_CAPTURE, keep);
+    }
 
 
     // --- 3D Viewer ---

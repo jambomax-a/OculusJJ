@@ -1681,156 +1681,90 @@ private JTabbedPane tabbedPane;
 
 
     private JComponent createViewersPane() {
-
-
-
         JPanel pane = sectionBox("Default Viewer Settings");
 
-
-
+        // -- Default CLUT (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m - CLUT selection) --
         String[] cluts = {"CT-Body", "PET-Rainbow", "Gray Scale", "Brain", "Bone"};
-
-
-
         JComboBox<String> comboCLUT = new JComboBox<>(cluts);
-
-
-
         comboCLUT.setSelectedItem(AppPreferences.getDefaultCLUT());
-
-
-
         pane.add(makeRow("Default CLUT:", comboCLUT));
 
-
-
-
-
-
-
         addGap(pane);
 
-
-
+        // -- Default Opacity Table (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m - Opacity) --
         String[] opacityTables = {"Standard", "Custom 1", "Custom 2"};
-
-
-
         JComboBox<String> comboOpacity = new JComboBox<>(opacityTables);
-
-
-
         comboOpacity.setSelectedItem(AppPreferences.getDefaultOpacityTable());
-
-
-
         pane.add(makeRow("Default Opacity Table:", comboOpacity));
 
-
-
-
-
-
-
         addGap(pane);
 
-
-
+        // -- Synchronize Series Between Studies (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m) --
         JCheckBox cbSync = new JCheckBox(
-
-
-
                 "Synchronize Series Between Studies", AppPreferences.isSyncSeriesBetweenStudies());
-
-
-
         pane.add(makeToggleRow("", cbSync));
-
-
-
-
-
-
 
         addSeparator(pane);
 
-
-
+        // ===== Secondary Monitor Section (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m / MULTISCREENS) --
         JPanel secondaryPanel = sectionBox("Secondary Monitor");
 
-
-
-        JCheckBox cbMonitorEnabled = new JCheckBox("Enable Secondary Monitor", false);
-
-
-
+        JCheckBox cbMonitorEnabled = new JCheckBox("Enable Secondary Monitor", AppPreferences.isSecondaryMonitorEnabled());
         secondaryPanel.add(makeToggleRow("", cbMonitorEnabled));
-
-
-
-        secondaryPanel.add(new JLabel("(Content type selection to be added)"));
-
-
-
         pane.add(secondaryPanel);
 
+        // Monitor selection dropdown (HOROS-20240407 Reference: ViewerController.m 8762-8781)
+        JPanel monitorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JLabel lblMonitorIdx = new JLabel("Monitor Index:");
+        JSpinner spinnerMonitor = new JSpinner(new SpinnerNumberModel(AppPreferences.getMonitorIndex(), 0, 16, 1));
+        monitorPanel.add(lblMonitorIdx);
+        monitorPanel.add(spinnerMonitor);
+        pane.add(monitorPanel);
 
+        // Keep CLUT bars for second capture (HOROS-20240407 Reference: ViewerController.m 18879/18881)
+        JCheckBox cbKeepCLUT = new JCheckBox(
+                "Keep CLUT Bars on Second Capture", AppPreferences.isKeepCLUTBarsForSecondCapture());
+        pane.add(makeToggleRow("", cbKeepCLUT));
 
+        addSeparator(pane);
 
-
-
+        // -- Window Size Mode (HOROS-20240407 Reference: ViewerController.m 8787/8791 - WINDOWSIZEVIEWER) --
+        JPanel windowPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JLabel lblWinSize = new JLabel("Default Window Size:");
+        String[] sizePresets = {"800x600", "1024x768", "1280x960", "1920x1080"};
+        JComboBox<String> comboWinSize = new JComboBox<>(sizePresets);
+        int currentMode = AppPreferences.getViewerWindowSizeMode();
+        if (currentMode >= 0 && currentMode < sizePresets.length) {
+            comboWinSize.setSelectedIndex(currentMode);
+        }
+        windowPanel.add(lblWinSize);
+        windowPanel.add(comboWinSize);
+        pane.add(windowPanel);
 
         addGap(pane);
 
+        // -- Default Window Size (W x H) manual override - tied to AppPreferences via the Spinner --
+        JPanel sizeManual = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JLabel lblSizeX = new JLabel("Width:");
+        JSpinner spinnerWidth = new JSpinner(new SpinnerNumberModel(800, 256, 4096, 32));
+        sizeManual.add(lblSizeX);
+        sizeManual.add(spinnerWidth);
 
+        JLabel lblSizeY = new JLabel("Height:");
+        JSpinner spinnerHeight = new JSpinner(new SpinnerNumberModel(600, 256, 4096, 32));
+        sizeManual.add(lblSizeY);
+        sizeManual.add(spinnerHeight);
+        pane.add(sizeManual);
 
-        JPanel windowSize = makeRow("Default Window Size (W x H):",
+        addSeparator(pane);
 
-
-
-                new JSpinner(new SpinnerNumberModel(800, 256, 4096, 64)));
-
-
-
-        pane.add(windowSize);
-
-
-
-
-
-
-
+        // -- Default Alignment (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m) --
         JComboBox<String> comboAlignment = new JComboBox<>(new String[]{"Left-Aligned", "Right-Aligned"});
-
-
-
-        comboAlignment.setSelectedIndex(0);
-
-
-
-        addGap(pane);
-
-
-
+        comboAlignment.setSelectedIndex(AppPreferences.getViewerWindowSizeMode() == 1 ? 1 : 0);
         pane.add(makeRow("Default Alignment:", comboAlignment));
 
-
-
-
-
-
-
         return wrapVertically(pane);
-
-
-
     }
-
-
-
-
-
-
 
     // ===== PANE 7: 3D Viewer (HOROS-20240407 Reference: OSI3DPreferencePanePref.m) =====
 
