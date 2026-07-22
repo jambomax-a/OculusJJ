@@ -1687,6 +1687,12 @@ private JTabbedPane tabbedPane;
         String[] cluts = {"CT-Body", "PET-Rainbow", "Gray Scale", "Brain", "Bone"};
         JComboBox<String> comboCLUT = new JComboBox<>(cluts);
         comboCLUT.setSelectedItem(AppPreferences.getDefaultCLUT());
+        // Save CLUT selection back to AppPreferences on change (HOROS-20240407 Reference: real-time preference sync)
+        comboCLUT.addItemListener(e -> {
+            if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+                AppPreferences.setDefaultCLUT((String) comboCLUT.getSelectedItem());
+            }
+        });
         pane.add(makeRow("Default CLUT:", comboCLUT));
 
         addGap(pane);
@@ -1695,6 +1701,12 @@ private JTabbedPane tabbedPane;
         String[] opacityTables = {"Standard", "Custom 1", "Custom 2"};
         JComboBox<String> comboOpacity = new JComboBox<>(opacityTables);
         comboOpacity.setSelectedItem(AppPreferences.getDefaultOpacityTable());
+        // Save Opacity Table selection back to AppPreferences on change (HOROS-20240407 Reference: real-time preference sync)
+        comboOpacity.addItemListener(e -> {
+            if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+                AppPreferences.setDefaultOpacityTable((String) comboOpacity.getSelectedItem());
+            }
+        });
         pane.add(makeRow("Default Opacity Table:", comboOpacity));
 
         addGap(pane);
@@ -1702,6 +1714,10 @@ private JTabbedPane tabbedPane;
         // -- Synchronize Series Between Studies (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m) --
         JCheckBox cbSync = new JCheckBox(
                 "Synchronize Series Between Studies", AppPreferences.isSyncSeriesBetweenStudies());
+        // Save sync setting on change (HOROS-20240407 Reference: real-time preference sync)
+        cbSync.addItemListener(e -> {
+            AppPreferences.setSyncSeriesBetweenStudies(cbSync.isSelected());
+        });
         pane.add(makeToggleRow("", cbSync));
 
         addSeparator(pane);
@@ -1710,7 +1726,10 @@ private JTabbedPane tabbedPane;
         JPanel secondaryPanel = sectionBox("Secondary Monitor");
 
         JCheckBox cbMonitorEnabled = new JCheckBox("Enable Secondary Monitor", AppPreferences.isSecondaryMonitorEnabled());
-        secondaryPanel.add(makeToggleRow("", cbMonitorEnabled));
+        // Save monitor toggle on change (HOROS-20240407 Reference: real-time preference sync)
+        cbMonitorEnabled.addItemListener(e -> {
+            AppPreferences.setSecondaryMonitorEnabled(cbMonitorEnabled.isSelected());
+        });
         pane.add(secondaryPanel);
 
         // Monitor selection dropdown (HOROS-20240407 Reference: ViewerController.m 8762-8781)
@@ -1724,6 +1743,10 @@ private JTabbedPane tabbedPane;
         // Keep CLUT bars for second capture (HOROS-20240407 Reference: ViewerController.m 18879/18881)
         JCheckBox cbKeepCLUT = new JCheckBox(
                 "Keep CLUT Bars on Second Capture", AppPreferences.isKeepCLUTBarsForSecondCapture());
+        // Save keep-CLUT toggle on change (HOROS-20240407 Reference: real-time preference sync)
+        cbKeepCLUT.addItemListener(e -> {
+            AppPreferences.setKeepCLUTBarsForSecondCapture(cbKeepCLUT.isSelected());
+        });
         pane.add(makeToggleRow("", cbKeepCLUT));
 
         addSeparator(pane);
@@ -1737,6 +1760,13 @@ private JTabbedPane tabbedPane;
         if (currentMode >= 0 && currentMode < sizePresets.length) {
             comboWinSize.setSelectedIndex(currentMode);
         }
+        // Save window size mode on change (HOROS-20240407 Reference: real-time preference sync)
+        comboWinSize.addItemListener(e -> {
+            if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+                int idx = comboWinSize.getSelectedIndex();
+                AppPreferences.setViewerWindowSizeMode(idx);
+            }
+        });
         windowPanel.add(lblWinSize);
         windowPanel.add(comboWinSize);
         pane.add(windowPanel);
@@ -1761,6 +1791,12 @@ private JTabbedPane tabbedPane;
         // -- Default Alignment (HOROS-20240407 Reference: OSIViewerPreferencePanePref.m) --
         JComboBox<String> comboAlignment = new JComboBox<>(new String[]{"Left-Aligned", "Right-Aligned"});
         comboAlignment.setSelectedIndex(AppPreferences.getViewerWindowSizeMode() == 1 ? 1 : 0);
+        // Save alignment on change (HOROS-20240407 Reference: real-time preference sync)  
+        comboAlignment.addItemListener(e -> {
+            if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+                AppPreferences.setViewerWindowSizeMode(comboAlignment.getSelectedIndex());
+            }
+        });
         pane.add(makeRow("Default Alignment:", comboAlignment));
 
         return wrapVertically(pane);
