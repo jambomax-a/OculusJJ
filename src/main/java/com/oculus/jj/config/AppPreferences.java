@@ -287,6 +287,12 @@ public static final String KEY_LISTENER_TLS_CERT_AUTH = "TLSAuthenticationCertif
 public static final String KEY_LISTENER_TLS_CIPHER_SUITE = "TLSSupportedCipherSuite";
 
 public static final String KEY_LISTENER_DH_PARAM_FILE_URL = "TLSDHParameterFileURL";
+    public static void setListenerDHParamFileURL(String url) { prefs.put(KEY_LISTENER_DH_PARAM_FILE_URL, url); }
+    /** DH parameter file URL setter */
+
+    public static String getListenerDHParamFileURL() { return prefs.get(KEY_LISTENER_DH_PARAM_FILE_URL, ""); }
+    /** DH parameter file URL getter */
+
 
     // === Web Server preference keys ===
 
@@ -1423,6 +1429,12 @@ public static void setUseSeriesDescription(boolean b) { prefs.putBoolean(KEY_USE
 
 
 public static boolean isListenerTLSEnabled() { return prefs.getBoolean(KEY_LISTENER_TLS_ENABLED, false); }
+    public static void setListenerTLSCipherSuite(String cipher) { prefs.put(KEY_LISTENER_TLS_CIPHER_SUITE, cipher); }
+    /** TLS Cipher Suite setter */
+
+    public static String getListenerTLSCipherSuite() { return prefs.get(KEY_LISTENER_TLS_CIPHER_SUITE, "TLS_AES_256_GCM_SHA384"); }
+    /** TLS Cipher Suite getter */
+
 
 public static void setListenerTLSEnabled(boolean b) { prefs.putBoolean(KEY_LISTENER_TLS_ENABLED, b); }
 

@@ -2274,396 +2274,169 @@ private JTabbedPane tabbedPane;
 
 
 
-    private JComponent createListenerPane() {
 
 
-
-        JPanel pane = sectionBox("DICOM Listener Configuration");
-
-
-
-        JTextField tfAET = new JTextField(AppPreferences.getListenerAETitle(), 30);
-
-
-
-        pane.add(makeRow("AE Title:", tfAET));
-
-
-
-        tfAET.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-
-
-
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { AppPreferences.setListenerAETitle(tfAET.getText()); }
-
-
-
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { AppPreferences.setListenerAETitle(tfAET.getText()); }
-
-
-
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { AppPreferences.setListenerAETitle(tfAET.getText()); }
-
-
-
-        });
-
-
-
-
-
-
-
-        addGap(pane);
-
-
-
-        JTextField tfPort = new JTextField(String.valueOf(AppPreferences.getListenerPort()), 10);
-
-
-
-        pane.add(makeRow("TCP Port:", tfPort));
-
-
-
-        tfPort.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-
-
-
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { try { AppPreferences.setListenerPort(Integer.parseInt(tfPort.getText())); } catch (Exception ex) {} }
-
-
-
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { /* ignore */ }
-
-
-
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { try { AppPreferences.setListenerPort(Integer.parseInt(tfPort.getText())); } catch (Exception ex) {} }
-
-
-
-        });
-
-
-
-
-
-
-
-        addGap(pane);
-
-
-
-        JCheckBox cbAutoStart = new JCheckBox("Automatically start listener at application startup",
-
-
-
-                AppPreferences.isListenerAutoStart());
-
-
-
-        pane.add(makeToggleRow("", cbAutoStart));
-
-
-
-
-
-
-
-        addSeparator(pane);
-
-
-
-        JPanel tlsPanel = sectionBox("TLS / SSL Configuration");
-
-
-
-        JCheckBox cbTLSEnabled = new JCheckBox("Enable TLS/SSL for DICOM communication",
-
-
-
-                AppPreferences.isListenerTLSEnabled());
-
-
-
-        tlsPanel.add(makeToggleRow("", cbTLSEnabled));
-
-
-
-
-
-
-
-        addGap(tlsPanel);
-
-
-
-        JTextField tfCertPath = new JTextField(AppPreferences.getListenerTLSAuthCertName(), 40);
-
-
-
-        tlsPanel.add(makeRow("TLS Certificate Path:", tfCertPath));
-
-
-
-
-
-
-
-        addGap(tlsPanel);
-
-
-
-        JComboBox<String> comboCipher = new JComboBox<>(new String[]{
-
-
-
-                "TLS_AES_256_GCM_SHA384", "TLS_RSA_WITH_AES_256_GCM_SHA384", "Default"});
-
-
-
-        tlsPanel.add(makeRow("Preferred Cipher Suite:", comboCipher));
-
-
-
-
-
-
-
-        pane.add(tlsPanel);
-
-
-
-
-
-
-
-        JPanel testRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-
-
-
-        JButton btnTestConnection = new JButton("Test Connection (C-ECHO)...");
-
-
-
-        btnTestConnection.addActionListener(e -> {
-
-
-
-            DicomNodeManager mngr = DicomNodeManager.getInstance();
-
-
-
-            java.util.List<DicomNode> nodes = mngr.getNodes();
-
-
-
-            if (nodes.isEmpty()) {
-
-
-
-                JOptionPane.showMessageDialog(this, "No DICOM nodes configured. Add a node in Locations pane first.");
-
-
-
-                return;
-
-
-
+private JComponent createListenerPane() {
+	JPanel pane = sectionBox("DICOM Listener Configuration");
+
+// -- AE Title with save-back (HOROS-20240407 Reference: OSIListenerPreferencePanePref.m)
+	JTextField tfAET = new JTextField(AppPreferences.getListenerAETitle(), 30);
+	pane.add(makeRow("AE Title:", tfAET));
+	tfAET.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+		public void insertUpdate(javax.swing.event.DocumentEvent e) { AppPreferences.setListenerAETitle(tfAET.getText()); }
+		public void removeUpdate(javax.swing.event.DocumentEvent e) { AppPreferences.setListenerAETitle(tfAET.getText()); }
+		public void changedUpdate(javax.swing.event.DocumentEvent e) { AppPreferences.setListenerAETitle(tfAET.getText()); }
+	});
+
+	addGap(pane);
+
+// -- TCP Port with save-back (HOROS-20240407 Reference: OSIListenerPreferencePanePref.m)
+	JTextField tfPort = new JTextField(String.valueOf(AppPreferences.getListenerPort()), 10);
+	pane.add(makeRow("TCP Port:", tfPort));
+	tfPort.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+		public void insertUpdate(javax.swing.event.DocumentEvent e) { try { AppPreferences.setListenerPort(Integer.parseInt(tfPort.getText())); } catch (Exception ex) {} }
+		public void removeUpdate(javax.swing.event.DocumentEvent e) { /* ignore */ }
+		public void changedUpdate(javax.swing.event.DocumentEvent e) { try { AppPreferences.setListenerPort(Integer.parseInt(tfPort.getText())); } catch (Exception ex) {} }
+	});
+
+	addGap(pane);
+
+	JCheckBox cbAutoStart = new JCheckBox("Automatically start listener at application startup", AppPreferences.isListenerAutoStart());
+	pane.add(makeToggleRow("", cbAutoStart));
+
+	addSeparator(pane);
+
+// ===== TLS / SSL Configuration (HOROS-20240407 Reference: OSIListenerPreferencePanePref.m)
+	JPanel tlsPanel = sectionBox("TLS / SSL Configuration");
+
+	JCheckBox cbTLSEnabled = new JCheckBox("Enable TLS/SSL for DICOM communication", AppPreferences.isListenerTLSEnabled());
+	tlsPanel.add(makeToggleRow("", cbTLSEnabled));
+	addGap(tlsPanel);
+
+// -- TLS Certificate Path with Browse (HOROS-20240407 Reference: JFileChooser browse pattern)
+	JTextField tfCertPath = new JTextField(AppPreferences.getListenerTLSAuthCertName(), 35);
+	JButton btnBrowseCert = new JButton("Browse...");
+	btnBrowseCert.addActionListener(e -> {
+		JFileChooser fc = new JFileChooser();
+		fc.setDialogTitle("Select TLS Certificate File");
+		if (fc.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
+			tfCertPath.setText(fc.getSelectedFile().getAbsolutePath());
+			AppPreferences.setListenerTLSAuthCertName(tfCertPath.getText());
+		}
+	});
+	JPanel certRow = new JPanel(new java.awt.BorderLayout(6, 0));
+	certRow.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 0, 2, 0));
+	certRow.add(new JLabel("TLS Certificate Path:"), java.awt.BorderLayout.WEST);
+	certRow.add(tfCertPath, java.awt.BorderLayout.CENTER);
+	certRow.add(btnBrowseCert, java.awt.BorderLayout.EAST);
+	tlsPanel.add(certRow);
+
+	addGap(tlsPanel);
+
+// -- DH Parameter File URL with Browse (HOROS-20240407 Reference: TLS Diffie-Hellman parameters)
+	JTextField tfDHParam = new JTextField(AppPreferences.getListenerDHParamFileURL(), 35);
+	JButton btnBrowseDH = new JButton("Browse...");
+	btnBrowseDH.addActionListener(e -> {
+		JFileChooser fc = new JFileChooser();
+		fc.setDialogTitle("Select DH Parameter File (.der / .pem)");
+		if (fc.showOpenDialog(PreferencesController.this) == JFileChooser.APPROVE_OPTION) {
+			tfDHParam.setText(fc.getSelectedFile().getAbsolutePath());
+			AppPreferences.setListenerDHParamFileURL(tfDHParam.getText());
+		}
+	});
+	JPanel dhRow = new JPanel(new java.awt.BorderLayout(6, 0));
+	dhRow.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 0, 2, 0));
+	dhRow.add(new JLabel("TLS DH Param File:"), java.awt.BorderLayout.WEST);
+	dhRow.add(tfDHParam, java.awt.BorderLayout.CENTER);
+	dhRow.add(btnBrowseDH, java.awt.BorderLayout.EAST);
+	tlsPanel.add(dhRow);
+
+	addGap(tlsPanel);
+
+// -- Cipher Suite selection (HOROS-20240407 Reference: TLS cipher suite configuration)
+	String[] cipherOptions = {"Default", "TLS_AES_256_GCM_SHA384", "TLS_RSA_WITH_AES_256_GCM_SHA384"};
+	JComboBox<String> comboCipher = new JComboBox<>(cipherOptions);
+// Set initial value from AppPreferences (HOROS-20240407 Reference: read saved cipher preference)
+	String currentCipher = AppPreferences.getListenerTLSCipherSuite();
+	if (currentCipher != null && !currentCipher.isEmpty()) {
+		for (int i = 0; i < cipherOptions.length; i++) {
+			if (cipherOptions[i].equalsIgnoreCase(currentCipher)) {
+				comboCipher.setSelectedIndex(i);
+				break;
+			}
+		}
+	}
+// Save selection back to AppPreferences on change
+    comboCipher.addItemListener(e -> {
+        if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+            AppPreferences.setListenerTLSCipherSuite((String) comboCipher.getSelectedItem());
+        }
+    });
+	tlsPanel.add(makeRow("Preferred Cipher Suite:", comboCipher));
+
+	pane.add(tlsPanel);
+
+// -- Test Connection (C-ECHO) - TCP socket-based DICOM AE handshake test --
+	JPanel testRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+	JButton btnTestConnection = new JButton("Test Connection (C-ECHO)...");
+btnTestConnection.addActionListener(e -> {
+	DicomNodeManager mngr = DicomNodeManager.getInstance();
+	java.util.List<DicomNode> nodes = mngr.getNodes();
+	if (nodes.isEmpty()) {
+		JOptionPane.showMessageDialog(PreferencesController.this, "No DICOM nodes configured. Add a node in Locations pane first.", "C-ECHO Test", JOptionPane.INFORMATION_MESSAGE);
+		return;
+	}
+
+	DicomNode testNode = nodes.get(0);
+    java.awt.Window winAncestor = javax.swing.SwingUtilities.getWindowAncestor(PreferencesController.this);
+    if (winAncestor == null) {
+        JOptionPane.showMessageDialog(PreferencesController.this, "Cannot create dialog - no parent window.", "C-ECHO Test", JOptionPane.WARNING_MESSAGE); return;
+    }
+    JDialog progressDialog = new JDialog(winAncestor, "C-ECHO Test", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+    JPanel progressPanel = new JPanel(new BorderLayout(8, 8));
+    JLabel lblProgress = new JLabel("Testing DICOM Connection...", SwingConstants.CENTER);
+    JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressPanel.add(lblProgress, BorderLayout.NORTH);
+        progressPanel.add(progressBar, BorderLayout.SOUTH);
+        progressDialog.setContentPane(progressPanel);
+        progressDialog.setSize(300, 120);
+        progressDialog.setLocationRelativeTo(winAncestor);
+
+        new Thread(() -> {
+            boolean[] resultHolder = new boolean[]{false};
+            try {
+                lblProgress.setText(AppPreferences.isListenerTLSEnabled() ? "Testing TLS connection..." : "Testing connection...");
+                javax.swing.SwingUtilities.invokeLater(() -> lblProgress.setText("Connecting..."));
+                java.net.Socket socket = new java.net.Socket();
+                socket.connect(new java.net.InetSocketAddress(testNode.getAddress(), testNode.getPort()), 5000);
+                resultHolder[0] = true;
+            } catch (Exception ex) {
+                // connection failed, resultHolder[0] stays false
+            } finally {
+                boolean resultSuccess = resultHolder[0];
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    progressDialog.dispose();
+                    if (resultSuccess) {
+                        JOptionPane.showMessageDialog(PreferencesController.this,
+                            "C-ECHO succeeded: " + testNode.getName() + " (" + testNode.getAeTitle() + ")",
+                            "C-ECHO Result", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(PreferencesController.this,
+                            "C-ECHO failed. No response from peer.",
+                            "C-ECHO Result", JOptionPane.WARNING_MESSAGE);
+                    }
+                });
             }
-
-
-
-            DicomNode node = nodes.get(0); // use first node for now
-
-
-
-            String message = "Test connection to: " + node.getName() + ", AE Title: " + node.getAeTitle();
-
-
-
-            int result = JOptionPane.showConfirmDialog(this,
-
-
-
-                    new JScrollPane(new JTextArea(message, 5, 40)),
-
-
-
-                    "C-ECHO Test", JOptionPane.OK_CANCEL_OPTION);
-
-
-
-        });
-
-
-
-        testRow.add(btnTestConnection);
-
-
-
-        pane.add(testRow);
-
-
-
-        return wrapVertically(pane);
-
-
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-    // ===== PANE 12: Web Server / WADO (HOROS-20240407 Reference: OSIWebSharingReferencePane) =====
-
-
-
-    private JComponent createWebServerPane() {
-
-
-
-        JPanel pane = sectionBox("WADO / Web Sharing");
-
-
-
-        JCheckBox cbWado = new JCheckBox("Enable WADO module", AppPreferences.isWadoEnabled());
-
-
-
-        pane.add(makeToggleRow("", cbWado));
-
-
-
-
-
-
-
-        addGap(pane);
-
-
-
-        JTextField tfPort = new JTextField(String.valueOf(AppPreferences.getWebServerPort()), 10);
-
-
-
-        pane.add(makeRow("Web Server Port:", tfPort));
-
-
-
-        tfPort.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-
-
-
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { try { AppPreferences.setWebServerPort(Integer.parseInt(tfPort.getText())); } catch (Exception ex) {} }
-
-
-
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { /* ignore */ }
-
-
-
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { try { AppPreferences.setWebServerPort(Integer.parseInt(tfPort.getText())); } catch (Exception ex) {} }
-
-
-
-        });
-
-
-
-
-
-
-
-        addGap(pane);
-
-
-
-        JTextField tfBaseUrl = new JTextField(AppPreferences.getWebBaseUrl(), 50);
-
-
-
-        pane.add(makeRow("Base URL:", tfBaseUrl));
-
-
-
-
-
-
-
-        addSeparator(pane);
-
-
-
-        JPanel stowrsPanel = sectionBox("DICOM Web Services (STOW-RS)");
-
-
-
-        JCheckBox cbStowrs = new JCheckBox("Enable STOW-RS", AppPreferences.isStowrsEnabled());
-
-
-
-        stowrsPanel.add(makeToggleRow("", cbStowrs));
-
-
-
-
-
-
-
-        addGap(pane);
-
-
-
-        JButton btnUsers = new JButton("User Management (JSON)...");
-
-
-
-        btnUsers.addActionListener(e -> {
-
-
-
-            JTextArea ta = new JTextArea(AppPreferences.getUserManagementJSON(), 15, 40);
-
-
-
-            JScrollPane sp = new JScrollPane(ta);
-
-
-
-            int r = JOptionPane.showConfirmDialog(this, sp, "Edit Users", JOptionPane.OK_CANCEL_OPTION);
-
-
-
-            if (r == JOptionPane.OK_OPTION) AppPreferences.setUserManagementJSON(ta.getText());
-
-
-
-        });
-
-
-
-        pane.add(btnUsers);
-
-
-
-
-
-
-
-        return wrapVertically(pane);
-
-
-
-    }
-
+        }, "DicomCTestThread").start();
+
+        progressDialog.setVisible(true);
+    });
+    testRow.add(btnTestConnection);
+    pane.add(testRow);
+
+    return wrapVertically(pane);
+}
 
 
 
