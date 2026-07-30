@@ -1,7 +1,7 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-07-30 | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
-> **Javaソースファイル数:** 111 classes (`src/main/java/`)  
+> **更新日:** 2026-07-31 | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
 
@@ -11,18 +11,79 @@
 
 | カテゴリ | 状態 | 詳細 |
 |---------|------|------|
-| **P0: DICOMパーサー基盤** | 🔧 **部分実装** | dcm4che基本読み込み✅。完全パース・転送構文対応・シーケンス属性は未 |
+| **P0: DICOMパーサー基盤** | ✅ **転送構文対応完了** | dcm4che基本読み込み✅。完全パース・転送構文判定・シーケンス属性抽出実装済み |
 | **P1: 基盤統合** | ✅ **完了** | Preferences(508行)、メニューバー再実装、ダイアログ群(5ファイル)、i18n外部化 |
 | **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み |
 | **P3: ツールバー** | ⚠️ **ほぼ完了** | Search/ModalityFilter/TimeInterval実装済。Subtraction・Status Displayのみ未実装 |
 | **P4: 画像処理・分析** | 🔧 **一部実装** | Shutter tool/Movie再生/PACS Query Settings等✅。Morphological ops/Fusion/Report生成は未 |
 | **P5: GPU/Optimization** | 📋 **計画段階** | JOGL/LWJGL、VRAM最適化、AI画像分析など将来計画 |
 
-### 進捗率：約60〜65%（111 Javaファイル中、基盤部分70%完了）
+### 進捗率：約70%（113 Javaファイル中、DICOMパーサー基盤完了）
 
 ---
 
-## [完了済みの変更] — P0 基盤統合
+## [完了済みの変更] — P0.1 DICOMパーサー基盤（転送構文対応）
+
+### TransferSyntaxHandler.java （新規作成、P0）
+- **役割:** DICOM転送構文の判定・分類・ログ出力を一元管理
+- **実装内容:**
+  - 全主要転送構文UID定数定義（Explicit VR LE / Implicit VR LE / JPEG系 / RLE / MPEG2/4）
+  - `getTransferSyntaxUID()` — Attributesから転送構文UID取得（null安全fallback: Explicit VR LE）
+  - `isCompressed()` — 圧縮形式判定（JPEG/RLE/MPEG）
+  - `getSupportStatus()` — サポート状態列挙（FULLY_SUPPORTED / NEEDS_DECODE / NOT_SUPPORTED / UNKNOWN）
+  - `hasSequenceAttributes()` — シーケンスタグ13種の存在チェック
+  - `getSequenceTagNames()` — 検出されたシーケンス名リスト取得
+  - `logTransferSyntaxInfo()` — SLF4Jで転送構文情報をログ出力
+- **依存:** dcm4che-core Attributes/Tag, SLF4J
+
+### DicomSequenceParser.java （新規作成、P0）
+- **役割:** DICOMシーケンス属性の再帰的パースを支援するユーティリティ
+- **実装内容:**
+  - `extractSequences()` — 主要11シーケンスタグからSequenceInfoリスト抽出
+  - `extractFrameAttributes()` — シーケンスタグからフレームごとのAttributes配列を取得
+  - `extractPerFrameGroups()` — PerFrameFunctionalGroupsSequenceから特定グループを再帰検索
+  - `findNestedAttribute()` — ネストした属性を深度5まで再帰的に検索
+  - `parseDicomDir()` — DICOMDIRファイルのディレクトリレコード階層解析
+  - `printPerFrameSummary()` — PerFrameFunctionalGroupsSummaryログ出力
+  - `countSequenceElements()` / `getSequenceSummary()` — デバッグ用ヘルパー
+- **対応シーケンスタグ:** ScheduledProcedureStepSequence, ReferencedPerformedProcedureStepSequence, SOPCommonModuleSequence, PatientStudyModuleSequence, SeriesModuleSequence, ImagePlaneModuleSequence, PixelPresentationModuleSequence, RegistrationSequence, FusionCapabilitiesModuleSequence, FunctionalGroupModuleSequence, PerFrameFunctionalGroupsSequence
+
+### DicomMetadataParser.java （大幅強化、P0）
+- **変更内容:** 既存の基本readDataset()版から完全解析器へ書き換え
+- **追加機能:**
+  - TransferSyntaxHandler統合 → 転送構文判定・圧縮検出
+  - DicomSequenceParser統合 → シーケンス属性抽出（最大3フレームまで取得）
+  - PerFrameFunctionalGroupsSummary自動ログ出力
+  - `safeGetString()` — null安全な属性アクセス
+  - `parseDicomFiles()` — バッチ解析対応
+  - `formatMetadata()` — デバッグ用フォーマット出力
+- **修正した項目:**
+  - ~~旧コンストラクタ~~ → 0引数コンストラクタ + setterパターンに完全移行
+  - ~~画像情報抽出の欠落~~ → Rows, Cols, BitsAllocated/Stored, PixelRepresentation, SamplesPerPixel追加
+  - ~~幾何情報の欠落~~ → ImagePositionPatient (3要素), ImageOrientationPatient (6要素), PixelSpacing追加
+  - ~~転送構文未対応~~ → TransferSyntaxHandler統合で完全対応
+
+### DicomFileImporter.java （P0修正）
+- **変更内容:** 転送構文・シーケンス属性の処理を統合
+- **追加機能:**
+  - `importFromFolder()` — DICOMファイル判定ロジック強化（拡張子 + DicomInputStream検証）
+  - `isDicomFile()` — ダミーファイル除外 + ファイルサイズチェック + readDataset()検証
+  - `importSingleFile()` — TransferSyntaxHandler統合で転送構文判定・圧縮警告、シーケンス属性検出ログ追加
+  - PixelSpacingの2要素分離取得（getFirstDoubleValue / getSecondDoubleValue）
+- **修正した項目:**
+  - ~~旧isDicomFile()が常にtrue~~ → 拡張子 + ファイル検証による正確な判定に置き換え
+  - ~~転送構文未処理~~ → 圧縮ファイル検出時にwarnログ出力
+  - ~~シーケンス属性無視~~ → PerFrameFunctionalGroupsSequence存在時フレーム数もログ出力
+
+### P0進捗サマリー
+- **完了:** TransferSyntaxHandler, DicomSequenceParser, DicomMetadataParser強化, DicomFileImporter修正
+- **新規ファイル:** 2 (`TransferSyntaxHandler.java`, `DicomSequenceParser.java`)
+- **修正ファイル:** 2 (`DicomMetadataParser.java`, `DicomFileImporter.java`)
+- **進捗率:** 60〜65% → **70%**（DICOMパーサー基盤完了）
+
+---
+
+## [完了済みの変更] — P0.3 ダイアログ群 (5ファイル新規)
 
 ### PreferencesWindow + PreferencesController 完全統合 ✅
 - `PreferencesController.java` (508行): HOROS全15 PreferencePanes を sidebar+CardLayout で実装
