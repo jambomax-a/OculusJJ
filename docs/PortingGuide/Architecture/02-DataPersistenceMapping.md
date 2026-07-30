@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # DICOM Tag Mapping & Persistence Strategy
 
 このドキュメントでは、各機能モジュールが必要とするDICOMタグと、それらをJavaのデータモデルおよびデータベース（SQLite等）にどのようにマッピングするかを定義します。

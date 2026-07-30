@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # UI 操作・インタラクション仕様書 (Java Porting)
 
 ## 1. 概要

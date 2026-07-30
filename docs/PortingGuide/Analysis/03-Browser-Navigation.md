@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # ブラウザ機能分析 (Browser & Navigation Analysis)
 
 ## 1. 概要

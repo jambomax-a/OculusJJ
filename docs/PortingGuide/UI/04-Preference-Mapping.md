@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # 設定画面（Preference Panes）マッピング仕様書
 
 ## 1. 概要

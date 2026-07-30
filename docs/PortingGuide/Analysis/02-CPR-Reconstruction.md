@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # CPR 再構成機能 (Coronal Pre-Reconstruction)
 
 CPR（Coronal Pre-Reconstruction）は、マルチスライスデータを統合し、断面方向に再投影することで2Dイメージを生成する技術。OculusJJ においてはこの機能の正確な再現と高速化が重要な移植目標となる。

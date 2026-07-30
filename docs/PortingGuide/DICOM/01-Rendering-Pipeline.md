@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # DICOM レンダリング・パイプライン実装仕様書 (Java Porting)
 
 ## 1. 概要

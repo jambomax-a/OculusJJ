@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # 同期エンジン分析 (Sync Engine Analysis)
 
 ## 1. 概要

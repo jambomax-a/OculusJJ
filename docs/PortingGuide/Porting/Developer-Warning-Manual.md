@@ -1,3 +1,10 @@
+# OculusJJ Porting Guide
+
+---
+
+**最終更新日:** 2026-07-30
+
+---
 # 開発者向け警告マニュアル (Developer's Warning Manual)
 
 ## ⚠ はじめに
