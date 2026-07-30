@@ -105,7 +105,7 @@ public class DicomFileImporter {
         // DicomInputStream でパース可能か確認（先頭バイトチェック）
         try (DicomInputStream dis = new DicomInputStream(path.toFile())) {
             Attributes attrs = dis.readDataset();
-            if (attrs != null && attrs.hasElement(org.dcm4che3.data.Tag.SOPClassUID)) {
+            if (attrs != null && attrs.contains(0x00080016)) {
                 return true;
             }
         } catch (Exception e) {
@@ -123,7 +123,7 @@ public class DicomFileImporter {
             // dcm4che-coreが暗黙的VRでもデコード済みのAttributesを返す
             Attributes attrs = dis.readDataset();
 
-            if (attrs == null || !attrs.hasElement(org.dcm4che3.data.Tag.SOPInstanceUID)) {
+            if (attrs == null || !attrs.contains(0x00080018)) {
                 logger.warn("無効なDICOMファイル: {}", pathStr);
                 return null;
             }
@@ -141,17 +141,17 @@ public class DicomFileImporter {
                 logger.info("シーケンス属性検出 [{}]: {}", pathStr, sequenceNames);
 
                 // PerFrameFunctionalGroupsSequence の場合、フレーム数もログ出力
-                if (attrs.hasElement(org.dcm4che3.data.Tag.PerFrameFunctionalGroupsSequence)) {
+                if (attrs.contains(0x52009230)) {
                     int frameCount = DicomSequenceParser.countSequenceElements(
-                        attrs, org.dcm4che3.data.Tag.PerFrameFunctionalGroupsSequence);
+                        attrs, 0x52009230);
                     logger.info("  PerFrameFunctionalGroups: {} frames", frameCount);
                 }
             }
 
             // ===== 基本属性抽出 =====
-            String studyUID = attrs.getString(org.dcm4che3.data.Tag.StudyInstanceUID);
-            String seriesUID = attrs.getString(org.dcm4che3.data.Tag.SeriesInstanceUID);
-            String instanceUID = attrs.getString(org.dcm4che3.data.Tag.SOPInstanceUID);
+            String studyUID = attrs.getString(0x0020000D);
+            String seriesUID = attrs.getString(0x00200011);
+            String instanceUID = attrs.getString(0x00080018);
 
             if (studyUID == null || seriesUID == null || instanceUID == null) {
                 logger.warn("必須属性が不足: {} - Study={}, Series={}, Instance={}", pathStr, studyUID, seriesUID, instanceUID);
@@ -166,50 +166,48 @@ public class DicomFileImporter {
             image.setSopInstanceUID(instanceUID);
 
             // HOROS準拠メタデータ抽出
-            image.setPatientName(attrs.getString(org.dcm4che3.data.Tag.PatientName));
-            image.setStudyDate(attrs.getDate(org.dcm4che3.data.Tag.StudyDate));
-            image.setSeriesDate(attrs.getDate(org.dcm4che3.data.Tag.SeriesDate));
-            image.setAcquisitionDate(attrs.getDate(org.dcm4che3.data.Tag.AcquisitionDate));
-            image.setManufacturerModelString(attrs.getString(org.dcm4che3.data.Tag.ManufacturerModelName));
-            image.setDeviceSerialNumber(attrs.getString(org.dcm4che3.data.Tag.DeviceSerialNumber));
+            image.setPatientName(attrs.getString(0x00100010));
+            image.setStudyDate(attrs.getDate(0x00080020));
+            image.setSeriesDate(attrs.getDate(0x00080021));
+            image.setAcquisitionDate(attrs.getDate(0x00080022));
+            image.setManufacturerModelString(attrs.getString(0x00081090));
+            image.setDeviceSerialNumber(attrs.getString(0x0008103E));
 
             // 画像パラメータ
-            image.setHeight(attrs.getInt(org.dcm4che3.data.Tag.Rows, 0));
-            image.setWidth(attrs.getInt(org.dcm4che3.data.Tag.Columns, 0));
-            image.setWindowWidth((double) attrs.getFloat(org.dcm4che3.data.Tag.WindowWidth, 0.0f));
-            image.setWindowLevel((double) attrs.getFloat(org.dcm4che3.data.Tag.WindowCenter, 0.0f));
+            image.setHeight(attrs.getInt(0x00280010, 0));
+            image.setWidth(attrs.getInt(0x00280011, 0));
+            image.setWindowWidth((double) attrs.getFloat(0x00281051, 0.0f));
+            image.setWindowLevel((double) attrs.getFloat(0x00281050, 0.0f));
 
             // モダリティ固有メタデータ（CT / MR / US）
-            String modality = attrs.getString(org.dcm4che3.data.Tag.Modality);
+            String modality = attrs.getString(0x00080060);
             image.setModality(modality);
-            image.setFileType(attrs.getString(org.dcm4che3.data.Tag.ImageType));
+            image.setFileType(attrs.getString(0x00080008));
 
             if (modality != null) {
                 switch (modality.toUpperCase()) {
                     case "CT":
-                        image.setSliceThickness(attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0));
-                        image.setSpacingBetweenSlices(attrs.getDouble(org.dcm4che3.data.Tag.SpacingBetweenSlices, 0.0));
-                        image.setPixelSpacingX(attrs.getDouble(
-                            getFirstDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing), 0.0));
-                        image.setPixelSpacingY(attrs.getDouble(
-                            getSecondDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing), 0.0));
+                        image.setSliceThickness(attrs.getDouble(0x00180050, 0.0));
+                        image.setSpacingBetweenSlices(attrs.getDouble(0x00180088, 0.0));
+                        image.setPixelSpacingX((double) getFirstDoubleValue(attrs, 0x00280030));
+                        image.setPixelSpacingY((double) getSecondDoubleValue(attrs, 0x00280030));
                         break;
                     case "MR":
-                        image.setSliceThickness(attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0));
-                        image.setSpacingBetweenSlices(attrs.getDouble(org.dcm4che3.data.Tag.SpacingBetweenSlices, 0.0));
-                        image.setPixelSpacingX((double) getFirstDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing));
-                        image.setPixelSpacingY((double) getSecondDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing));
+                        image.setSliceThickness(attrs.getDouble(0x00180050, 0.0));
+                        image.setSpacingBetweenSlices(attrs.getDouble(0x00180088, 0.0));
+                        image.setPixelSpacingX((double) getFirstDoubleValue(attrs, 0x00280030));
+                        image.setPixelSpacingY((double) getSecondDoubleValue(attrs, 0x00280030));
                         break;
                     case "US":
-                        image.setDynamicRange(attrs.getString(org.dcm4che3.data.Tag.DynamicRange));
-                        image.setFrequency(attrs.getString(org.dcm4che3.data.Tag.TransducerFrequency));
+                        image.setDynamicRange(attrs.getString(0x00182010));
+                        image.setFrequency(attrs.getString(0x00182040));
                         break;
                 }
             }
 
             // ===== PixelData長さの記録（デバッグ用） =====
-            long pixelDataLen = attrs.getBytes(org.dcm4che3.data.Tag.PixelData) != null
-                    ? attrs.getBytes(org.dcm4che3.data.Tag.PixelData).length : 0L;
+            long pixelDataLen = attrs.getBytes(0x7FE00010) != null
+                    ? attrs.getBytes(0x7FE00010).length : 0L;
             logger.debug("PixelData Length: {} bytes [{}]", pixelDataLen, pathStr);
 
             // ===== データベース保存 =====

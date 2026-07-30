@@ -252,8 +252,8 @@ public class LocalDicomRepository implements DicomRepository {
     }
 
     private String generateInternalPatientUID(Attributes attrs) {
-        String patientName = cleanString(attrs.getString(org.dcm4che3.data.Tag.PatientName));
-        String patientID = cleanString(attrs.getString(org.dcm4che3.data.Tag.PatientID));
+        String patientName = cleanString(attrs.getString(0x00100010)); // PatientName
+        String patientID = cleanString(attrs.getString(0x00100020)); // PatientID
         String dob = attrs.getString(0x00100010);
 
         if (patientName != null && patientID != null) {
@@ -280,10 +280,10 @@ public class LocalDicomRepository implements DicomRepository {
             Attributes attrs = dis.readDataset();
             // ... existing code ...
 
-            String studyUID = attrs.getString(org.dcm4che3.data.Tag.StudyInstanceUID);
+            String studyUID = attrs.getString(0x0020000D); // StudyInstanceUID
 
-            String seriesUID = attrs.getString(org.dcm4che3.data.Tag.SeriesInstanceUID);
-            String instanceUID = attrs.getString(org.dcm4che3.data.Tag.SOPInstanceUID);
+            String seriesUID = attrs.getString(0x00200011); // SeriesInstanceUID
+            String instanceUID = attrs.getString(0x00080018); // SOPInstanceUID
 
             if (studyUID == null || seriesUID == null || instanceUID == null) {
                 return null;
@@ -295,19 +295,19 @@ public class LocalDicomRepository implements DicomRepository {
             image.setSeriesInstanceUID(seriesUID);
             image.setSopInstanceUID(instanceUID);
             // 位置情報などの追加抽出
-            String ipp = attrs.getString(org.dcm4che3.data.Tag.ImagePositionPatient);
+            String ipp = attrs.getString(0x00200032); // ImagePositionPatient
             image.setImagePositionPatient(ipp);
 
             // 画像のサイズとウィンドウ情報の抽出
-            if (attrs.contains(org.dcm4che3.data.Tag.Rows) && attrs.contains(org.dcm4che3.data.Tag.Columns)) {
-                image.setHeight(attrs.getInt(org.dcm4che3.data.Tag.Rows, -1));
-                image.setWidth(attrs.getInt(org.dcm4che3.data.Tag.Columns, -1));
+            if (attrs.contains(0x00280011) && attrs.contains(0x00280010)) { // Rows, Columns
+                image.setHeight(attrs.getInt(0x00280011, -1)); // Rows
+                image.setWidth(attrs.getInt(0x00280010, -1)); // Columns
             }
-            if (attrs.contains(org.dcm4che3.data.Tag.WindowCenter)) {
-                image.setWindowLevel(attrs.getDouble(org.dcm4che3.data.Tag.WindowCenter, -1.0));
+            if (attrs.contains(0x00281050)) { // WindowCenter
+                image.setWindowLevel(attrs.getDouble(0x00281050, -1.0)); // WindowCenter
             }
-            if (attrs.contains(org.dcm4che3.data.Tag.WindowWidth)) {
-                image.setWindowWidth(attrs.getDouble(org.dcm4che3.data.Tag.WindowWidth, -1.0));
+            if (attrs.contains(0x00281051)) { // WindowWidth
+                image.setWindowWidth(attrs.getDouble(0x00281051, -1.0)); // WindowWidth
             }
 
             // 簡易的なキャッシュ更新（実際にはリレーションの構築も必要）

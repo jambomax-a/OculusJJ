@@ -50,7 +50,7 @@ public class DicomCommunicationUtils {
      */
     public static Attributes createQueryKeys(String level) {
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, level);
+        keys.setString(0x00080052, VR.CS, level); // QueryRetrieveLevel
         return keys;
     }
 
@@ -58,42 +58,42 @@ public class DicomCommunicationUtils {
      * DICOM検索キーにPatientNameを設定します。
      */
     public static void setPatientName(Attributes keys, String name) {
-        keys.setString(Tag.PatientName, VR.PN, "*" + name + "*");
+        keys.setString(0x00100010, VR.PN, "*" + name + "*"); // PatientName
     }
 
     /**
      * DICOM検索キーにPatientIDを設定します。
      */
     public static void setPatientId(Attributes keys, String id) {
-        keys.setString(Tag.PatientID, VR.LO, id);
+        keys.setString(0x00100020, VR.LO, id); // PatientID
     }
 
     /**
      * DICOM検索キーにStudyDescriptionを設定します。
      */
     public static void setStudyDescription(Attributes keys, String description) {
-        keys.setString(Tag.StudyDescription, VR.LO, "*" + description + "*");
+        keys.setString(0x00101020, VR.LO, "*" + description + "*"); // StudyDescription
     }
 
     /**
      * DICOM検索キーにAccessionNumberを設定します。
      */
     public static void setAccessionNumber(Attributes keys, String accession) {
-        keys.setString(Tag.AccessionNumber, VR.SH, "*" + accession + "*");
+        keys.setString(0x00080050, VR.SH, "*" + accession + "*"); // AccessionNumber
     }
 
     /**
      * DICOM検索キーにStudyDateを設定します。
      */
     public static void setStudyDate(Attributes keys, String date) {
-        keys.setString(Tag.StudyDate, VR.DA, date);
+        keys.setString(0x00080020, VR.DA, date); // StudyDate
     }
 
     /**
      * DICOM検索キーにModalityを設定します。
      */
     public static void setModality(Attributes keys, String modality) {
-        keys.setString(Tag.ScheduledStepAttributesSequence, VR.SQ, modality);
+        keys.setString(0x00400275, VR.SQ, modality); // ScheduledStepAttributesSequence
     }
 
     // ==================== WADO-RS/STOW-RS 統合メソッド ====================
@@ -138,9 +138,9 @@ public class DicomCommunicationUtils {
      */
     public static List<Attributes> findStudies(DicomNode node, String patientName) throws Exception {
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "STUDY");
+        keys.setString(0x00080052, VR.CS, "STUDY"); // QueryRetrieveLevel
         if (patientName != null && !patientName.isEmpty()) {
-            keys.setString(Tag.PatientName, VR.PN, "*" + patientName + "*");
+            keys.setString(0x00100010, VR.PN, "*" + patientName + "*"); // PatientName
         }
         return DicomService.getInstance().find(node, keys);
     }
@@ -150,8 +150,8 @@ public class DicomCommunicationUtils {
      */
     public static List<Attributes> findSeries(DicomNode node, String studyInstanceUID) throws Exception {
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "SERIES");
-        keys.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
+        keys.setString(0x00080052, VR.CS, "SERIES"); // QueryRetrieveLevel
+        keys.setString(0x0020000D, VR.UI, studyInstanceUID); // StudyInstanceUID
         return DicomService.getInstance().find(node, keys);
     }
 
@@ -160,8 +160,8 @@ public class DicomCommunicationUtils {
      */
     public static List<Attributes> findInstances(DicomNode node, String seriesInstanceUID) throws Exception {
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "IMAGE");
-        keys.setString(Tag.SeriesInstanceUID, VR.UI, seriesInstanceUID);
+        keys.setString(0x00080052, VR.CS, "IMAGE"); // QueryRetrieveLevel
+        keys.setString(0x00200011, VR.UI, seriesInstanceUID); // SeriesInstanceUID
         return DicomService.getInstance().find(node, keys);
     }
 

@@ -307,7 +307,7 @@ public class DicomMetadataParser {
         };
 
         for (int[] entry : sequenceTags) {
-            if (!attrs.hasElement(entry[0])) continue;
+            if (!attrs.contains(entry[0])) continue;
             DicomSequenceInfo info = new DicomSequenceInfo(entry[0], entry[1]);
 
             try {
@@ -333,7 +333,7 @@ public class DicomMetadataParser {
      * Attributesから安全に文字列を取得（nullチェック付き）
      */
     private static String safeGetString(Attributes attrs, int tag) {
-        if (attrs == null || !attrs.hasElement(tag)) return "";
+        if (attrs == null || !attrs.contains(tag)) return "";
         try {
             return attrs.getString(tag);
         } catch (Exception e) {

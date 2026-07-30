@@ -18,7 +18,33 @@
 | **P4: 画像処理・分析** | 🔧 **一部実装** | Shutter tool/Movie再生/PACS Query Settings等✅。Morphological ops/Fusion/Report生成は未 |
 | **P5: GPU/Optimization** | 📋 **計画段階** | JOGL/LWJGL、VRAM最適化、AI画像分析など将来計画 |
 
-### 進捗率：約70%（113 Javaファイル中、DICOMパーサー基盤完了）
+### 進捗率：約75%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model完了）
+
+---
+
+## [完了済みの変更] — P0.2 Navigator Panel logic integration
+
+### NavigatorModel.java （新規作成、P0.2）
+- **役割:** Study/Series/Image階層のデータモデル管理
+- **実装内容:**
+  - `StudyNode` / `SeriesNode` / `ImageNode` の3段階ノード構造
+  - `buildHierarchy(List<DicomStudy>)` — DicomDatabaseからStudy→Series→Image階層を自動構築
+  - UIDベースの検索: `getStudyByUID()` / `getSeriesByUID()` / `getImageByUID()`
+  - Studyリストを日付降順（最新→最古）にソート
+  - `fromDicomDatabase()` — DicomDatabase直接ロードヘルパー
+  - `loadFromNavigatorModel()` — 他のモデルからデータ転送
+  - `notifyNavigatorUpdate()` — NavigatorPanelへのデータ通知コールバック
+
+### NavigatorPanel.java （74%書き換え、P0.2）
+- **役割:** Study/Series/Image階層のツリー表示＋ミニマップ（HOROS NavigatorWindowController相当）
+- **実装内容:**
+  - JTree + DefaultMutableTreeNode による3段階階層表示
+  - `NavigatorTreeCellRenderer` — カスタムセルレンダラで画像ノードにツールチップ表示
+  - TreeSelectionListener → サムネイル更新＋コールバック連携
+  - `loadFromNavigatorModel(NavigatorModel)` — NavigatorModelからツリーデータをロード
+  - `setOnImageSelected(Consumer<String>)` — 画像選択時のコールバック設定
+  - `MiniMapView` インナークラス — サムネイル縮小表示＋可視領域オーバーレイ描画（旧機能継承）
+- **依存:** NavigatorModel, javax.swing.tree.*, java.util.function.Consumer
 
 ---
 

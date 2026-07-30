@@ -122,7 +122,7 @@ public class DicomService {
                 @Override
                 public void onDimseRSP(Association as, Attributes cmd, Attributes data) {
                     super.onDimseRSP(as, cmd, data);
-                    int status = cmd.getInt(Tag.Status, -1);
+                    int status = cmd.getInt(0x00080160, -1); // Status
                     if (status == 0xFF00 || status == 0xFF01) { // Pending
                         if (data != null) {
                             results.add(new Attributes(data));
@@ -153,8 +153,8 @@ public class DicomService {
         ae.setAETitle(manager.getLocalAET());
 
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "STUDY");
-        keys.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
+        keys.setString(0x00080052, VR.CS, "STUDY"); // QueryRetrieveLevel
+        keys.setString(0x0020000D, VR.UI, studyInstanceUID); // StudyInstanceUID
 
         AAssociateRQ rq = new AAssociateRQ();
         rq.setCalledAET(remoteNode.getAeTitle());
@@ -173,14 +173,14 @@ public class DicomService {
                 @Override
                 public void onDimseRSP(Association as, Attributes cmd, Attributes data) {
                     super.onDimseRSP(as, cmd, data);
-                    int status = cmd.getInt(Tag.Status, -1);
+                    int status = cmd.getInt(0x00080160, -1); // Status (C-MOVE)
                     finalStatus[0] = status;
 
                     // C-MOVEの重複操作数（完了、残数、失敗、警告）を取得
-                    int completed = cmd.getInt(Tag.NumberOfCompletedSuboperations, 0);
-                    int remaining = cmd.getInt(Tag.NumberOfRemainingSuboperations, 0);
-                    int warning = cmd.getInt(Tag.NumberOfWarningSuboperations, 0);
-                    int failed = cmd.getInt(Tag.NumberOfFailedSuboperations, 0);
+                    int completed = cmd.getInt(0x00081351, 0); // NumberOfCompletedSuboperations
+                    int remaining = cmd.getInt(0x00081352, 0); // NumberOfRemainingSuboperations
+                    int warning = cmd.getInt(0x00081353, 0); // NumberOfWarningSuboperations
+                    int failed = cmd.getInt(0x00081354, 0); // NumberOfFailedSuboperations
 
                     int total = completed + remaining + warning + failed;
                     if (total > 0) {
@@ -239,7 +239,7 @@ public class DicomService {
                 @Override
                 public void onDimseRSP(Association as, Attributes cmd, Attributes data) {
                     super.onDimseRSP(as, cmd, data);
-                    int status = cmd.getInt(Tag.Status, -1);
+                    int status = cmd.getInt(0x00080160, -1); // Status (C-GET)
                     if (Status.isPending(status)) {
                         // 継続中
                     } else if (status == Status.Success) {
@@ -360,8 +360,8 @@ public class DicomService {
      */
     public static Attributes createSeriesQueryKeys(String studyInstanceUID) {
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "SERIES");
-        keys.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
+        keys.setString(0x00080052, VR.CS, "SERIES"); // QueryRetrieveLevel
+        keys.setString(0x0020000D, VR.UI, studyInstanceUID); // StudyInstanceUID
         return keys;
     }
 
@@ -370,8 +370,8 @@ public class DicomService {
      */
     public static Attributes createInstanceQueryKeys(String seriesInstanceUID) {
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, "IMAGE");
-        keys.setString(Tag.SeriesInstanceUID, VR.UI, seriesInstanceUID);
+        keys.setString(0x00080052, VR.CS, "IMAGE"); // QueryRetrieveLevel
+        keys.setString(0x00200011, VR.UI, seriesInstanceUID); // SeriesInstanceUID
         return keys;
     }
 

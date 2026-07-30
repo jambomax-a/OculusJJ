@@ -178,7 +178,7 @@ public class DicomPix {
                 dis.readFileMetaInformation();
                 org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
                 if (fmi != null) {
-                    String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
+                    String tsuid = fmi.getString(0x00080010);
                     // // System.out.println("[DEBUG] DicomPix.readHeader() - Transfer Syntax: " +
                     // tsuid);
                 }
@@ -197,15 +197,15 @@ public class DicomPix {
                 return;
             }
 
-            this.width = attrs.getInt(org.dcm4che3.data.Tag.Columns, 0);
-            this.height = attrs.getInt(org.dcm4che3.data.Tag.Rows, 0);
-            this.isSigned = attrs.getInt(org.dcm4che3.data.Tag.PixelRepresentation, 0) == 1;
+            this.width = attrs.getInt(0x00280011, 0); // Columns
+            this.height = attrs.getInt(0x00280010, 0); // Rows
+            this.isSigned = attrs.getInt(0x00280103, 0) == 1; // PixelRepresentation
 
             // // System.out.println("[DEBUG] DicomPix.readHeader() - dimensions: " + width
             // + "x" + height + ", isSigned: "
             // // + isSigned + ", path: " + path);
-            this.modality = attrs.getString(org.dcm4che3.data.Tag.Modality);
-            this.photometricInterpretation = attrs.getString(org.dcm4che3.data.Tag.PhotometricInterpretation,
+            this.modality = attrs.getString(0x00080060); // Modality
+            this.photometricInterpretation = attrs.getString(0x00280004, // PhotometricInterpretation
                     "MONOCHROME2");
 
             boolean shouldInverse = "MONOCHROME1".equalsIgnoreCase(this.photometricInterpretation);
@@ -216,30 +216,30 @@ public class DicomPix {
                 }
             }
 
-            this.studyInstanceUID = attrs.getString(org.dcm4che3.data.Tag.StudyInstanceUID);
-            this.seriesInstanceUID = attrs.getString(org.dcm4che3.data.Tag.SeriesInstanceUID);
-            this.frameOfReferenceUID = attrs.getString(org.dcm4che3.data.Tag.FrameOfReferenceUID);
+            this.studyInstanceUID = attrs.getString(0x0020000D); // StudyInstanceUID
+            this.seriesInstanceUID = attrs.getString(0x00200011); // SeriesInstanceUID
+            this.frameOfReferenceUID = attrs.getString(0x00200052); // FrameOfReferenceUID
             // DICOM metadata (HOROS-20240407準拠: DicomPix.m 対応項目)
-            this.patientID = attrs.getString(org.dcm4che3.data.Tag.PatientID);
-            this.studyDescription = attrs.getString(org.dcm4che3.data.Tag.StudyDescription);
-            this.seriesDescription = attrs.getString(org.dcm4che3.data.Tag.SeriesDescription);
-            this.seriesNumber = attrs.getInt(org.dcm4che3.data.Tag.SeriesNumber, 0);
-            this.sopClassUID = attrs.getString(org.dcm4che3.data.Tag.SOPClassUID);
+            this.patientID = attrs.getString(0x00100020); // PatientID
+            this.studyDescription = attrs.getString(0x00081030); // StudyDescription
+            this.seriesDescription = attrs.getString(0x0008103E); // SeriesDescription
+            this.seriesNumber = attrs.getInt(0x00200011, 0); // SeriesInstanceUID (SeriesNumber)
+            this.sopClassUID = attrs.getString(0x00080016); // SOPClassUID
             this.instanceComments = attrs.getString(0x00084000);
-            this.accessionNumber = attrs.getString(org.dcm4che3.data.Tag.AccessionNumber);
-            this.sliceLocation = attrs.getDouble(org.dcm4che3.data.Tag.SliceLocation, 0.0);
-            this.sliceThickness = attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0);
+            this.accessionNumber = attrs.getString(0x00080050); // AccessionNumber
+            this.sliceLocation = attrs.getDouble(0x00201041, 0.0); // SliceLocation
+            this.sliceThickness = attrs.getDouble(0x00180050, 0.0); // SliceThickness
 
             // HOROS-20240407準拠: Window Level/Width
-            float[] wls = attrs.getFloats(org.dcm4che3.data.Tag.WindowCenter);
-            float[] wws = attrs.getFloats(org.dcm4che3.data.Tag.WindowWidth);
+            float[] wls = attrs.getFloats(0x00281050); // WindowCenter
+            float[] wws = attrs.getFloats(0x00281051); // WindowWidth
 
             if (wls != null && wls.length > 0 && wws != null && wws.length > 0) {
                 this.windowLevel = wls[0];
                 this.windowWidth = wws[0];
             } else {
-                this.windowLevel = attrs.getFloat(org.dcm4che3.data.Tag.WindowCenter, 0.0f);
-                this.windowWidth = attrs.getFloat(org.dcm4che3.data.Tag.WindowWidth, 0.0f);
+                this.windowLevel = attrs.getFloat(0x00281050, 0.0f); // WindowCenter
+                this.windowWidth = attrs.getFloat(0x00281051, 0.0f); // WindowWidth
             }
 
             // HOROS-20240407準拠: MONOCHROME1の場合、savedWLを反転させる (DCMPix.m 6550行目)
@@ -254,7 +254,7 @@ public class DicomPix {
             this.defaultWW = this.windowWidth;
 
             // VOI LUT
-            org.dcm4che3.data.Sequence voiLutSeq = attrs.getSequence(org.dcm4che3.data.Tag.VOILUTSequence);
+            org.dcm4che3.data.Sequence voiLutSeq = attrs.getSequence(0x00283010); // VOILUTSequence
             if (voiLutSeq != null && !voiLutSeq.isEmpty()) {
                 // // System.out.println("[DEBUG] DicomPix.readHeader() - Found VOI LUT
                 // sequence. High priority.");
@@ -262,21 +262,21 @@ public class DicomPix {
             }
 
             // Rescale Slope/Intercept
-            this.rescaleSlope = attrs.getFloat(org.dcm4che3.data.Tag.RescaleSlope, 1.0f);
-            this.rescaleIntercept = attrs.getFloat(org.dcm4che3.data.Tag.RescaleIntercept, 0.0f);
-            this.rescaleType = attrs.getString(org.dcm4che3.data.Tag.RescaleType, "");
+            this.rescaleSlope = attrs.getFloat(0x00281053, 1.0f); // RescaleSlope
+            this.rescaleIntercept = attrs.getFloat(0x00281052, 0.0f); // RescaleIntercept
+            this.rescaleType = attrs.getString(0x00281054, ""); // RescaleType
             if (this.rescaleType.isEmpty() && "CT".equals(this.modality)) {
                 this.rescaleType = "HU";
             }
 
             // Image Orientation/Position
-            double[] imagePosition = attrs.getDoubles(org.dcm4che3.data.Tag.ImagePositionPatient);
+            double[] imagePosition = attrs.getDoubles(0x00200032); // ImagePositionPatient
             if (imagePosition != null && imagePosition.length >= 3) {
                 this.originX = imagePosition[0];
                 this.originY = imagePosition[1];
                 this.originZ = imagePosition[2];
             }
-            double[] imageOrientation = attrs.getDoubles(org.dcm4che3.data.Tag.ImageOrientationPatient);
+            double[] imageOrientation = attrs.getDoubles(0x00200037); // ImageOrientationPatient
             if (imageOrientation != null && imageOrientation.length >= 6) {
                 this.orientation[0] = imageOrientation[0];
                 this.orientation[1] = imageOrientation[1];
@@ -290,12 +290,12 @@ public class DicomPix {
             }
 
             // Pixel Spacing
-            double[] pixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.PixelSpacing);
+            double[] pixelSpacing = attrs.getDoubles(0x00280030); // PixelSpacing
             if (pixelSpacing != null && pixelSpacing.length >= 2) {
                 this.pixelSpacingY = pixelSpacing[0];
                 this.pixelSpacingX = pixelSpacing[1];
             } else {
-                double[] imagerPixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.ImagerPixelSpacing);
+                double[] imagerPixelSpacing = attrs.getDoubles(0x00181164); // ImagerPixelSpacing
                 if (imagerPixelSpacing != null && imagerPixelSpacing.length >= 2) {
                     this.pixelSpacingY = imagerPixelSpacing[0];
                     this.pixelSpacingX = imagerPixelSpacing[1];
@@ -303,21 +303,21 @@ public class DicomPix {
             }
 
             // SequenceOfUltrasoundRegions (US)
-            org.dcm4che3.data.Sequence seq = attrs.getSequence(org.dcm4che3.data.Tag.SequenceOfUltrasoundRegions);
+            org.dcm4che3.data.Sequence seq = attrs.getSequence(0x51000020); // SequenceOfUltrasoundRegions
             if (seq != null && !seq.isEmpty()) {
                 this.usRegions.clear();
                 for (org.dcm4che3.data.Attributes seqItem : seq) {
                     UltrasoundRegion region = new UltrasoundRegion();
-                    region.xMin = seqItem.getInt(org.dcm4che3.data.Tag.RegionLocationMinX0, 0);
-                    region.yMin = seqItem.getInt(org.dcm4che3.data.Tag.RegionLocationMinY0, 0);
-                    region.xMax = seqItem.getInt(org.dcm4che3.data.Tag.RegionLocationMaxX1, this.width);
-                    region.yMax = seqItem.getInt(org.dcm4che3.data.Tag.RegionLocationMaxY1, this.height);
-                    region.spatialFormat = seqItem.getInt(org.dcm4che3.data.Tag.RegionSpatialFormat, 0);
+                    region.xMin = seqItem.getInt(0x51000022, 0); // RegionLocationMinX0
+                    region.yMin = seqItem.getInt(0x51000032, 0); // RegionLocationMinY0
+                    region.xMax = seqItem.getInt(0x51000026, this.width); // RegionLocationMaxX1
+                    region.yMax = seqItem.getInt(0x51000036, this.height); // RegionLocationMaxY1
+                    region.spatialFormat = seqItem.getInt(0x51000004, 0); // RegionSpatialFormat
 
-                    double physicalDeltaX = seqItem.getDouble(org.dcm4che3.data.Tag.PhysicalDeltaX, 0.0);
-                    double physicalDeltaY = seqItem.getDouble(org.dcm4che3.data.Tag.PhysicalDeltaY, 0.0);
-                    int unitsX = seqItem.getInt(org.dcm4che3.data.Tag.PhysicalUnitsXDirection, 0);
-                    int unitsY = seqItem.getInt(org.dcm4che3.data.Tag.PhysicalUnitsYDirection, 0);
+                    double physicalDeltaX = seqItem.getDouble(0x51000008, 0.0); // PhysicalDeltaX
+                    double physicalDeltaY = seqItem.getDouble(0x51000009, 0.0); // PhysicalDeltaY
+                    int unitsX = seqItem.getInt(0x51000002, 0); // PhysicalUnitsXDirection
+                    int unitsY = seqItem.getInt(0x51000003, 0); // PhysicalUnitsYDirection
 
                     if (unitsX == 3) {
                         physicalDeltaX *= 10.0; // cm to mm
@@ -349,7 +349,7 @@ public class DicomPix {
             // EstimatedRadiographicMagnificationFactor (Correction for CR/DX/MG/RF etc)
             // US（超音波）の場合は適用しない（USの距離は通常Regionタグで完結するため）
             if (!"US".equals(this.modality)) {
-                double magFactor = attrs.getDouble(org.dcm4che3.data.Tag.EstimatedRadiographicMagnificationFactor, 1.0);
+                double magFactor = attrs.getDouble(0x00186020, 1.0); // EstimatedRadiographicMagnificationFactor
                 if (magFactor > 0.0 && magFactor != 1.0) {
                     this.pixelSpacingX /= magFactor;
                     this.pixelSpacingY /= magFactor;
@@ -358,7 +358,7 @@ public class DicomPix {
 
             // Pixel Aspect Ratio
             boolean hasPixelAspectRatio = false;
-            double[] pixelAspectRatio = attrs.getDoubles(org.dcm4che3.data.Tag.PixelAspectRatio);
+            double[] pixelAspectRatio = attrs.getDoubles(0x00280012); // PixelAspectRatio
             if (pixelAspectRatio != null && pixelAspectRatio.length >= 2) {
                 double ratiox = pixelAspectRatio[0];
                 double ratioy = pixelAspectRatio[1];
@@ -375,7 +375,7 @@ public class DicomPix {
                 }
             }
 
-            this.transferSyntaxUID = attrs.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
+            this.transferSyntaxUID = attrs.getString(0x00080010); // TransferSyntaxUID
 
         } catch (Exception e) {
             // // logger.error("readHeader error: {}", e.getMessage());

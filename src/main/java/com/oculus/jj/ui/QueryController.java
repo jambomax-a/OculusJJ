@@ -237,7 +237,7 @@ public class QueryController extends JFrame {
         }
 
         Attributes keys = new Attributes();
-        keys.setString(Tag.QueryRetrieveLevel, org.dcm4che3.data.VR.CS, "STUDY");
+        keys.setString(0x00080052, org.dcm4che3.data.VR.CS, "STUDY"); // QueryRetrieveLevel
 
         String searchText = globalSearchField.getText().trim();
         int tabIndex = selectedSearchTabIndex;
@@ -246,25 +246,25 @@ public class QueryController extends JFrame {
         if (!searchText.isEmpty()) {
             switch (tabIndex) {
                 case 0:
-                    keys.setString(Tag.PatientName, org.dcm4che3.data.VR.PN, "*" + searchText + "*");
+                    keys.setString(0x00100010, org.dcm4che3.data.VR.PN, "*" + searchText + "*"); // PatientName
                     break;
                 case 1:
-                    keys.setString(Tag.PatientID, org.dcm4che3.data.VR.LO, searchText);
+                    keys.setString(0x00100020, org.dcm4che3.data.VR.LO, searchText); // PatientID
                     break;
                 case 2:
-                    keys.setString(Tag.AccessionNumber, org.dcm4che3.data.VR.SH, searchText);
+                    keys.setString(0x00080050, org.dcm4che3.data.VR.SH, searchText); // AccessionNumber
                     break;
                 case 3:
-                    keys.setString(Tag.PatientBirthDate, org.dcm4che3.data.VR.DA, searchText);
+                    keys.setString(0x00100030, org.dcm4che3.data.VR.DA, searchText); // PatientBirthDate
                     break;
                 case 4:
-                    keys.setString(Tag.StudyDescription, org.dcm4che3.data.VR.LO, "*" + searchText + "*");
+                    keys.setString(0x00081030, org.dcm4che3.data.VR.LO, "*" + searchText + "*"); // StudyDescription
                     break;
                 case 5:
-                    keys.setString(Tag.ReferringPhysicianName, org.dcm4che3.data.VR.PN, "*" + searchText + "*");
+                    keys.setString(0x00080090, org.dcm4che3.data.VR.PN, "*" + searchText + "*"); // ReferringPhysicianName
                     break;
                 case 6:
-                    keys.setString(Tag.InstitutionName, org.dcm4che3.data.VR.LO, "*" + searchText + "*");
+                    keys.setString(0x00080080, org.dcm4che3.data.VR.LO, "*" + searchText + "*"); // InstitutionName
                     break;
             }
         }
@@ -273,20 +273,20 @@ public class QueryController extends JFrame {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
         Calendar cal = Calendar.getInstance();
         if (todayBtn.isSelected()) {
-            keys.setString(Tag.StudyDate, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime()));
+            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime())); // StudyDateAndTime
         } else if (yesterdayBtn.isSelected()) {
             cal.add(Calendar.DATE, -1);
-            keys.setString(Tag.StudyDate, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime()));
+            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime())); // StudyDateAndTime
         } else if (last7DaysBtn.isSelected()) {
             String end = sdf.format(cal.getTime());
             cal.add(Calendar.DATE, -7);
             String start = sdf.format(cal.getTime());
-            keys.setString(Tag.StudyDate, org.dcm4che3.data.VR.DA, start + "-" + end);
+            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, start + "-" + end); // StudyDateAndTime (last 7 days)
         } else if (lastMonthBtn.isSelected()) {
             String end = sdf.format(cal.getTime());
             cal.add(Calendar.MONTH, -1);
             String start = sdf.format(cal.getTime());
-            keys.setString(Tag.StudyDate, org.dcm4che3.data.VR.DA, start + "-" + end);
+            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, start + "-" + end); // StudyDateAndTime (last month)
         }
 
         // Modality Filter
@@ -299,19 +299,19 @@ public class QueryController extends JFrame {
             }
         }
         if (mods.length() > 0) {
-            keys.setString(Tag.ModalitiesInStudy, org.dcm4che3.data.VR.CS, mods.toString());
+            keys.setString(0x0008103F, org.dcm4che3.data.VR.CS, mods.toString()); // ModalitiesInStudy
         }
 
         // Return keys
-        keys.setString(Tag.PatientName, org.dcm4che3.data.VR.PN, "");
-        keys.setString(Tag.PatientID, org.dcm4che3.data.VR.LO, "");
-        keys.setString(Tag.PatientBirthDate, org.dcm4che3.data.VR.DA, "");
-        keys.setString(Tag.StudyDate, org.dcm4che3.data.VR.DA, "");
-        keys.setString(Tag.StudyDescription, org.dcm4che3.data.VR.LO, "");
-        keys.setString(Tag.ModalitiesInStudy, org.dcm4che3.data.VR.CS, "");
-        keys.setString(Tag.AccessionNumber, org.dcm4che3.data.VR.SH, "");
-        keys.setString(Tag.NumberOfStudyRelatedInstances, org.dcm4che3.data.VR.IS, "");
-        keys.setString(Tag.StudyInstanceUID, org.dcm4che3.data.VR.UI, "");
+        keys.setString(0x00100010, org.dcm4che3.data.VR.PN, ""); // PatientName
+        keys.setString(0x00100020, org.dcm4che3.data.VR.LO, ""); // PatientID
+        keys.setString(0x00100030, org.dcm4che3.data.VR.DA, ""); // PatientBirthDate
+        keys.setString(0x00080020, org.dcm4che3.data.VR.DA, ""); // StudyDate
+        keys.setString(0x00081030, org.dcm4che3.data.VR.LO, ""); // StudyDescription
+        keys.setString(0x0008103F, org.dcm4che3.data.VR.CS, ""); // ModalitiesInStudy
+        keys.setString(0x00080050, org.dcm4che3.data.VR.SH, ""); // AccessionNumber
+        keys.setString(0x00201206, org.dcm4che3.data.VR.IS, ""); // NumberOfStudyRelatedInstances
+        keys.setString(0x0020000D, org.dcm4che3.data.VR.UI, ""); // StudyInstanceUID
 
         queryButton.setEnabled(false);
         tableModel.setRowCount(0);
@@ -328,17 +328,17 @@ public class QueryController extends JFrame {
                     List<Attributes> results = get();
                     for (Attributes attr : results) {
                         Vector<String> row = new Vector<>();
-                        row.add(attr.getString(Tag.PatientName, ""));
-                        row.add(attr.getString(Tag.PatientID, ""));
-                        row.add(attr.getString(Tag.PatientBirthDate, ""));
-                        row.add(attr.getString(Tag.StudyDescription, ""));
-                        row.add(attr.getString(Tag.ModalitiesInStudy, ""));
-                        row.add(attr.getString(Tag.NumberOfStudyRelatedInstances, "0"));
-                        row.add(attr.getString(Tag.StudyDate, ""));
-                        row.add(attr.getString(Tag.StudyTime, ""));
+                        row.add(attr.getString(0x00100010, "")); // PatientName
+                        row.add(attr.getString(0x00100020, "")); // PatientID
+                        row.add(attr.getString(0x00100030, "")); // PatientBirthDate
+                        row.add(attr.getString(0x00081030, "")); // StudyDescription
+                        row.add(attr.getString(0x0008103F, "")); // ModalitiesInStudy
+                        row.add(attr.getString(0x00201206, "0")); // NumberOfStudyRelatedInstances
+                        row.add(attr.getString(0x00080020, "")); // StudyDate
+                        row.add(attr.getString(0x00080030, "")); // StudyTime
                         row.add(node.getAeTitle());
-                        row.add(attr.getString(Tag.AccessionNumber, ""));
-                        row.add(attr.getString(Tag.StudyInstanceUID, "")); // Hidden column index 10
+                        row.add(attr.getString(0x00080050, "")); // AccessionNumber
+                        row.add(attr.getString(0x0020000D, "")); // StudyInstanceUID
                         tableModel.addRow(row);
                     }
                 } catch (Exception e) {

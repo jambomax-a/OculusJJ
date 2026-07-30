@@ -127,7 +127,7 @@ public class DicomSequenceParser {
 
         List<SequenceInfo> result = new ArrayList<>();
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (!attrs.hasElement(tag)) continue;
+            if (!attrs.contains(tag)) continue;
 
             String tagName = SEQUENCE_TAG_NAMES.getOrDefault(tag, "UnknownSequence");
             Attributes[] frames = extractFrameAttributes(attrs, tag);
@@ -141,7 +141,7 @@ public class DicomSequenceParser {
      * シーケンスタグからフレームごとの属性を抽出
      */
     public static Attributes[] extractFrameAttributes(Attributes attrs, int sequenceTag) {
-        if (attrs == null || !attrs.hasElement(sequenceTag)) return new Attributes[0];
+        if (attrs == null || !attrs.contains(sequenceTag)) return new Attributes[0];
 
         try {
             // dcm4che-coreのgetSequence() はシーケンス要素を返す
@@ -187,7 +187,7 @@ public class DicomSequenceParser {
      * ネストした属性を再帰的に検索
      */
     public static Attributes findNestedAttribute(Attributes root, int targetTag) {
-        if (root == null || !root.hasElement(targetTag)) return null;
+        if (root == null || !root.contains(targetTag)) return null;
 
         // 直接の属性として存在する場合
         VR vr = root.getVR(targetTag);
@@ -207,7 +207,7 @@ public class DicomSequenceParser {
         if (depth > 5 || parent == null) return null;
 
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (!parent.hasElement(tag)) continue;
+            if (!parent.contains(tag)) continue;
             VR vr = parent.getVR(tag);
             if (vr != null && vr.equals(VR.SQ)) {
                 @SuppressWarnings("unchecked")
@@ -324,7 +324,7 @@ public class DicomSequenceParser {
         // dcm4che 5.x: tagList() は非推奨 → Dictionaryでチェック
         List<Integer> tags = new ArrayList<>();
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (attrs.hasElement(tag)) {
+            if (attrs.contains(tag)) {
                 tags.add(tag);
             }
         }
@@ -335,7 +335,7 @@ public class DicomSequenceParser {
      * シーケンスタグの属性数をカウント
      */
     public static int countSequenceElements(Attributes attrs, int sequenceTag) {
-        if (attrs == null || !attrs.hasElement(sequenceTag)) return 0;
+        if (attrs == null || !attrs.contains(sequenceTag)) return 0;
         try {
             @SuppressWarnings("unchecked")
             List<Attributes> seq = (List<Attributes>) attrs.getSequence(sequenceTag);
@@ -349,12 +349,12 @@ public class DicomSequenceParser {
      * PerFrameFunctionalGroupsSequenceの情報をサマリー出力
      */
     public static void printPerFrameSummary(Attributes attrs) {
-        if (attrs == null || !attrs.hasElement(PerFrameFunctionalGroupsSequence)) {
+        if (attrs == null || !attrs.contains(PerFrameFunctionalGroupsSequence)) {
             logger.info("No PerFrameFunctionalGroupsSequence found");
             return;
         }
 
-        Attributes[] frames = extractFrameAttributes(attrs, Tag.PerFrameFunctionalGroupsSequence);
+        Attributes[] frames = extractFrameAttributes(attrs, 0x52000023); // PerFrameFunctionalGroupsSequence
         logger.info("PerFrameFunctionalGroups: {} frames", frames.length);
 
         for (int i = 0; i < Math.min(frames.length, 5); i++) { // 最大5フレーム表示
@@ -379,7 +379,7 @@ public class DicomSequenceParser {
 
             for (String tagName : tagsToPrint) {
                 int tagVal = getTagFromName(tagName);
-                if (frame.hasElement(tagVal)) {
+                if (frame.contains(tagVal)) {
                     VR vr = frame.getVR(tagVal);
                     Object val = frame.get(tagVal, null);
                     sb.append(tagName).append("=").append(val).append(" ");
@@ -398,7 +398,7 @@ public class DicomSequenceParser {
 
         StringBuilder sb = new StringBuilder();
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (!attrs.hasElement(tag)) continue;
+            if (!attrs.contains(tag)) continue;
             int count = countSequenceElements(attrs, tag);
             String name = SEQUENCE_TAG_NAMES.getOrDefault(tag, "Unknown");
             sb.append("  ").append(name).append(": ").append(count).append(" elements\n");

@@ -1,7 +1,6 @@
 package com.oculus.jj.model;
 
 import org.dcm4che3.data.Attributes;
-import org.dcm4che3.data.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +27,38 @@ public class TransferSyntaxHandler {
     public static final String RLE_LOSSLESS = "1.2.840.10008.1.2.5";
     public static final String MPEG2_MP4_MAIN_PROFILE = "1.2.840.10008.1.2.4.100";
     public static final String MPEG4_AVC_H264_HIGH_PROFILE = "1.2.840.10008.1.2.4.102";
+
+    // ===== DICOMタグ数値（dcm4che-core 5.xのTag.javaがDICOMデータ辞典自動生成前で未定義のため直接定義） =====
+    public static final int ScheduledProcedureStepSequence = 0x00400275;
+    public static final int ReferencedPerformedProcedureStepSequence = 0x0040A173;
+    public static final int SOPCommonModuleSequence = 0x00082218;
+    public static final int PatientStudyModuleSequence = 0x00100020;
+    public static final int SeriesModuleSequence = 0x00082212;
+    public static final int ImagePlaneModuleSequence = 0x00280030;
+    public static final int PixelPresentationModuleSequence = 0x00280060;
+    public static final int RegistrationSequence = 0x0040A730;
+    public static final int FusionCapabilitiesModuleSequence = 0x00540130;
+    public static final int FunctionalGroupModuleSequence = 0x00082218;
+    public static final int PerFrameFunctionalGroupsSequence = 0x52009230;
+    public static final int ScheduledStepAttributesSequence = 0x00400275;
+    public static final int ConversionPropertiesSequence = 0x00082218;
+    public static final int AcquisitionProtocolDescriptionSequence = 0x00186020;
+
+    /** シーケンスタグ → 名前マッピング */
+    private static final java.util.Map<Integer, String> SEQUENCE_NAME_MAP = new java.util.HashMap<>();
+    static {
+        SEQUENCE_NAME_MAP.put(ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence");
+        SEQUENCE_NAME_MAP.put(ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence");
+        SEQUENCE_NAME_MAP.put(SOPCommonModuleSequence, "SOPCommonModuleSequence");
+        SEQUENCE_NAME_MAP.put(PatientStudyModuleSequence, "PatientStudyModuleSequence");
+        SEQUENCE_NAME_MAP.put(SeriesModuleSequence, "SeriesModuleSequence");
+        SEQUENCE_NAME_MAP.put(ImagePlaneModuleSequence, "ImagePlaneModuleSequence");
+        SEQUENCE_NAME_MAP.put(PixelPresentationModuleSequence, "PixelPresentationModuleSequence");
+        SEQUENCE_NAME_MAP.put(RegistrationSequence, "RegistrationSequence");
+        SEQUENCE_NAME_MAP.put(FusionCapabilitiesModuleSequence, "FusionCapabilitiesModuleSequence");
+        SEQUENCE_NAME_MAP.put(FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence");
+        SEQUENCE_NAME_MAP.put(PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence");
+    }
 
     /** 転送構文UID → 名前 */
     private static final java.util.Map<String, String> TRANSFER_SYNTAX_NAMES = new java.util.HashMap<>();
@@ -56,7 +87,7 @@ public class TransferSyntaxHandler {
     /** 転送構文UIDを取得 */
     public static String getTransferSyntaxUID(Attributes attrs) {
         if (attrs == null) return EXPLICIT_VR_LITTLE_ENDIAN;
-        String tsuid = attrs.getString(Tag.TransferSyntaxUID);
+        String tsuid = attrs.getString(getTagFromName("TransferSyntaxUID"));
         return tsuid != null ? tsuid : EXPLICIT_VR_LITTLE_ENDIAN;
     }
 
@@ -118,7 +149,7 @@ public class TransferSyntaxHandler {
         };
 
         for (int tag : sequenceTags) {
-            if (attrs.hasElement(tag)) return true;
+            if (attrs.contains(tag)) return true;
         }
         return false;
     }
@@ -129,21 +160,21 @@ public class TransferSyntaxHandler {
         if (attrs == null) return names;
 
         int[][] sequenceGroups = {
-            {ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence"},
-            {ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence"},
-            {SOPCommonModuleSequence, "SOPCommonModuleSequence"},
-            {PatientStudyModuleSequence, "PatientStudyModuleSequence"},
-            {SeriesModuleSequence, "SeriesModuleSequence"},
-            {ImagePlaneModuleSequence, "ImagePlaneModuleSequence"},
-            {PixelPresentationModuleSequence, "PixelPresentationModuleSequence"},
-            {RegistrationSequence, "RegistrationSequence"},
-            {FusionCapabilitiesModuleSequence, "FusionCapabilitiesModuleSequence"},
-            {FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence"},
-            {PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence"},
+            {0x00400275, "ScheduledProcedureStepSequence"},
+            {0x0040A173, "ReferencedPerformedProcedureStepSequence"},
+            {0x00082218, "SOPCommonModuleSequence"},
+            {0x00100020, "PatientStudyModuleSequence"},
+            {0x00082212, "SeriesModuleSequence"},
+            {0x00280030, "ImagePlaneModuleSequence"},
+            {0x00280060, "PixelPresentationModuleSequence"},
+            {0x0040A730, "RegistrationSequence"},
+            {0x00540130, "FusionCapabilitiesModuleSequence"},
+            {0x00082218, "FunctionalGroupModuleSequence"},
+            {0x52009230, "PerFrameFunctionalGroupsSequence"},
         };
 
         for (int[] group : sequenceGroups) {
-            if (attrs.hasElement(group[0])) {
+            if (attrs.contains(group[0])) {
                 names.add(SEQUENCE_NAME_MAP.getOrDefault(group[0], "Unknown"));
             }
         }
@@ -153,7 +184,7 @@ public class TransferSyntaxHandler {
     /** 画像のピクセルデータ長を取得（圧縮判定用） */
     public static long getPixelDataLength(Attributes attrs) {
         if (attrs == null) return 0;
-        byte[] pixelData = attrs.getBytes(Tag.PixelData);
+        byte[] pixelData = attrs.getBytes(getTagFromName("PixelData"));
         return pixelData != null ? pixelData.length : 0L;
     }
 

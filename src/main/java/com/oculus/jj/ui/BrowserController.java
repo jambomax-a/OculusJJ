@@ -8954,7 +8954,7 @@ public class BrowserController extends JFrame {
                 dis.readFileMetaInformation();
                 org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
                 if (fmi != null) {
-                    String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
+                    String tsuid = fmi.getString(0x00080010);
                 }
                 attrs = dis.readDataset();
                 dis.close();
@@ -8969,9 +8969,9 @@ public class BrowserController extends JFrame {
                 return;
             }
             String newSopInstanceUID = java.util.UUID.randomUUID().toString();
-            attrs.setString(org.dcm4che3.data.Tag.SOPClassUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
-            attrs.setString(org.dcm4che3.data.Tag.SOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
-            attrs.setString(org.dcm4che3.data.Tag.Modality, org.dcm4che3.data.VR.CS, "SC");
+            attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
+            attrs.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID);
+            attrs.setString(0x00080060, org.dcm4che3.data.VR.CS, "SC");
             java.io.File dir = new java.io.File(new java.io.File(".", "OculusJJ Data"), "KeyImages");
             if (!dir.exists())
                 dir.mkdirs();
@@ -8990,10 +8990,10 @@ public class BrowserController extends JFrame {
             java.io.File tmpFmi = java.io.File.createTempFile("fmi", "tmp");
             org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(tmpFmi);
             org.dcm4che3.data.Attributes fmo = new org.dcm4che3.data.Attributes();
-            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPClassUID, org.dcm4che3.data.VR.UI,
-                    "1.2.840.10008.5.1.4.1.1.7");
-            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
-            fmo.setString(org.dcm4che3.data.Tag.TransferSyntaxUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2");
+            fmo.setString(0x00080016, org.dcm4che3.data.VR.UI,
+                    "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
+            fmo.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID); // MediaStorageSOPInstanceUID
+            fmo.setString(0x00080010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID
             dos.writeFileMetaInformation(fmo);
             dos.close();
             byte[] fmiBytes = java.nio.file.Files.readAllBytes(tmpFmi.toPath());
@@ -9705,7 +9705,7 @@ public class BrowserController extends JFrame {
                 dis.readFileMetaInformation();
                 org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
                 if (fmi != null) {
-                    String tsuid = fmi.getString(org.dcm4che3.data.Tag.TransferSyntaxUID);
+                    String tsuid = fmi.getString(0x00080010); // TransferSyntaxUID
                 }
                 attrs = dis.readDataset();
                 dis.close();
@@ -9720,9 +9720,9 @@ public class BrowserController extends JFrame {
                 return;
             }
             String newSopInstanceUID = java.util.UUID.randomUUID().toString();
-            attrs.setString(org.dcm4che3.data.Tag.SOPClassUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
-            attrs.setString(org.dcm4che3.data.Tag.SOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
-            attrs.setString(org.dcm4che3.data.Tag.Modality, org.dcm4che3.data.VR.CS, "SC");
+            attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // SOPClassUID
+            attrs.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID); // SOPInstanceUID
+            attrs.setString(0x00080060, org.dcm4che3.data.VR.CS, "SC"); // Modality
             java.io.File outDir = outputFile.getParentFile();
             if (outDir != null && !outDir.exists())
                 outDir.mkdirs();
@@ -9744,10 +9744,10 @@ public class BrowserController extends JFrame {
             java.io.File tmpFmi = java.io.File.createTempFile("fmi", "tmp");
             org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(tmpFmi);
             org.dcm4che3.data.Attributes fmo = new org.dcm4che3.data.Attributes();
-            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPClassUID, org.dcm4che3.data.VR.UI,
-                    "1.2.840.10008.5.1.4.1.1.7");
-            fmo.setString(org.dcm4che3.data.Tag.MediaStorageSOPInstanceUID, org.dcm4che3.data.VR.UI, newSopInstanceUID);
-            fmo.setString(org.dcm4che3.data.Tag.TransferSyntaxUID, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2");
+            fmo.setString(0x00080016, org.dcm4che3.data.VR.UI,
+                    "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
+            fmo.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID); // MediaStorageSOPInstanceUID
+            fmo.setString(0x00080010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID
             dos.writeFileMetaInformation(fmo);
             dos.close();
             byte[] fmiBytes = java.nio.file.Files.readAllBytes(tmpFmi.toPath());

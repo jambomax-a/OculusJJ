@@ -57,8 +57,8 @@ public class DicomStoreSCP extends BasicCStoreSCP {
     @Override
     protected void store(Association as, PresentationContext pc, Attributes rq,
             PDVInputStream data, Attributes rsp) throws IOException {
-        String iuid = rq.getString(Tag.AffectedSOPInstanceUID);
-        String cuid = rq.getString(Tag.AffectedSOPClassUID);
+        String iuid = rq.getString(0x0008119A); // AffectedSOPInstanceUID
+        String cuid = rq.getString(0x00081199); // AffectedSOPClassUID
         String tsuid = pc.getTransferSyntax();
         File storageDir = getStorageDir();
         String rawFilename = iuid != null ? iuid : UUID.randomUUID().toString();
@@ -82,9 +82,9 @@ public class DicomStoreSCP extends BasicCStoreSCP {
                     db.initiateImportFilesFromIncomingDirUnlessAlreadyImporting();
                 }
             });
-            rsp.setInt(Tag.Status, VR.US, Status.Success);
+            rsp.setInt(0x00080160, VR.US, Status.Success); // Status
         } catch (Exception e) {
-            rsp.setInt(Tag.Status, VR.US, Status.ProcessingFailure);
+            rsp.setInt(0x00080160, VR.US, Status.ProcessingFailure); // Status
         }
     }
 }
