@@ -145,7 +145,8 @@ public class DicomSequenceParser {
 
         try {
             // dcm4che-coreのgetSequence() はシーケンス要素を返す
-            var sequence = attrs.getSequence(sequenceTag);
+            @SuppressWarnings("unchecked")
+            List<Attributes> sequence = (List<Attributes>) attrs.getSequence(sequenceTag);
             if (sequence == null) return new Attributes[0];
 
             int count = sequence.size();
@@ -191,7 +192,8 @@ public class DicomSequenceParser {
         // 直接の属性として存在する場合
         VR vr = root.getVR(targetTag);
         if (vr != null && vr.equals(VR.SQ)) {
-            var seq = root.getSequence(targetTag);
+            @SuppressWarnings("unchecked")
+            List<Attributes> seq = (List<Attributes>) root.getSequence(targetTag);
             if (seq != null && seq.size() > 0) {
                 return seq.get(0); // dcm4che 5.x: get() already returns Attributes
             }
@@ -208,7 +210,8 @@ public class DicomSequenceParser {
             if (!parent.hasElement(tag)) continue;
             VR vr = parent.getVR(tag);
             if (vr != null && vr.equals(VR.SQ)) {
-                var seq = parent.getSequence(tag);
+                @SuppressWarnings("unchecked")
+                List<Attributes> seq = (List<Attributes>) parent.getSequence(tag);
                 if (seq == null) continue;
 
                 for (Attributes child : seq) {
@@ -276,7 +279,7 @@ public class DicomSequenceParser {
         // ファイル位置（DICOMDIR特有）
         record.filePosition = new long[]{
             attrs.getLong(DirectReferenceFileName, -1),
-            attrs.getLong(IndirectFileNamePointer, -1))
+            attrs.getLong(IndirectFileNamePointer, -1)
         };
 
         return record;
@@ -334,7 +337,8 @@ public class DicomSequenceParser {
     public static int countSequenceElements(Attributes attrs, int sequenceTag) {
         if (attrs == null || !attrs.hasElement(sequenceTag)) return 0;
         try {
-            var seq = attrs.getSequence(sequenceTag);
+            @SuppressWarnings("unchecked")
+            List<Attributes> seq = (List<Attributes>) attrs.getSequence(sequenceTag);
             return seq != null ? seq.size() : 0;
         } catch (Exception e) {
             return 0;

@@ -20,6 +20,55 @@ public class DicomMetadataParser {
 
     private static final Logger logger = LoggerFactory.getLogger(DicomMetadataParser.class);
 
+    // DICOMタグ数値（dcm4che-core 5.xのTag.javaがDICOMデータ辞典自動生成前で未定義のため直接定義）
+    private static final int SOPInstanceUID = 0x00080018;
+    private static final int StudyInstanceUID = 0x0020000D;
+    private static final int SeriesInstanceUID = 0x00200011;
+    private static final int SOPClassUID = 0x00080016;
+    private static final int Modality = 0x00080060;
+    private static final int ImageType = 0x00080008;
+    private static final int Manufacturer = 0x00080070;
+    private static final int ManufacturerModelName = 0x00081090;
+    private static final int DeviceSerialNumber = 0x0008103E;
+    private static final int PatientID = 0x00100020;
+    private static final int PatientName = 0x00100010;
+    private static final int PatientBirthDate = 0x00100030;
+    private static final int PatientSex = 0x00100040;
+    private static final int AccessionNumber = 0x00080050;
+    private static final int StudyDate = 0x00080020;
+    private static final int SeriesDate = 0x00080021;
+    private static final int AcquisitionDate = 0x00080022;
+    private static final int InstanceCreationDate = 0x00080013;
+    private static final int StudyDescription = 0x00081030;
+    private static final int SeriesDescription = 0x0008103E;
+    private static final int Rows = 0x00280010;
+    private static final int Columns = 0x00280011;
+    private static final int BitsAllocated = 0x00280100;
+    private static final int BitsStored = 0x00280101;
+    private static final int HighBit = 0x00280102;
+    private static final int PixelRepresentation = 0x00280103;
+    private static final int SamplesPerPixel = 0x00280002;
+    private static final int PhotometricInterpretation = 0x00280004;
+    private static final int ImagePositionPatient = 0x00200032;
+    private static final int ImageOrientationPatient = 0x00200037;
+    private static final int SliceThickness = 0x00180050;
+    private static final int SpacingBetweenSlices = 0x00180088;
+    private static final int PixelSpacing = 0x00280030;
+    private static final int WindowCenter = 0x00281050;
+    private static final int WindowWidth = 0x00281051;
+
+    /** よく使われるシーケンスタグ一覧（数値直接定義） */
+    public static final int[] COMMON_SEQUENCE_TAGS = {
+        0x00400275, // ScheduledProcedureStepSequence
+        0x0040A173, // ReferencedPerformedProcedureStepSequence
+        0x00100020, // PatientStudyModuleSequence
+        0x00082212, // SeriesModuleSequence
+        0x00280030, // ImagePlaneModuleSequence
+        0x00280060, // PixelPresentationModuleSequence
+        0x00082218, // FunctionalGroupModuleSequence
+        0x52009230, // PerFrameFunctionalGroupsSequence
+    };
+
     /**
      * 解析結果を保持するデータ構造。
      */
@@ -168,52 +217,52 @@ public class DicomMetadataParser {
         MetadataData data = new MetadataData();
 
         // ===== 基本ID =====
-        data.sopInstanceUID = safeGetString(attrs, org.dcm4che3.data.Tag.SOPInstanceUID);
-        data.studyInstanceUID = safeGetString(attrs, org.dcm4che3.data.Tag.StudyInstanceUID);
-        data.seriesInstanceUID = safeGetString(attrs, org.dcm4che3.data.Tag.SeriesInstanceUID);
-        data.sopClassUID = safeGetString(attrs, org.dcm4che3.data.Tag.SOPClassUID);
+        data.sopInstanceUID = safeGetString(attrs, SOPInstanceUID);
+        data.studyInstanceUID = safeGetString(attrs, StudyInstanceUID);
+        data.seriesInstanceUID = safeGetString(attrs, SeriesInstanceUID);
+        data.sopClassUID = safeGetString(attrs, SOPClassUID);
 
         // ===== クラス識別 =====
-        data.modality = safeGetString(attrs, org.dcm4che3.data.Tag.Modality);
-        data.imageType = safeGetString(attrs, org.dcm4che3.data.Tag.ImageType);
-        data.manufacturer = safeGetString(attrs, org.dcm4che3.data.Tag.Manufacturer);
-        data.manufacturerModelName = safeGetString(attrs, org.dcm4che3.data.Tag.ManufacturerModelName);
-        data.deviceSerialNumber = safeGetString(attrs, org.dcm4che3.data.Tag.DeviceSerialNumber);
+        data.modality = safeGetString(attrs, Modality);
+        data.imageType = safeGetString(attrs, ImageType);
+        data.manufacturer = safeGetString(attrs, Manufacturer);
+        data.manufacturerModelName = safeGetString(attrs, ManufacturerModelName);
+        data.deviceSerialNumber = safeGetString(attrs, DeviceSerialNumber);
 
         // ===== 患者情報 =====
-        data.patientID = safeGetString(attrs, org.dcm4che3.data.Tag.PatientID);
-        data.patientName = safeGetString(attrs, org.dcm4che3.data.Tag.PatientName);
-        data.patientBirthDate = safeGetString(attrs, org.dcm4che3.data.Tag.PatientBirthDate);
-        data.patientSex = safeGetString(attrs, org.dcm4che3.data.Tag.PatientSex);
+        data.patientID = safeGetString(attrs, PatientID);
+        data.patientName = safeGetString(attrs, PatientName);
+        data.patientBirthDate = safeGetString(attrs, PatientBirthDate);
+        data.patientSex = safeGetString(attrs, PatientSex);
 
         // ===== 検査情報 =====
-        data.accessionNumber = safeGetString(attrs, org.dcm4che3.data.Tag.AccessionNumber);
-        data.studyDate = attrs.getDate(org.dcm4che3.data.Tag.StudyDate);
-        data.seriesDate = attrs.getDate(org.dcm4che3.data.Tag.SeriesDate);
-        data.acquisitionDate = attrs.getDate(org.dcm4che3.data.Tag.AcquisitionDate);
-        data.instanceCreationDate = attrs.getDate(org.dcm4che3.data.Tag.InstanceCreationDate);
-        data.studyDescription = safeGetString(attrs, org.dcm4che3.data.Tag.StudyDescription);
-        data.seriesDescription = safeGetString(attrs, org.dcm4che3.data.Tag.SeriesDescription);
+        data.accessionNumber = safeGetString(attrs, AccessionNumber);
+        data.studyDate = attrs.getDate(StudyDate);
+        data.seriesDate = attrs.getDate(SeriesDate);
+        data.acquisitionDate = attrs.getDate(AcquisitionDate);
+        data.instanceCreationDate = attrs.getDate(InstanceCreationDate);
+        data.studyDescription = safeGetString(attrs, StudyDescription);
+        data.seriesDescription = safeGetString(attrs, SeriesDescription);
 
         // ===== 画像パラメータ =====
-        data.rows = attrs.getInt(org.dcm4che3.data.Tag.Rows, 0);
-        data.columns = attrs.getInt(org.dcm4che3.data.Tag.Columns, 0);
-        data.bitsAllocated = attrs.getInt(org.dcm4che3.data.Tag.BitsAllocated, 0);
-        data.bitsStored = attrs.getInt(org.dcm4che3.data.Tag.BitsStored, 0);
-        data.highBit = attrs.getInt(org.dcm4che3.data.Tag.HighBit, 0);
-        data.pixelRepresentation = attrs.getInt(org.dcm4che3.data.Tag.PixelRepresentation, 0);
-        data.samplesPerPixel = attrs.getFloat(org.dcm4che3.data.Tag.SamplesPerPixel, 1.0f);
-        data.photometricInterpretation = safeGetString(attrs, org.dcm4che3.data.Tag.PhotometricInterpretation);
+        data.rows = attrs.getInt(Rows, 0);
+        data.columns = attrs.getInt(Columns, 0);
+        data.bitsAllocated = attrs.getInt(BitsAllocated, 0);
+        data.bitsStored = attrs.getInt(BitsStored, 0);
+        data.highBit = attrs.getInt(HighBit, 0);
+        data.pixelRepresentation = attrs.getInt(PixelRepresentation, 0);
+        data.samplesPerPixel = attrs.getFloat(SamplesPerPixel, 1.0f);
+        data.photometricInterpretation = safeGetString(attrs, PhotometricInterpretation);
 
         // ===== 幾何情報 =====
-        int[] position = attrs.getInts(org.dcm4che3.data.Tag.ImagePositionPatient);
+        int[] position = attrs.getInts(ImagePositionPatient);
         if (position != null && position.length >= 3) {
             data.imagePositionPatient[0] = position[0];
             data.imagePositionPatient[1] = position[1];
             data.imagePositionPatient[2] = position[2];
         }
 
-        int[] orientation = attrs.getInts(org.dcm4che3.data.Tag.ImageOrientationPatient);
+        int[] orientation = attrs.getInts(ImageOrientationPatient);
         if (orientation != null && orientation.length >= 6) {
             data.imageOrientationPatient[0] = orientation[0];
             data.imageOrientationPatient[1] = orientation[1];
@@ -223,18 +272,18 @@ public class DicomMetadataParser {
             data.imageOrientationPatient[5] = orientation[5];
         }
 
-        data.sliceThickness = attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0);
-        data.spacingBetweenSlices = attrs.getDouble(org.dcm4che3.data.Tag.SpacingBetweenSlices, 0.0);
+        data.sliceThickness = attrs.getDouble(SliceThickness, 0.0);
+        data.spacingBetweenSlices = attrs.getDouble(SpacingBetweenSlices, 0.0);
 
-        double[] pixelSpacing = attrs.getDoubles(org.dcm4che3.data.Tag.PixelSpacing);
+        double[] pixelSpacing = attrs.getDoubles(PixelSpacing);
         if (pixelSpacing != null && pixelSpacing.length >= 2) {
             data.pixelSpacing[0] = pixelSpacing[0];
             data.pixelSpacing[1] = pixelSpacing[1];
         }
 
         // ===== ウィンドウ設定 =====
-        data.windowCenter = safeGetString(attrs, org.dcm4che3.data.Tag.WindowCenter);
-        data.windowWidth = safeGetString(attrs, org.dcm4che3.data.Tag.WindowWidth);
+        data.windowCenter = safeGetString(attrs, WindowCenter);
+        data.windowWidth = safeGetString(attrs, WindowWidth);
 
         return data;
     }
@@ -262,11 +311,12 @@ public class DicomMetadataParser {
             DicomSequenceInfo info = new DicomSequenceInfo(entry[0], entry[1]);
 
             try {
-                var seq = attrs.getSequence(entry[0]);
+                @SuppressWarnings("unchecked")
+                List<Attributes> seq = (List<Attributes>) attrs.getSequence(entry[0]);
                 if (seq != null) {
                     info.elementCount = seq.size();
                     for (int i = 0; i < Math.min(seq.size(), 3); i++) { // デバッグ用に最大3要素
-                        info.frames.add(seq.get(i)); // dcm4che 5.x: get() already returns Attributes
+                        info.frames.add(seq.get(i));
                     }
                 }
             } catch (Exception e) {
@@ -293,9 +343,8 @@ public class DicomMetadataParser {
     }
 
     /**
-     * DICOMファイルのパスからメタデータをパース（File版）
+     * DICOMファイルのパスからメタデータをパース（File版）— 重複定義のため削除済み
      */
-    public static MetadataData parseDicomFile(File file) {
 
     /**
      * 複数のDICOMファイルからメタデータをバッチ解析
