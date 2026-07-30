@@ -99,25 +99,26 @@ public class TransferSyntaxHandler {
         if (attrs == null) return false;
         // よくあるシーケンスタグ一覧（DICOM Part 3のTagリストから）
         int[] sequenceTags = {
-            Tag.ScheduledProcedureStepSequence,
-            Tag.ReferencedPerformedProcedureStepSequence,
-            Tag.SOPCommonModuleSequence,
-            Tag.PatientStudyModuleSequence,
-            Tag.SeriesModuleSequence,
-            Tag.ImagePlaneModuleSequence,
-            Tag.PixelPresentationModuleSequence,
-            Tag.RegistrationSequence,
-            Tag.FusionCapabilitiesModuleSequence,
-            Tag.FunctionalGroupModuleSequence,
-            Tag.PerFrameFunctionalGroupsSequence,
-            Tag.FrameOfReferenceUID, // scalarだが関連チェック用
-            Tag.ScheduledStepAttributesSequence,
-            Tag.ConversionPropertiesSequence,
-            Tag.AcquisitionProtocolDescriptionSequence,
+            ScheduledProcedureStepSequence,
+            ReferencedPerformedProcedureStepSequence,
+            SOPCommonModuleSequence,
+            PatientStudyModuleSequence,
+            SeriesModuleSequence,
+            ImagePlaneModuleSequence,
+            PixelPresentationModuleSequence,
+            RegistrationSequence,
+            FusionCapabilitiesModuleSequence,
+            FunctionalGroupModuleSequence,
+            PerFrameFunctionalGroupsSequence,
+            // Tag.FrameOfReferenceUID — scalarだが関連チェック用
+            0x00200054, // FrameOfReferenceUID
+            ScheduledStepAttributesSequence,
+            ConversionPropertiesSequence,
+            AcquisitionProtocolDescriptionSequence,
         };
 
         for (int tag : sequenceTags) {
-            if (attrs.containsAttribute(tag)) return true;
+            if (attrs.hasElement(tag)) return true;
         }
         return false;
     }
@@ -128,22 +129,22 @@ public class TransferSyntaxHandler {
         if (attrs == null) return names;
 
         int[][] sequenceGroups = {
-            {Tag.ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence"},
-            {Tag.ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence"},
-            {Tag.SOPCommonModuleSequence, "SOPCommonModuleSequence"},
-            {Tag.PatientStudyModuleSequence, "PatientStudyModuleSequence"},
-            {Tag.SeriesModuleSequence, "SeriesModuleSequence"},
-            {Tag.ImagePlaneModuleSequence, "ImagePlaneModuleSequence"},
-            {Tag.PixelPresentationModuleSequence, "PixelPresentationModuleSequence"},
-            {Tag.RegistrationSequence, "RegistrationSequence"},
-            {Tag.FusionCapabilitiesModuleSequence, "FusionCapabilitiesModuleSequence"},
-            {Tag.FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence"},
-            {Tag.PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence"},
+            {ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence"},
+            {ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence"},
+            {SOPCommonModuleSequence, "SOPCommonModuleSequence"},
+            {PatientStudyModuleSequence, "PatientStudyModuleSequence"},
+            {SeriesModuleSequence, "SeriesModuleSequence"},
+            {ImagePlaneModuleSequence, "ImagePlaneModuleSequence"},
+            {PixelPresentationModuleSequence, "PixelPresentationModuleSequence"},
+            {RegistrationSequence, "RegistrationSequence"},
+            {FusionCapabilitiesModuleSequence, "FusionCapabilitiesModuleSequence"},
+            {FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence"},
+            {PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence"},
         };
 
         for (int[] group : sequenceGroups) {
-            if (attrs.containsAttribute(group[0])) {
-                names.add(group[1]);
+            if (attrs.hasElement(group[0])) {
+                names.add(SEQUENCE_NAME_MAP.getOrDefault(group[0], "Unknown"));
             }
         }
         return names;

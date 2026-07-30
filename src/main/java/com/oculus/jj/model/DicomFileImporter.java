@@ -105,7 +105,7 @@ public class DicomFileImporter {
         // DicomInputStream でパース可能か確認（先頭バイトチェック）
         try (DicomInputStream dis = new DicomInputStream(path.toFile())) {
             Attributes attrs = dis.readDataset();
-            if (attrs != null && attrs.containsAttribute(org.dcm4che3.data.Tag.SOPClassUID)) {
+            if (attrs != null && attrs.hasElement(org.dcm4che3.data.Tag.SOPClassUID)) {
                 return true;
             }
         } catch (Exception e) {
@@ -123,7 +123,7 @@ public class DicomFileImporter {
             // dcm4che-coreが暗黙的VRでもデコード済みのAttributesを返す
             Attributes attrs = dis.readDataset();
 
-            if (attrs == null || !attrs.containsAttribute(org.dcm4che3.data.Tag.SOPInstanceUID)) {
+            if (attrs == null || !attrs.hasElement(org.dcm4che3.data.Tag.SOPInstanceUID)) {
                 logger.warn("無効なDICOMファイル: {}", pathStr);
                 return null;
             }
@@ -141,7 +141,7 @@ public class DicomFileImporter {
                 logger.info("シーケンス属性検出 [{}]: {}", pathStr, sequenceNames);
 
                 // PerFrameFunctionalGroupsSequence の場合、フレーム数もログ出力
-                if (attrs.containsAttribute(org.dcm4che3.data.Tag.PerFrameFunctionalGroupsSequence)) {
+                if (attrs.hasElement(org.dcm4che3.data.Tag.PerFrameFunctionalGroupsSequence)) {
                     int frameCount = DicomSequenceParser.countSequenceElements(
                         attrs, org.dcm4che3.data.Tag.PerFrameFunctionalGroupsSequence);
                     logger.info("  PerFrameFunctionalGroups: {} frames", frameCount);
@@ -197,10 +197,8 @@ public class DicomFileImporter {
                     case "MR":
                         image.setSliceThickness(attrs.getDouble(org.dcm4che3.data.Tag.SliceThickness, 0.0));
                         image.setSpacingBetweenSlices(attrs.getDouble(org.dcm4che3.data.Tag.SpacingBetweenSlices, 0.0));
-                        image.setPixelSpacingX(attrs.getDouble(
-                            getFirstDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing), 0.0));
-                        image.setPixelSpacingY(attrs.getDouble(
-                            getSecondDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing), 0.0));
+                        image.setPixelSpacingX((double) getFirstDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing));
+                        image.setPixelSpacingY((double) getSecondDoubleValue(attrs, org.dcm4che3.data.Tag.PixelSpacing));
                         break;
                     case "US":
                         image.setDynamicRange(attrs.getString(org.dcm4che3.data.Tag.DynamicRange));

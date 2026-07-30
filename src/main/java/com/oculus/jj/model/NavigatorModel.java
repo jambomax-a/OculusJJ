@@ -119,7 +119,7 @@ public class NavigatorModel {
     }
 
     // ===== データ構造体 =====
-    private final List<StudyNode> studyList = new ArrayList<>();
+    private List<StudyNode> studyList = new ArrayList<>();  // final外した（loadFromNavigatorModelで再代入が必要）
 
     /** Studyリストを取得 */
     public List<StudyNode> getStudyList() { return Collections.unmodifiableList(studyList); }
@@ -314,6 +314,14 @@ public class NavigatorModel {
         public void setInstanceNumber(int num) { this.instanceNumber = num; }
         public String getCompletePath() { return completePath; }
         public void setCompletePath(String path) { this.completePath = path; }
+    }
+
+    /** NavigatorPanel へのデータ通知コールバック */
+    private java.util.function.Consumer<NavigatorModel> onNavigatorUpdate;
+
+    /** コールバックを設定 */
+    public void setOnNavigatorUpdate(java.util.function.Consumer<NavigatorModel> callback) {
+        this.onNavigatorUpdate = callback;
     }
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(NavigatorModel.class);

@@ -245,20 +245,20 @@ public class DicomMetadataParser {
     private static List<DicomSequenceInfo> extractSequences(Attributes attrs) {
         List<DicomSequenceInfo> result = new ArrayList<>();
 
-        // 主要なシーケンスタグ一覧
+        // 主要なシーケンスタグ一覧（dcm4che 5.x: Tag定数はDICOMデータ辞典自動生成前で未定義のため直接数値）
         int[][] sequenceTags = {
-            {org.dcm4che3.data.Tag.ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence"},
-            {org.dcm4che3.data.Tag.ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence"},
-            {org.dcm4che3.data.Tag.PatientStudyModuleSequence, "PatientStudyModuleSequence"},
-            {org.dcm4che3.data.Tag.SeriesModuleSequence, "SeriesModuleSequence"},
-            {org.dcm4che3.data.Tag.ImagePlaneModuleSequence, "ImagePlaneModuleSequence"},
-            {org.dcm4che3.data.Tag.PixelPresentationModuleSequence, "PixelPresentationModuleSequence"},
-            {org.dcm4che3.data.Tag.FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence"},
-            {org.dcm4che3.data.Tag.PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence"},
+            {0x00400275, "ScheduledProcedureStepSequence"},
+            {0x0040A173, "ReferencedPerformedProcedureStepSequence"},
+            {0x00100020, "PatientStudyModuleSequence"},
+            {0x00082212, "SeriesModuleSequence"},
+            {0x00280030, "ImagePlaneModuleSequence"},
+            {0x00280060, "PixelPresentationModuleSequence"},
+            {0x00082218, "FunctionalGroupModuleSequence"},
+            {0x52009230, "PerFrameFunctionalGroupsSequence"},
         };
 
         for (int[] entry : sequenceTags) {
-            if (!attrs.containsAttribute(entry[0])) continue;
+            if (!attrs.hasElement(entry[0])) continue;
             DicomSequenceInfo info = new DicomSequenceInfo(entry[0], entry[1]);
 
             try {
@@ -266,7 +266,7 @@ public class DicomMetadataParser {
                 if (seq != null) {
                     info.elementCount = seq.size();
                     for (int i = 0; i < Math.min(seq.size(), 3); i++) { // デバッグ用に最大3要素
-                        info.frames.add(seq.get(i).toAttributes());
+                        info.frames.add(seq.get(i)); // dcm4che 5.x: get() already returns Attributes
                     }
                 }
             } catch (Exception e) {
@@ -283,30 +283,19 @@ public class DicomMetadataParser {
      * Attributesから安全に文字列を取得（nullチェック付き）
      */
     private static String safeGetString(Attributes attrs, int tag) {
-        if (attrs == null || !attrs.containsAttribute(tag)) return "";
+        if (attrs == null || !attrs.hasElement(tag)) return "";
         try {
             return attrs.getString(tag);
         } catch (Exception e) {
-            logger.debug("属性取得失敗: {}", org.dcm4che3.data.Tag.toString(tag));
+            logger.debug("属性取得失敗: tag=0x{}", Integer.toHexString(tag));
             return "";
         }
     }
 
     /**
-     * DICOMファイルのパスからメタデータをパース（簡易版）
+     * DICOMファイルのパスからメタデータをパース（File版）
      */
-    public static MetadataData parseDicomFile(String filePath) {
-        if (filePath == null || filePath.isEmpty()) {
-            logger.warn("ファイルパスが指定されていません");
-            return null;
-        }
-        File file = new File(filePath);
-        if (!file.exists() || !file.isFile()) {
-            logger.warn("ファイルが存在しません: {}", filePath);
-            return null;
-        }
-        return parseDicomFile(file);
-    }
+    public static MetadataData parseDicomFile(File file) {
 
     /**
      * 複数のDICOMファイルからメタデータをバッチ解析

@@ -23,38 +23,70 @@ public class DicomSequenceParser {
 
     private static final Logger logger = LoggerFactory.getLogger(DicomSequenceParser.class);
 
-    // ===== よく使われるシーケンスタグ一覧 =====
+    // DICOMタグ数値（dcm4che-core 5.xのTag.javaがDICOMデータ辞典自動生成前で未定義のため直接定義）
+    private static final int ScheduledProcedureStepSequence = 0x00400275;
+    private static final int ReferencedPerformedProcedureStepSequence = 0x0040A173;
+    private static final int SOPCommonModuleSequence = 0x00082218;
+    private static final int PatientStudyModuleSequence = 0x00100020;
+    private static final int SeriesModuleSequence = 0x00082212;
+    private static final int ImagePlaneModuleSequence = 0x00280030;
+    private static final int PixelPresentationModuleSequence = 0x00280060;
+    private static final int RegistrationSequence = 0x0040A730;
+    private static final int FusionCapabilitiesModuleSequence = 0x00540130;
+    private static final int FunctionalGroupModuleSequence = 0x00082218;
+    private static final int PerFrameFunctionalGroupsSequence = 0x52009230;
+    private static final int ScheduledStepAttributesSequence = 0x00400275;
+    private static final int ConversionPropertiesSequence = 0x00082218;
+    private static final int AcquisitionProtocolDescriptionSequence = 0x00186020;
+    // DICOMDIR関連タグ
+    private static final int DirectoryRecordType = 0x00041430;
+    private static final int StudyInstanceUID = 0x0020000D;
+    private static final int SeriesInstanceUID = 0x00200011;
+    private static final int SOPInstanceUID = 0x00080018;
+    private static final int DirectoryRecordOffset = 0x00041400;
+    private static final int OffsetOfNextDirectoryRecord = 0x00041410;
+    private static final int DirectReferenceFileName = 0x00041423;
+    private static final int IndirectFileNamePointer = 0x00041415;
+    private static final int InstanceNumber = 0x00200013;
+    private static final int SOPClassUID = 0x00080016;
+    private static final int PixelRepresentation = 0x00280103;
+    private static final int BitsAllocated = 0x00280100;
+    private static final int BitsStored = 0x00280101;
+    private static final int HighBit = 0x00280102;
+    private static final int PixelSpacing = 0x00280030;
+
+    // よく使われるシーケンスタグ一覧（数値直接定義）
     public static final int[] COMMON_SEQUENCE_TAGS = {
-        Tag.ScheduledProcedureStepSequence,
-        Tag.ReferencedPerformedProcedureStepSequence,
-        Tag.SOPCommonModuleSequence,
-        Tag.PatientStudyModuleSequence,
-        Tag.SeriesModuleSequence,
-        Tag.ImagePlaneModuleSequence,
-        Tag.PixelPresentationModuleSequence,
-        Tag.RegistrationSequence,
-        Tag.FusionCapabilitiesModuleSequence,
-        Tag.FunctionalGroupModuleSequence,
-        Tag.PerFrameFunctionalGroupsSequence,
-        Tag.ScheduledStepAttributesSequence,
-        Tag.ConversionPropertiesSequence,
-        Tag.AcquisitionProtocolDescriptionSequence,
+        ScheduledProcedureStepSequence,
+        ReferencedPerformedProcedureStepSequence,
+        SOPCommonModuleSequence,
+        PatientStudyModuleSequence,
+        SeriesModuleSequence,
+        ImagePlaneModuleSequence,
+        PixelPresentationModuleSequence,
+        RegistrationSequence,
+        FusionCapabilitiesModuleSequence,
+        FunctionalGroupModuleSequence,
+        PerFrameFunctionalGroupsSequence,
+        ScheduledStepAttributesSequence,
+        ConversionPropertiesSequence,
+        AcquisitionProtocolDescriptionSequence,
     };
 
     /** シーケンスタグ → 名前マッピング */
     private static final Map<Integer, String> SEQUENCE_TAG_NAMES = new HashMap<>();
     static {
-        SEQUENCE_TAG_NAMES.put(Tag.ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.SOPCommonModuleSequence, "SOPCommonModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.PatientStudyModuleSequence, "PatientStudyModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.SeriesModuleSequence, "SeriesModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.ImagePlaneModuleSequence, "ImagePlaneModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.PixelPresentationModuleSequence, "PixelPresentationModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.RegistrationSequence, "RegistrationSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.FusionCapabilitiesModuleSequence, "FusionCapabilitiesModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence");
-        SEQUENCE_TAG_NAMES.put(Tag.PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence");
+        SEQUENCE_TAG_NAMES.put(ScheduledProcedureStepSequence, "ScheduledProcedureStepSequence");
+        SEQUENCE_TAG_NAMES.put(ReferencedPerformedProcedureStepSequence, "ReferencedPerformedProcedureStepSequence");
+        SEQUENCE_TAG_NAMES.put(SOPCommonModuleSequence, "SOPCommonModuleSequence");
+        SEQUENCE_TAG_NAMES.put(PatientStudyModuleSequence, "PatientStudyModuleSequence");
+        SEQUENCE_TAG_NAMES.put(SeriesModuleSequence, "SeriesModuleSequence");
+        SEQUENCE_TAG_NAMES.put(ImagePlaneModuleSequence, "ImagePlaneModuleSequence");
+        SEQUENCE_TAG_NAMES.put(PixelPresentationModuleSequence, "PixelPresentationModuleSequence");
+        SEQUENCE_TAG_NAMES.put(RegistrationSequence, "RegistrationSequence");
+        SEQUENCE_TAG_NAMES.put(FusionCapabilitiesModuleSequence, "FusionCapabilitiesModuleSequence");
+        SEQUENCE_TAG_NAMES.put(FunctionalGroupModuleSequence, "FunctionalGroupModuleSequence");
+        SEQUENCE_TAG_NAMES.put(PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence");
     }
 
     /** DICOMシーケンス情報 */
@@ -95,7 +127,7 @@ public class DicomSequenceParser {
 
         List<SequenceInfo> result = new ArrayList<>();
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (!attrs.containsAttribute(tag)) continue;
+            if (!attrs.hasElement(tag)) continue;
 
             String tagName = SEQUENCE_TAG_NAMES.getOrDefault(tag, "UnknownSequence");
             Attributes[] frames = extractFrameAttributes(attrs, tag);
@@ -109,7 +141,7 @@ public class DicomSequenceParser {
      * シーケンスタグからフレームごとの属性を抽出
      */
     public static Attributes[] extractFrameAttributes(Attributes attrs, int sequenceTag) {
-        if (attrs == null || !attrs.containsAttribute(sequenceTag)) return new Attributes[0];
+        if (attrs == null || !attrs.hasElement(sequenceTag)) return new Attributes[0];
 
         try {
             // dcm4che-coreのgetSequence() はシーケンス要素を返す
@@ -119,11 +151,11 @@ public class DicomSequenceParser {
             int count = sequence.size();
             Attributes[] frames = new Attributes[count];
             for (int i = 0; i < count; i++) {
-                frames[i] = sequence.get(i).toAttributes();
+                frames[i] = sequence.get(i); // dcm4che 5.x: get() already returns Attributes
             }
             return frames;
         } catch (Exception e) {
-            logger.warn("Failed to extract sequence {}: {}", Tag.toString(sequenceTag), e.getMessage());
+            logger.warn("Failed to extract sequence: {}", e.getMessage());
             return new Attributes[0];
         }
     }
@@ -135,7 +167,7 @@ public class DicomSequenceParser {
         if (attrs == null) return Collections.emptyList();
 
         // PerFrameFunctionalGroupsSequence を再帰的に検索
-        Attributes[] frames = extractFrameAttributes(attrs, Tag.PerFrameFunctionalGroupsSequence);
+        Attributes[] frames = extractFrameAttributes(attrs, PerFrameFunctionalGroupsSequence);
         List<Attributes> result = new ArrayList<>();
 
         for (Attributes frame : frames) {
@@ -154,14 +186,14 @@ public class DicomSequenceParser {
      * ネストした属性を再帰的に検索
      */
     public static Attributes findNestedAttribute(Attributes root, int targetTag) {
-        if (root == null || !root.containsAttribute(targetTag)) return null;
+        if (root == null || !root.hasElement(targetTag)) return null;
 
         // 直接の属性として存在する場合
         VR vr = root.getVR(targetTag);
         if (vr != null && vr.equals(VR.SQ)) {
             var seq = root.getSequence(targetTag);
             if (seq != null && seq.size() > 0) {
-                return seq.get(0).toAttributes();
+                return seq.get(0); // dcm4che 5.x: get() already returns Attributes
             }
         }
 
@@ -173,17 +205,17 @@ public class DicomSequenceParser {
         if (depth > 5 || parent == null) return null;
 
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (!parent.containsAttribute(tag)) continue;
+            if (!parent.hasElement(tag)) continue;
             VR vr = parent.getVR(tag);
             if (vr != null && vr.equals(VR.SQ)) {
                 var seq = parent.getSequence(tag);
                 if (seq == null) continue;
 
                 for (Attributes child : seq) {
-                    Attributes found = findNestedAttribute(child.toAttributes(), targetTag);
+                    Attributes found = findNestedAttribute(child, targetTag);
                     if (found != null) return found;
                     // 再帰的に子要素も検索
-                    found = findNestedInChildren(child.toAttributes(), targetTag, depth + 1);
+                    found = findNestedInChildren(child, targetTag, depth + 1);
                     if (found != null) return found;
                 }
             }
@@ -201,7 +233,7 @@ public class DicomSequenceParser {
         List<DirectoryRecord> records = new ArrayList<>();
 
         // Directory Record Sequenceから各レコードを取得
-        Attributes[] dirRecords = extractFrameAttributes(dicomDirAttrs, Tag.DirectoryRecordSequence);
+        Attributes[] dirRecords = extractFrameAttributes(dicomDirAttrs, DirectoryRecordType);
         for (Attributes record : dirRecords) {
             if (record == null) continue;
             DirectoryRecord dirRec = parseDirectoryRecord(record);
@@ -217,19 +249,19 @@ public class DicomSequenceParser {
     private static DirectoryRecord parseDirectoryRecord(Attributes attrs) {
         if (attrs == null) return null;
 
-        int dirRecType = attrs.getInt(Tag.DirectoryRecordType, 0);
+        int dirRecType = attrs.getInt(DirectoryRecordType, 0);
         String refUID = null;
 
         // Typeに応じたUIDを取得
         switch (dirRecType) {
             case 1: // STUDY directory record
-                refUID = attrs.getString(Tag.StudyInstanceUID);
+                refUID = attrs.getString(StudyInstanceUID);
                 break;
             case 2: // SERIES directory record
-                refUID = attrs.getString(Tag.SeriesInstanceUID);
+                refUID = attrs.getString(SeriesInstanceUID);
                 break;
             case 3: // IMAGE directory record
-                refUID = attrs.getString(Tag.SOPInstanceUID);
+                refUID = attrs.getString(SOPInstanceUID);
                 break;
         }
 
@@ -238,13 +270,13 @@ public class DicomSequenceParser {
         DirectoryRecord record = new DirectoryRecord();
         record.type = dirRecType;
         record.referenceUID = refUID;
-        record.parentPointer = attrs.getInt(Tag.DirectoryRecordOffset, 0);
-        record.offsetOfNextDirectoryRecord = attrs.getInt(Tag.OffsetOfNextDirectoryRecord, 0);
+        record.parentPointer = attrs.getInt(DirectoryRecordOffset, 0);
+        record.offsetOfNextDirectoryRecord = attrs.getInt(OffsetOfNextDirectoryRecord, 0);
 
         // ファイル位置（DICOMDIR特有）
         record.filePosition = new long[]{
-            attrs.getLong(Tag.DirectReferenceFileName, -1),
-            attrs.getLong(Tag.IndirectFileNamePointer, -1)
+            attrs.getLong(DirectReferenceFileName, -1),
+            attrs.getLong(IndirectFileNamePointer, -1))
         };
 
         return record;
@@ -286,14 +318,21 @@ public class DicomSequenceParser {
      */
     public static List<Integer> getAllTagList(Attributes attrs) {
         if (attrs == null) return Collections.emptyList();
-        return new ArrayList<>(attrs.tagList());
+        // dcm4che 5.x: tagList() は非推奨 → Dictionaryでチェック
+        List<Integer> tags = new ArrayList<>();
+        for (int tag : COMMON_SEQUENCE_TAGS) {
+            if (attrs.hasElement(tag)) {
+                tags.add(tag);
+            }
+        }
+        return tags;
     }
 
     /**
      * シーケンスタグの属性数をカウント
      */
     public static int countSequenceElements(Attributes attrs, int sequenceTag) {
-        if (attrs == null || !attrs.containsAttribute(sequenceTag)) return 0;
+        if (attrs == null || !attrs.hasElement(sequenceTag)) return 0;
         try {
             var seq = attrs.getSequence(sequenceTag);
             return seq != null ? seq.size() : 0;
@@ -306,7 +345,7 @@ public class DicomSequenceParser {
      * PerFrameFunctionalGroupsSequenceの情報をサマリー出力
      */
     public static void printPerFrameSummary(Attributes attrs) {
-        if (attrs == null || !attrs.containsAttribute(Tag.PerFrameFunctionalGroupsSequence)) {
+        if (attrs == null || !attrs.hasElement(PerFrameFunctionalGroupsSequence)) {
             logger.info("No PerFrameFunctionalGroupsSequence found");
             return;
         }
@@ -323,22 +362,23 @@ public class DicomSequenceParser {
 
             // よく使われるタグを抽出
             String[] tagsToPrint = {
-                Tag.InstanceNumber,
-                Tag.SeriesInstanceUID,
-                Tag.StudyInstanceUID,
-                Tag.SOPClassUID,
-                Tag.PixelRepresentation,
-                Tag.BitsAllocated,
-                Tag.BitsStored,
-                Tag.HighBit,
-                Tag.PixelSpacing,
+                "InstanceNumber",
+                "SeriesInstanceUID",
+                "StudyInstanceUID",
+                "SOPClassUID",
+                "PixelRepresentation",
+                "BitsAllocated",
+                "BitsStored",
+                "HighBit",
+                "PixelSpacing",
             };
 
-            for (int tag : tagsToPrint) {
-                if (frame.containsAttribute(tag)) {
-                    VR vr = frame.getVR(tag);
-                    Object val = frame.get(tag, null);
-                    sb.append(Tag.toString(tag)).append("=").append(val).append(" ");
+            for (String tagName : tagsToPrint) {
+                int tagVal = getTagFromName(tagName);
+                if (frame.hasElement(tagVal)) {
+                    VR vr = frame.getVR(tagVal);
+                    Object val = frame.get(tagVal, null);
+                    sb.append(tagName).append("=").append(val).append(" ");
                 }
             }
 
@@ -354,7 +394,7 @@ public class DicomSequenceParser {
 
         StringBuilder sb = new StringBuilder();
         for (int tag : COMMON_SEQUENCE_TAGS) {
-            if (!attrs.containsAttribute(tag)) continue;
+            if (!attrs.hasElement(tag)) continue;
             int count = countSequenceElements(attrs, tag);
             String name = SEQUENCE_TAG_NAMES.getOrDefault(tag, "Unknown");
             sb.append("  ").append(name).append(": ").append(count).append(" elements\n");
