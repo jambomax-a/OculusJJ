@@ -60,6 +60,22 @@ public class TransferSyntaxHandler {
         SEQUENCE_NAME_MAP.put(PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence");
     }
 
+    /** 属性名→DICOMタグ数値の逆引きマップ */
+    private static final java.util.Map<String, Integer> NAME_TO_TAG_MAP = new java.util.HashMap<>();
+    static {
+        for (java.util.Map.Entry<Integer, String> e : SEQUENCE_NAME_MAP.entrySet()) {
+            NAME_TO_TAG_MAP.put(e.getValue(), e.getKey());
+        }
+        NAME_TO_TAG_MAP.put("TransferSyntaxUID", 0x00080016);
+        NAME_TO_TAG_MAP.put("PixelData", 0x7FE00010);
+    }
+
+    /** 属性名からDICOMタグ数値を取得 */
+    private static int getTagFromName(String name) {
+        Integer tag = NAME_TO_TAG_MAP.get(name);
+        return tag != null ? tag : 0;
+    }
+
     /** 転送構文UID → 名前 */
     private static final java.util.Map<String, String> TRANSFER_SYNTAX_NAMES = new java.util.HashMap<>();
     static {
@@ -159,23 +175,10 @@ public class TransferSyntaxHandler {
         java.util.List<String> names = new java.util.ArrayList<>();
         if (attrs == null) return names;
 
-        int[][] sequenceGroups = {
-            {0x00400275, "ScheduledProcedureStepSequence"},
-            {0x0040A173, "ReferencedPerformedProcedureStepSequence"},
-            {0x00082218, "SOPCommonModuleSequence"},
-            {0x00100020, "PatientStudyModuleSequence"},
-            {0x00082212, "SeriesModuleSequence"},
-            {0x00280030, "ImagePlaneModuleSequence"},
-            {0x00280060, "PixelPresentationModuleSequence"},
-            {0x0040A730, "RegistrationSequence"},
-            {0x00540130, "FusionCapabilitiesModuleSequence"},
-            {0x00082218, "FunctionalGroupModuleSequence"},
-            {0x52009230, "PerFrameFunctionalGroupsSequence"},
-        };
-
-        for (int[] group : sequenceGroups) {
-            if (attrs.contains(group[0])) {
-                names.add(SEQUENCE_NAME_MAP.getOrDefault(group[0], "Unknown"));
+        for (java.util.Map.Entry<Integer, String> e : SEQUENCE_NAME_MAP.entrySet()) {
+            int tag = e.getKey();
+            if (attrs.contains(tag)) {
+                names.add(SEQUENCE_NAME_MAP.getOrDefault(tag, "Unknown"));
             }
         }
         return names;
@@ -184,8 +187,13 @@ public class TransferSyntaxHandler {
     /** 画像のピクセルデータ長を取得（圧縮判定用） */
     public static long getPixelDataLength(Attributes attrs) {
         if (attrs == null) return 0;
-        byte[] pixelData = attrs.getBytes(getTagFromName("PixelData"));
-        return pixelData != null ? pixelData.length : 0L;
+        try {
+            byte[] pixelData = attrs.getBytes(getTagFromName("PixelData"));
+            return pixelData != null ? pixelData.length : 0L;
+        } catch (java.io.IOException e) {
+            logger.debug("ピクセルデータ長取得失敗: {}", e.getMessage());
+            return 0L;
+        }
     }
 
     /** 転送構文を考慮したピクセルデータ長を取得 */

@@ -89,6 +89,22 @@ public class DicomSequenceParser {
         SEQUENCE_TAG_NAMES.put(PerFrameFunctionalGroupsSequence, "PerFrameFunctionalGroupsSequence");
     }
 
+    /** 属性名→DICOMタグ数値の逆引きマップ */
+    private static final Map<String, Integer> NAME_TO_TAG_MAP = new HashMap<>();
+    static {
+        for (Map.Entry<Integer, String> e : SEQUENCE_TAG_NAMES.entrySet()) {
+            NAME_TO_TAG_MAP.put(e.getValue(), e.getKey());
+        }
+        NAME_TO_TAG_MAP.put("TransferSyntaxUID", 0x00080016);
+        NAME_TO_TAG_MAP.put("PixelData", 0x7FE00010);
+    }
+
+    /** 属性名からDICOMタグ数値を取得 */
+    private static int getTagFromName(String name) {
+        Integer tag = NAME_TO_TAG_MAP.get(name);
+        return tag != null ? tag : 0;
+    }
+
     /** DICOMシーケンス情報 */
     public static class SequenceInfo {
         private final int tag;
@@ -381,7 +397,23 @@ public class DicomSequenceParser {
                 int tagVal = getTagFromName(tagName);
                 if (frame.contains(tagVal)) {
                     VR vr = frame.getVR(tagVal);
-                    Object val = frame.get(tagVal, null);
+                    Object val;
+                    switch (vr) {
+                        case DS: case IS: case SS: case US: case UL:
+                            try {
+                                val = String.valueOf(frame.getInt(tagVal, 0));
+                            } catch (Exception e) {
+                                val = "";
+                            }
+                            break;
+                        default:
+                            try {
+                                val = frame.getString(tagVal);
+                            } catch (Exception e2) {
+                                val = "";
+                            }
+                            break;
+                    }
                     sb.append(tagName).append("=").append(val).append(" ");
                 }
             }

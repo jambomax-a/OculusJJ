@@ -295,7 +295,7 @@ public class DicomMetadataParser {
         List<DicomSequenceInfo> result = new ArrayList<>();
 
         // 主要なシーケンスタグ一覧（dcm4che 5.x: Tag定数はDICOMデータ辞典自動生成前で未定義のため直接数値）
-        int[][] sequenceTags = {
+        Object[][] sequenceTags = {
             {0x00400275, "ScheduledProcedureStepSequence"},
             {0x0040A173, "ReferencedPerformedProcedureStepSequence"},
             {0x00100020, "PatientStudyModuleSequence"},
@@ -306,13 +306,15 @@ public class DicomMetadataParser {
             {0x52009230, "PerFrameFunctionalGroupsSequence"},
         };
 
-        for (int[] entry : sequenceTags) {
-            if (!attrs.contains(entry[0])) continue;
-            DicomSequenceInfo info = new DicomSequenceInfo(entry[0], entry[1]);
+        for (Object[] entry : sequenceTags) {
+            if (!attrs.contains((Integer) entry[0])) continue;
+            int tag = (Integer) entry[0];
+            String name = (String) entry[1];
+            DicomSequenceInfo info = new DicomSequenceInfo(tag, name);
 
             try {
                 @SuppressWarnings("unchecked")
-                List<Attributes> seq = (List<Attributes>) attrs.getSequence(entry[0]);
+                List<Attributes> seq = (List<Attributes>) attrs.getSequence(tag);
                 if (seq != null) {
                     info.elementCount = seq.size();
                     for (int i = 0; i < Math.min(seq.size(), 3); i++) { // デバッグ用に最大3要素
