@@ -2,9 +2,11 @@ package com.oculus.jj.ui;
 
 import javax.swing.*;
 import java.awt.*;
+import com.oculus.jj.model.DicomPix;
 import com.oculus.jj.utils.UIStyle;
 import com.oculus.jj.utils.LanguageManager;
 import java.awt.event.*;
+import java.util.List;
 
 /**
  * ToolbarPanel - ツールバーウィンドウ（JToolBar方式）
@@ -211,7 +213,35 @@ public class ToolbarPanel extends JFrame {
     }
 
     private void toggleFusionMode() {
-        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.fusion", "Fusion/Blending - feature in development"), "Fusion", JOptionPane.INFORMATION_MESSAGE);
+        DCMView baseView = null;
+        if (viewer != null && viewer.getImageView() != null) {
+            baseView = viewer.getImageView();
+        } else if (BrowserController.currentBrowser() != null) {
+            baseView = BrowserController.currentBrowser().getActiveDCMViewForEdit();
+        }
+        if (baseView == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("toolbar.fusion.no.view", "No active image view"),
+                    LanguageManager.get("toolbar.fusion", "Fusion"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        List<DicomPix> list = baseView.getDcmPixList();
+        if (list == null || list.size() < 2) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("toolbar.fusion.single.image",
+                            "Fusion requires at least two images in this view. Open a second image (e.g. another series or a contrast pair) in the same viewer."),
+                    LanguageManager.get("toolbar.fusion", "Fusion"), JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // base = current, overlay = the other image
+        int cur = baseView.getCurImage();
+        int overlayIdx = (cur == 0) ? 1 : 0;
+        DicomPix overlay = list.get(overlayIdx);
+
+        JFrame owner = (viewer != null) ? viewer : this;
+        FusionControlsPanel.createAndShow(owner, baseView, overlay);
     }
 
     private void sendMailAction() {

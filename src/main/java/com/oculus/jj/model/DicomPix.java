@@ -510,6 +510,18 @@ public class DicomPix {
         return seriesId;
     }
 
+    /** PatientID (0010,0020) */
+    public String getPatientID() { return patientID; }
+
+    /** StudyDescription (0008,1030) */
+    public String getStudyDescription() { return studyDescription; }
+
+    /** SeriesDescription (0008,103E) */
+    public String getSeriesDescription() { return seriesDescription; }
+
+    /** AccessionNumber (0008,0050) */
+    public String getAccessionNumber() { return accessionNumber; }
+
     /**
      * 画像を読み込む
      * Weasisのアプローチを参考に実装

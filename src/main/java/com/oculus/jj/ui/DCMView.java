@@ -1650,6 +1650,33 @@ public class DCMView extends JPanel {
         return this.newRoi;
     }
 
+    /** 現在選択中のROIを取得 (null = 未選択) */
+    public com.oculus.jj.model.ROI getSelectedRoi() {
+        return this.selectedRoi;
+    }
+
+    /**
+     * 選択中の Brush ROI に対して形態学操作 (Dilate/Erode) を適用。
+     * Brush は太さ(thickness)で描画されるため、太さの増減で実現する。
+     *
+     * @param dilate true=Dilate(太らせる), false=Erode(細くする)
+     * @param amount 強度 (ピクセル相当)
+     * @return 適用できた場合にtrue
+     */
+    public boolean applyBrushMorph(boolean dilate, int amount) {
+        com.oculus.jj.model.ROI r = this.selectedRoi;
+        if (r == null) {
+            return false;
+        }
+        float t = r.getThickness() + (dilate ? amount : -amount);
+        r.setThickness(Math.max(1.0f, t));
+        if (curDCM != null) {
+            curDCM.computeROIStatistics(r);
+        }
+        repaint();
+        return true;
+    }
+
     /**
      * scaleToFitForDCMPix - 画像をフィットさせるスケール値を計算
      * HOROS-20240407準拠: DCMView.m 2056-2073行目

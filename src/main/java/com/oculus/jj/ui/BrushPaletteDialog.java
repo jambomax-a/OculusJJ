@@ -6,6 +6,7 @@ import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * Brush Palette Dialog
@@ -66,10 +67,43 @@ public class BrushPaletteDialog extends JDialog {
         sizePanel.add(sizeLabel, BorderLayout.EAST);
         mainPanel.add(sizePanel);
 
+        // --- P4: Morphological ops (Dilate / Erode) on selected Brush ROI ---
+        JPanel morphPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        morphPanel.setBorder(BorderFactory.createTitledBorder(
+                LanguageManager.get("brush.morph.strength", "Brush Morph")));
+        JButton dilateBtn = new JButton(LanguageManager.get("brush.dilate", "Dilate"));
+        JButton erodeBtn = new JButton(LanguageManager.get("brush.erode", "Erode"));
+        dilateBtn.addActionListener(e -> applyMorph(true));
+        erodeBtn.addActionListener(e -> applyMorph(false));
+        morphPanel.add(dilateBtn);
+        morphPanel.add(erodeBtn);
+        mainPanel.add(morphPanel);
+
         add(mainPanel, BorderLayout.CENTER);
 
         pack();
         setLocationRelativeTo(owner);
+    }
+
+    /**
+     * 選択中の Brush ROI に対して Dilate/Erode を適用。
+     * Brush は太さで描画されるため、太さの増減で実現する。
+     */
+    private void applyMorph(boolean dilate) {
+        BrowserController bc = BrowserController.currentBrowser();
+        com.oculus.jj.ui.DCMView view = (bc != null) ? bc.getActiveDCMViewForEdit() : null;
+        if (view == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("brush.morph.no.roi", "Select a Brush ROI first."),
+                    "Brush", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        boolean applied = view.applyBrushMorph(dilate, 1);
+        if (!applied) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("brush.morph.no.roi", "Select a Brush ROI first."),
+                    "Brush", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     public static void showPalette(Frame owner) {

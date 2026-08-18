@@ -15,7 +15,7 @@
 | **P1: 基盤統合** | ✅ **完了** | Preferences(508行)、メニューバー再実装、ダイアログ群(5ファイル)、i18n外部化 |
 | **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み |
 | **P3: ツールバー** | ✅ **完了** | Search/ModalityFilter/TimeInterval/Subtraction/Status Display 全実装 |
-| **P4: 画像処理・分析** | 🔧 **一部実装** | Shutter tool/Movie再生/PACS Query Settings等✅。Morphological ops/Fusion/Report生成は未 |
+| **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | 📋 **計画段階** | JOGL/LWJGL、VRAM最適化、AI画像分析など将来計画 |
 
 ### 進捗率：約75%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model完了）
@@ -216,12 +216,12 @@
 ### 🟠 P3: 画像処理・分析機能ギャップ
 | カテゴリ | 未実装項目 | HOROS参照 | 重要性 |
 |---------|-----------|----------|--------|
-| 画像操作 | Brush ROI Morphological ops (dilate/erode) | — | 中 |
+| 画像操作 | ~~Brush ROI Morphological ops (dilate/erode)~~ ✅実装済（BrushPalette + `applyBrushMorph`） | — | 中 |
 | 画像操作 | Subtraction operations, convolution, resample | — | 低 |
 | 画像操作 | ~~Shutter tool~~ ✅実装済み / Full-screen mode | — | 中 |
-| Fusion | Blending slider/mode, mergeFusedImages | — | 中 |
+| Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
 | Key Image | captureAndSetKeyImage → DICOM SC出力 | — | 中 |
-| Report | PDF生成・DICOM SR変換 | — | 中 |
+| Report | ~~PDF生成・DICOM SR変換~~ ✅HTMLレポート生成実装済（`generateReport`） | — | 中 |
 | Print | 12-bit display, Print slider | — | 低 |
 
 ### 🔵 P3.5: 2D Viewer メニュー（未実装）

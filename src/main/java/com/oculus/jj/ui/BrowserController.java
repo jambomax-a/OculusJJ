@@ -9816,16 +9816,81 @@ public class BrowserController extends JFrame {
 
     /** DICOM Print (PACSSettings popup) */
     public void generateReport(Object sender) {
-        javax.swing.JMenuItem jMenuItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file_print_report"));
-        jMenuItem.addActionListener(e -> {
-            PACSQuerySettingsDialog dialog = new PACSQuerySettingsDialog(BrowserController.this);
-            dialog.pack();
-            dialog.setLocationRelativeTo(BrowserController.this);
-            dialog.setVisible(true);
-        });
-        JPopupMenu popup = new JPopupMenu();
-        popup.add(jMenuItem);
-        popup.show(this, 0, this.getY());
+        DCMView view = getActiveDCMViewForEdit();
+        DicomPix dcm = (view != null) ? view.getCurDCM() : null;
+        if (dcm == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("report.no.image", "No active image to generate a report for."),
+                    LanguageManager.get("report.title", "Report"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String content = buildReportContent(view, dcm);
+
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle(LanguageManager.get("report.save.title", "Save Report"));
+        fc.setSelectedFile(new java.io.File("OculusJJ_Report.html"));
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                LanguageManager.get("report.filter.html", "HTML file"), "html"));
+        fc.setAcceptAllFileFilterUsed(false);
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File out = fc.getSelectedFile();
+        if (!out.getName().toLowerCase().endsWith(".html")) {
+            out = new java.io.File(out.getAbsolutePath() + ".html");
+        }
+        try {
+            java.nio.file.Files.write(out.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("report.saved", "Report saved to:") + "\n" + out.getAbsolutePath(),
+                    LanguageManager.get("report.title", "Report"), JOptionPane.INFORMATION_MESSAGE);
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("report.save.failed", "Failed to save report:") + " " + ex.getMessage(),
+                    LanguageManager.get("report.title", "Report"), JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** レポート用 HTML コンテンツを生成 */
+    private String buildReportContent(DCMView view, DicomPix dcm) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\">\n");
+        sb.append("<title>OculusJJ Report</title>\n");
+        sb.append("<style>body{font-family:sans-serif;margin:24px;}"
+                + "table{border-collapse:collapse;margin-top:12px;}"
+                + "th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;}"
+                + "th{background:#f0f0f0;}</style>\n</head>\n<body>\n");
+        sb.append("<h1>OculusJJ ").append(esc(LanguageManager.get("report.title", "Report"))).append("</h1>\n");
+        sb.append("<p>").append(esc(LanguageManager.get("report.generated", "Generated:")))
+                .append(" ").append(esc(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date())))
+                .append("</p>\n");
+        sb.append("<table>\n");
+        row(sb, LanguageManager.get("report.patient.id", "Patient ID"), dcm.getPatientID());
+        row(sb, LanguageManager.get("report.study.desc", "Study Description"), dcm.getStudyDescription());
+        row(sb, LanguageManager.get("report.series.desc", "Series Description"), dcm.getSeriesDescription());
+        row(sb, LanguageManager.get("report.accession", "Accession Number"), dcm.getAccessionNumber());
+        row(sb, LanguageManager.get("report.modality", "Modality"), dcm.getModality());
+        row(sb, "Study UID", dcm.getStudyInstanceUID());
+        row(sb, "Series UID", dcm.getSeriesInstanceUID());
+        row(sb, "SOP Instance UID", dcm.getSOPInstanceUID());
+        row(sb, "Transfer Syntax", dcm.getTransferSyntaxUID());
+        row(sb, LanguageManager.get("report.dimensions", "Dimensions"), dcm.getWidth() + " x " + dcm.getHeight());
+        row(sb, LanguageManager.get("report.frame", "Current Frame"), String.valueOf(view.getCurImage()));
+        row(sb, "Source File", dcm.getSrcFile());
+        sb.append("</table>\n");
+        sb.append("</body></html>\n");
+        return sb.toString();
+    }
+
+    private void row(StringBuilder sb, String label, String value) {
+        sb.append("<tr><th>").append(esc(label)).append("</th><td>")
+                .append(esc(value == null ? "" : value)).append("</td></tr>\n");
+    }
+
+    private String esc(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /** Import image from file (via JFileChooser) */
