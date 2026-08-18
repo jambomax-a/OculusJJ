@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-08-18 (P3.5: +Export実装: JPEG/TIFF/DICOMフォルダ一括・Email/DB List) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-08-18 (P3.5完了: +Apply CLUT(8プリセット)/Opacity(25-100%)) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -224,11 +224,11 @@
 | Report | ~~PDF生成・DICOM SR変換~~ ✅HTMLレポート生成実装済（`generateReport`） | — | 中 |
 | Print | 12-bit display, Print slider | — | 低 |
 
-### 🔵 P3.5: 2D Viewer メニュー（残り: Apply CLUT / Opacity）
+### ✅ P3.5: 2D Viewer メニュー（完了）
 | # | 項目 | HOROS実装箇所 | 概要 |
 |---|------|-------------|------|
-| 1 | Apply CLUT / Add CLUT | `ApplyCLUT:` / `AddCLUT:` (8-bit Editor) | カラーマッピング、LUT適用 |
-| 2 | Opacity (透明度) | `ApplyOpacity:` / `AddOpacity:` | 透明度テーブルの適用 |
+| 1 | ~~Apply CLUT / Add CLUT~~ ✅実装済（8プリセット: Gray/Body/Bone/Lung/Brain/PET-Rainbow/HotMetal/Heat + CLUTなし） | `ApplyCLUT:` / `AddCLUT:` (8-bit Editor) | WL/WW後の8bit値にRGB LUTを適用 |
+| 2 | ~~Opacity (透明度)~~ ✅実装済（25%/50%/75%/100%） | `ApplyOpacity:` / `AddOpacity:` | 画像全体の一様な不透明度 |
 | 3 | ~~Resize Window %~~ ✅実装済（actualSize/realSize/scaleToFit + Flip/Rotate） | `resizeWindow:` (ViewerController.m:2709) | No Rescale/Actual Size/Scale To Fit |
 | 4 | ~~Workspace State~~ ✅実装済（Save/Load JSON・Reset） | `saveWindowsState:` / `loadWindowsState:` / `resetWindowsState:` | ウィンドウ配置の保存・復元 |
 | 5 | ~~Apply Window Protocol~~ ✅実装済（モダリティ別既定WL/WW） | `applyWindowProtocol:` (ViewerController.m:2747) | モダリティ/シリーズに応じた自動ウィンドウ設定 |

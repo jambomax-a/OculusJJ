@@ -47,6 +47,12 @@ public class DicomPix {
     private boolean isBonjour;
     // HOROS-20240407準拠: isKeyImage フラグ
     private boolean isKeyImage = false;
+
+    // HOROS-20240407準拠: ApplyCLUT: / ApplyOpacity: (2D Viewer)
+    // WL/WWマッピング後の8bitグレースケール値(0-255)に対して適用するLUT
+    private int[] clutLUT = null;      // 256エントリのRGB LUT、null=無効
+    private float clutOpacity = 1.0f;  // 0.0..1.0 の一様なアルファ
+
     private DicomImage imageObj;
 
     // 画像データ
@@ -856,14 +862,32 @@ public class DicomPix {
         }
 
         // 画像ピクセルへの適用 (DataBufferへの直接書き込みで高速化)
+        // HOROS-20240407準拠: ApplyCLUT: / ApplyOpacity: — WL/WW後の8bit値にLUT・不透明度を適用
         int[] pixels = ((java.awt.image.DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
+        int[] clut = clutLUT;
+        float opacity = clutOpacity;
         for (int i = 0; i < rawShortData.length; i++) {
             if (i % 500000 == 0 && Thread.currentThread().isInterrupted()) {
                 return;
             }
             int rawVal = rawShortData[i] & 0xFFFF;
             int gray = lut[rawVal] & 0xFF;
-            pixels[i] = (gray << 16) | (gray << 8) | gray;
+            if (clut != null) {
+                int rgb = clut[gray];
+                if (opacity < 1.0f) {
+                    int r = (int) (((rgb >> 16) & 0xFF) * opacity);
+                    int gr = (int) (((rgb >> 8) & 0xFF) * opacity);
+                    int b = (int) ((rgb & 0xFF) * opacity);
+                    rgb = (r << 16) | (gr << 8) | b;
+                }
+                pixels[i] = rgb;
+            } else {
+                if (opacity < 1.0f) {
+                    gray = (int) (gray * opacity);
+                    if (gray > 255) gray = 255;
+                }
+                pixels[i] = (gray << 16) | (gray << 8) | gray;
+            }
         }
     }
 
@@ -962,6 +986,162 @@ public class DicomPix {
             // メモリ内で高速に適用（再読み込み不要）
             applyWLWWInMemory();
             thumbnailImage = null; // サムネイルは必要に応じて再生成
+        }
+    }
+
+    // ========================================================================
+    // CLUT / Opacity (HOROS-20240407準拠: ApplyCLUT: / ApplyOpacity:)
+    // WL/WWマッピング後の8bitグレースケール値(0-255) → RGB のLUT
+    // ========================================================================
+
+    /** 利用可能なCLUTプリセット名リスト (PreferencesのDefault CLUT一覧と一致) */
+    public static final String[] CLUT_PRESETS = {
+            "Gray Scale", "CT-Body", "CT-Bone", "CT-Lung", "CT-Brain",
+            "PET-Rainbow", "PET-HotMetal", "PET-Heat"
+    };
+
+    /**
+     * 指定したプリセット名のCLUT LUTを取得（256エントリのRGB配列）
+     * @return LUT配列、未知の名前の場合は null
+     */
+    public static int[] getCLUTLUT(String preset) {
+        if (preset == null)
+            return null;
+        int[] lut = new int[256];
+        switch (preset) {
+        case "Gray Scale":
+            for (int i = 0; i < 256; i++)
+                lut[i] = (i << 16) | (i << 8) | i;
+            return lut;
+        case "CT-Body":
+            // 黒→青→緑→黄→白（医療画像で一般的なボディウィンドウカラー）
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 90, 0x0000A0 },
+                    { 150, 0x00A000 },
+                    { 210, 0xC0C000 },
+                    { 255, 0xFFFFFF }
+            });
+        case "CT-Bone":
+            // 黒→赤→オレンジ（骨強調）
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 100, 0x800000 },
+                    { 180, 0xE05000 },
+                    { 255, 0xFFD060 }
+            });
+        case "CT-Lung":
+            // 黒→シア→白（肺野）
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 80, 0x002060 },
+                    { 160, 0x0080C0 },
+                    { 255, 0xE8F4FF }
+            });
+        case "CT-Brain":
+            // 黒→紫→ピンク（脳）
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 90, 0x300050 },
+                    { 170, 0x9040A0 },
+                    { 255, 0xFFE0F0 }
+            });
+        case "PET-Rainbow":
+            // ホットメタル風のレインボー（PET標準）
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 40, 0x0000FF },
+                    { 80, 0x00FF00 },
+                    { 120, 0xFFFF00 },
+                    { 170, 0xFF8000 },
+                    { 220, 0xFF0000 },
+                    { 255, 0xFFFFFF }
+            });
+        case "PET-HotMetal":
+            // 黒→青→シアン→白（冷色系）
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 60, 0x0000C0 },
+                    { 130, 0x00C0FF },
+                    { 200, 0xC0F0FF },
+                    { 255, 0xFFFFFF }
+            });
+        case "PET-Heat":
+            // FusionImageProcessorのHEAT_CLUTと同一の熱色系
+            return gradientLUT(new int[][] {
+                    { 0, 0x000000 },
+                    { 60, 0x800000 },
+                    { 120, 0xFF4000 },
+                    { 180, 0xFFC000 },
+                    { 255, 0xFFFFE0 }
+            });
+        default:
+            return null;
+        }
+    }
+
+    private static int[] gradientLUT(int[][] stops) {
+        int[] lut = new int[256];
+        for (int i = 0; i < 256; i++) {
+            // iを含む区間 [stops[s][0], stops[s+1][0]] を探す
+            int s = 0;
+            while (s < stops.length - 1 && stops[s + 1][0] < i)
+                s++;
+            int v0 = stops[s][0], v1 = stops[s + 1][0];
+            int c0 = stops[s][1], c1 = stops[s + 1][1];
+            float t = (v1 > v0) ? (float) (i - v0) / (v1 - v0) : 0.0f;
+            if (t > 1.0f)
+                t = 1.0f;
+            if (t < 0.0f)
+                t = 0.0f;
+            int r = (int) (((c0 >> 16) & 0xFF) + (((c1 >> 16) & 0xFF) - ((c0 >> 16) & 0xFF)) * t);
+            int g = (int) (((c0 >> 8) & 0xFF) + (((c1 >> 8) & 0xFF) - ((c0 >> 8) & 0xFF)) * t);
+            int b = (int) ((c0 & 0xFF) + ((c1 & 0xFF) - (c0 & 0xFF)) * t);
+            lut[i] = (r << 16) | (g << 8) | b;
+        }
+        return lut;
+    }
+
+    /**
+     * CLUTを適用（プリセット名で指定）
+     * @param preset CLUT_PRESETS のいずれか、または null で解除
+     */
+    public void applyCLUT(String preset) {
+        this.clutLUT = getCLUTLUT(preset);
+        if (isGrayscale && rawShortData != null) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
+        }
+    }
+
+    /** 現在のCLUTプリセットのLUTが設定されているか */
+    public boolean hasCLUT() {
+        return clutLUT != null;
+    }
+
+    /**
+     * Opacity（不透明度）を設定 — 0.0..1.0
+     * 画像全体を暗く（背景色へ向けて淡く）表示する
+     */
+    public void applyOpacity(float opacity) {
+        this.clutOpacity = Math.max(0.0f, Math.min(1.0f, opacity));
+        if (isGrayscale && rawShortData != null) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
+        }
+    }
+
+    public float getCLUTOpacity() {
+        return clutOpacity;
+    }
+
+    /** CLUTとOpacityをリセット（デフォルト表示に戻す） */
+    public void resetCLUTOpacity() {
+        this.clutLUT = null;
+        this.clutOpacity = 1.0f;
+        if (isGrayscale && rawShortData != null) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
         }
     }
 

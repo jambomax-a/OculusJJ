@@ -7463,6 +7463,36 @@ public class BrowserController extends JFrame {
         applyWindowProtocolItem.addActionListener(e -> applyWindowProtocol(null));
         viewer2DMenu.add(applyWindowProtocolItem);
 
+        // Apply CLUT
+        // HOROS-20240407準拠: - (IBAction) applyCLUT (2D Viewer)
+        javax.swing.JMenu clutMenu = new javax.swing.JMenu(
+                MenuResourceLoader.getString("menu_viewer_2d_apply_clut"));
+        for (String preset : DicomPix.CLUT_PRESETS) {
+            final String name = preset;
+            javax.swing.JMenuItem it = new javax.swing.JMenuItem(name);
+            it.addActionListener(e -> applyCLUT(name));
+            clutMenu.add(it);
+        }
+        clutMenu.addSeparator();
+        javax.swing.JMenuItem noClutItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("clut.none"));
+        noClutItem.addActionListener(e -> applyCLUT(null));
+        clutMenu.add(noClutItem);
+        viewer2DMenu.add(clutMenu);
+
+        // Apply Opacity
+        // HOROS-20240407準拠: - (IBAction) applyOpacity (2D Viewer)
+        javax.swing.JMenu opacityMenu = new javax.swing.JMenu(
+                MenuResourceLoader.getString("menu_viewer_2d_apply_opacity"));
+        int[] opacityPercents = { 100, 75, 50, 25 };
+        for (int p : opacityPercents) {
+            final int pp = p;
+            javax.swing.JMenuItem it = new javax.swing.JMenuItem(p + "%");
+            it.addActionListener(e -> applyOpacity(pp));
+            opacityMenu.add(it);
+        }
+        viewer2DMenu.add(opacityMenu);
+
         // Workspace State
         // HOROS-20240407準拠: Save/Load Workspace State
         javax.swing.JMenu workspaceMenu = new javax.swing.JMenu(
@@ -8876,6 +8906,36 @@ public class BrowserController extends JFrame {
         if (pix == null) return;
         int mode = (sender instanceof Integer) ? (Integer) sender : 3;
         pix.convertToRGB(mode);
+        view.repaint();
+    }
+
+    /**
+     * CLUTを適用
+     * HOROS-20240407準拠: - (IBAction) applyCLUT (2D Viewer)
+     * @param sender プリセット名（String）、null で解除
+     */
+    public void applyCLUT(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        String preset = (sender instanceof String) ? (String) sender : null;
+        pix.applyCLUT(preset);
+        view.repaint();
+    }
+
+    /**
+     * Opacity（不透明度）を適用
+     * HOROS-20240407準拠: - (IBAction) applyOpacity (2D Viewer)
+     * @param sender 不透明度パーセント（Integer、25/50/75/100）
+     */
+    public void applyOpacity(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        int percent = (sender instanceof Integer) ? (Integer) sender : 100;
+        pix.applyOpacity(percent / 100.0f);
         view.repaint();
     }
 
