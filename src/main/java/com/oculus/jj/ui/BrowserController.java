@@ -8439,15 +8439,107 @@ public class BrowserController extends JFrame {
     /**
      * メールを送信
      * HOROS-20240407準拠: -(IBAction)sendMail:(id)sender (16940行目)
+     * 現行: 現行フレームをJPEGにエクスポートし、mailto URIでメーラを起動
      */
     public void sendMail(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.curDCM == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("export.no.view", "No active viewer to export"),
+                    "Export to Email", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle("Export JPEG (for Email)");
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JPEG images", "jpg", "jpeg"));
+        fc.setApproveButtonText("Save");
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File file = fc.getSelectedFile();
+        if (!file.getName().toLowerCase().endsWith(".jpg") && !file.getName().toLowerCase().endsWith(".jpeg")) {
+            file = new java.io.File(file.getAbsolutePath() + ".jpg");
+        }
+        exportImageSingle(view.curDCM, file, "JPEG", "Export to Email");
+        if (file.exists()) {
+            try {
+                String dcm = (view.curDCM.getSeriesDescription() != null
+                        ? view.curDCM.getSeriesDescription() : "OculusJJ");
+                String subject = java.net.URLEncoder.encode(
+                        (view.curDCM.getPatientID() != null ? view.curDCM.getPatientID() + " - " : "") + dcm,
+                        java.nio.charset.StandardCharsets.UTF_8.name());
+                String body = java.net.URLEncoder.encode(
+                        LanguageManager.get("mail.body", "Please find the attached DICOM image export.") + "\n",
+                        java.nio.charset.StandardCharsets.UTF_8.name());
+                String uri = "mailto:?subject=" + subject + "&body=" + body;
+                java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                if (desktop.isDesktopSupported()) {
+                    desktop.browse(java.net.URI.create(uri));
+                } else {
+                    JOptionPane.showMessageDialog(this,
+                            LanguageManager.get("mail.attach.hint",
+                                    "Attach the file below to your email:") + "\n" + file.getAbsolutePath(),
+                            "Export to Email", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("mail.attach.hint", "Attach the file below to your email:") + "\n"
+                                + file.getAbsolutePath() + "\n(" + ex.getMessage() + ")",
+                        "Export to Email", JOptionPane.INFORMATION_MESSAGE);
+            }
+        }
     }
 
     /**
      * データベースリストを保存
      * HOROS-20240407準拠: - (IBAction) saveDBListAs:(id) sender (8825行目)
+     * 現行: DatabaseOutlineView のツリー構造をCSVまたはテキストでエクスポート
      */
     public void saveDBListAs(Object sender) {
+        if (databaseOutline == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("dblist.no.data", "No database list to export"),
+                    "Export Database List", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int choice = JOptionPane.showOptionDialog(this,
+                LanguageManager.get("dblist.format.choose", "Choose export format:"),
+                "Export Database List",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null,
+                new String[] {
+                        LanguageManager.get("dblist.format.csv", "CSV"),
+                        LanguageManager.get("dblist.format.txt", "Plain Text"),
+                        LanguageManager.get("common.cancel", "Cancel")
+                },
+                LanguageManager.get("dblist.format.csv", "CSV"));
+        if (choice < 0) {
+            return;
+        }
+        boolean csv = (choice == 0);
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle("Export Database List");
+        fc.setSelectedFile(new java.io.File(csv ? "DatabaseList.csv" : "DatabaseList.txt"));
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File out = fc.getSelectedFile();
+        if (csv && !out.getName().toLowerCase().endsWith(".csv")) {
+            out = new java.io.File(out.getAbsolutePath() + ".csv");
+        }
+        try (java.io.BufferedWriter w = new java.io.BufferedWriter(
+                new java.io.OutputStreamWriter(new java.io.FileOutputStream(out),
+                        java.nio.charset.StandardCharsets.UTF_8))) {
+            w.write("\uFEFF"); // BOM (Excel互換)
+            databaseOutline.exportAsText(csv, w);
+            w.flush();
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("export.saved", "Exported to:") + "\n" + out.getAbsolutePath(),
+                    "Export Database List", JOptionPane.INFORMATION_MESSAGE);
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("export.failed", "Export failed:") + " " + ex.getMessage(),
+                    "Export Database List", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -9972,36 +10064,98 @@ public class BrowserController extends JFrame {
 
     /** Export to JPEG dialog */
     private void exportToJPEG() {
-        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        fc.setDialogTitle("Export JPEG");
-        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JPEG images", "jpg", "jpeg"));
-        fc.setApproveButtonText("Export");
-        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
-            java.io.File file = fc.getSelectedFile();
-            if (!file.getName().toLowerCase().endsWith(".jpg") && !file.getName().toLowerCase().endsWith(".jpeg")) {
-                file = new java.io.File(file.getAbsolutePath() + ".jpg");
-            }
-            DCMView view = getActiveDCMViewForEdit();
-            if (view != null && view.curDCM != null) {
-                try {
-                    java.awt.image.BufferedImage img = view.curDCM.getBufferedImageNoLoad();
-                    if (img != null) {
-                        javax.imageio.ImageIO.write(img, "JPEG", file);
-                        JOptionPane.showMessageDialog(BrowserController.this, "Exported to: " + file.getAbsolutePath(),
-                                "JPEG Export", JOptionPane.INFORMATION_MESSAGE);
-                    } else {
-                        JOptionPane.showMessageDialog(BrowserController.this, "No image data available", "JPEG Export",
-                                JOptionPane.WARNING_MESSAGE);
-                    }
-                } catch (java.io.IOException ex) {
-                    JOptionPane.showMessageDialog(BrowserController.this, "Export failed: " + ex.getMessage(),
-                            "JPEG Export", JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "JPEG Export",
-                        JOptionPane.WARNING_MESSAGE);
+        exportImageBatch("JPEG", new String[] { "jpg", "jpeg" },
+                LanguageManager.get("export.title.jpeg", "Export JPEG"));
+    }
+
+    /** 画像エクスポート共通処理（JPEG/TIFF）。複数フレーム時はフォルダ一括出力に対応 */
+    private void exportImageBatch(String format, String[] exts, String title) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.curDCM == null) {
+            JOptionPane.showMessageDialog(BrowserController.this,
+                    LanguageManager.get("export.no.view", "No active viewer to export"),
+                    title, JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        java.util.List<DicomPix> list = (view.dcmPixList != null && !view.dcmPixList.isEmpty())
+                ? view.dcmPixList
+                : java.util.Collections.singletonList(view.curDCM);
+        String ext = exts[0];
+
+        if (list.size() > 1) {
+            int choice = JOptionPane.showConfirmDialog(BrowserController.this,
+                    String.format(LanguageManager.get("export.all.frames",
+                            "This series has %d frames. Export all frames to a folder?"), list.size()),
+                    title, JOptionPane.YES_NO_OPTION);
+            if (choice == JOptionPane.YES_OPTION) {
+                exportImageBatchAll(list, format, ext, title);
+                return;
             }
         }
+
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle(title);
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(format + " images", exts));
+        fc.setApproveButtonText("Export");
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File file = fc.getSelectedFile();
+        if (!file.getName().toLowerCase().endsWith("." + ext)) {
+            file = new java.io.File(file.getAbsolutePath() + "." + ext);
+        }
+        exportImageSingle(view.curDCM, file, format, title);
+    }
+
+    private void exportImageSingle(DicomPix pix, java.io.File file, String format, String title) {
+        try {
+            java.awt.image.BufferedImage img = pix.getBufferedImage();
+            if (img == null) {
+                JOptionPane.showMessageDialog(BrowserController.this,
+                        LanguageManager.get("export.no.image", "No image data available"),
+                        title, JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            if (img.getType() == java.awt.image.BufferedImage.TYPE_BYTE_GRAY && format.equals("JPEG")) {
+                // JPEGはグレースケール非対応のためRGBに変換
+                java.awt.image.BufferedImage rgb = new java.awt.image.BufferedImage(img.getWidth(), img.getHeight(),
+                        java.awt.image.BufferedImage.TYPE_INT_RGB);
+                rgb.getGraphics().drawImage(img, 0, 0, null);
+                img = rgb;
+            }
+            javax.imageio.ImageIO.write(img, format, file);
+            JOptionPane.showMessageDialog(BrowserController.this,
+                    LanguageManager.get("export.saved", "Exported to:") + "\n" + file.getAbsolutePath(),
+                    title, JOptionPane.INFORMATION_MESSAGE);
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(BrowserController.this,
+                    LanguageManager.get("export.failed", "Export failed:") + " " + ex.getMessage(),
+                    title, JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void exportImageBatchAll(java.util.List<DicomPix> list, String format, String ext, String title) {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle(title);
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setApproveButtonText("Export");
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File dir = fc.getSelectedFile();
+        String base = (list.get(0).getSeriesDescription() != null
+                ? list.get(0).getSeriesDescription()
+                : "series").replaceAll("[^A-Za-z0-9._-]", "_");
+        int ok = 0;
+        for (int i = 0; i < list.size(); i++) {
+            java.io.File out = new java.io.File(dir, String.format("%s_%03d.%s", base, i + 1, ext));
+            exportImageSingle(list.get(i), out, format, title + " (batch)");
+            ok++;
+        }
+        JOptionPane.showMessageDialog(BrowserController.this,
+                String.format(LanguageManager.get("export.frames.exported", "Exported %d image(s) to:"))
+                        + "\n" + dir.getAbsolutePath(),
+                title, JOptionPane.INFORMATION_MESSAGE);
     }
 
     /** Export Raw Data dialog */
@@ -10010,66 +10164,73 @@ public class BrowserController extends JFrame {
         fc.setDialogTitle("Export Raw DICOM");
         if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
             java.io.File file = fc.getSelectedFile();
-            exportToDICOMFileInternal(file);
+            DCMView view = getActiveDCMViewForEdit();
+            exportToDICOMFileInternal(file, (view != null) ? view.curDCM : null);
         }
     }
 
     /** Export to TIFF dialog */
     private void exportToTIFF() {
-        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
-        fc.setDialogTitle("Export TIFF");
-        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("TIFF images", "tif", "tiff"));
-        fc.setApproveButtonText("Export");
-        if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
-            java.io.File file = fc.getSelectedFile();
-            if (!file.getName().toLowerCase().endsWith(".tif") && !file.getName().toLowerCase().endsWith(".tiff")) {
-                file = new java.io.File(file.getAbsolutePath() + ".tif");
-            }
-            DCMView view = getActiveDCMViewForEdit();
-            if (view != null && view.curDCM != null) {
-                try {
-                    java.awt.image.BufferedImage img = view.curDCM.getBufferedImageNoLoad();
-                    if (img != null) {
-                        javax.imageio.ImageIO.write(img, "TIFF", file);
-                        JOptionPane.showMessageDialog(BrowserController.this, "Exported to: " + file.getAbsolutePath(),
-                                "TIFF Export", JOptionPane.INFORMATION_MESSAGE);
-                    } else {
-                        JOptionPane.showMessageDialog(BrowserController.this, "No image data available", "TIFF Export",
-                                JOptionPane.WARNING_MESSAGE);
-                    }
-                } catch (java.io.IOException ex) {
-                    JOptionPane.showMessageDialog(BrowserController.this, "Export failed: " + ex.getMessage(),
-                            "TIFF Export", JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "TIFF Export",
-                        JOptionPane.WARNING_MESSAGE);
-            }
-        }
+        exportImageBatch("TIFF", new String[] { "tif", "tiff" },
+                LanguageManager.get("export.title.tiff", "Export TIFF"));
     }
 
     /** Export to DICOM File(s) dialog */
     private void exportToDICOMFile() {
+        DCMView view = getActiveDCMViewForEdit();
+        boolean multi = view != null && view.dcmPixList != null && view.dcmPixList.size() > 1;
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setDialogTitle("Export DICOM");
+        if (multi) {
+            int choice = JOptionPane.showConfirmDialog(this,
+                    String.format(LanguageManager.get("export.all.frames",
+                            "This series has %d frames. Export all frames to a folder?"),
+                            view.dcmPixList.size()),
+                    "Export DICOM", JOptionPane.YES_NO_OPTION);
+            if (choice == JOptionPane.YES_OPTION) {
+                fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+            }
+        }
         if (fc.showSaveDialog(this) == javax.swing.JFileChooser.APPROVE_OPTION) {
             java.io.File file = fc.getSelectedFile();
-            exportToDICOMFileInternal(file);
+            if (file.isDirectory()) {
+                // フォルダ一括: 全フレームを出力
+                int ok = 0;
+                String base = (view.curDCM.getSeriesDescription() != null
+                        ? view.curDCM.getSeriesDescription()
+                        : "series").replaceAll("[^A-Za-z0-9._-]", "_");
+                for (int i = 0; i < view.dcmPixList.size(); i++) {
+                    DicomPix pix = view.dcmPixList.get(i);
+                    java.io.File out = new java.io.File(file, String.format("%s_%03d.dcm", base, i + 1));
+                    if (exportToDICOMFileInternal(out, pix, false))
+                        ok++;
+                }
+                JOptionPane.showMessageDialog(this,
+                        String.format(LanguageManager.get("export.frames.exported", "Exported %d image(s) to:"))
+                                + "\n" + file.getAbsolutePath(),
+                        "Export DICOM", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                exportToDICOMFileInternal(file, view != null ? view.curDCM : null);
+            }
         }
     }
 
-    private void exportToDICOMFileInternal(java.io.File outputFile) {
-        DCMView view = getActiveDCMViewForEdit();
-        if (view == null || view.curDCM == null) {
-            JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "DICOM Export",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
+    private boolean exportToDICOMFileInternal(java.io.File outputFile, DicomPix pix) {
+        return exportToDICOMFileInternal(outputFile, pix, true);
+    }
+
+    private boolean exportToDICOMFileInternal(java.io.File outputFile, DicomPix pix, boolean showMessages) {
+        if (pix == null) {
+            if (showMessages)
+                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "DICOM Export",
+                        JOptionPane.WARNING_MESSAGE);
+            return false;
         }
-        DicomPix pix = view.curDCM;
         if (pix.getPath() == null || !pix.getPath().toFile().exists()) {
-            JOptionPane.showMessageDialog(BrowserController.this, "Source file not available", "DICOM Export",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
+            if (showMessages)
+                JOptionPane.showMessageDialog(BrowserController.this, "Source file not available", "DICOM Export",
+                        JOptionPane.WARNING_MESSAGE);
+            return false;
         }
         try {
             java.io.File srcFile = pix.getPath().toFile();
@@ -10089,9 +10250,10 @@ public class BrowserController extends JFrame {
                 }
             }
             if (attrs == null) {
-                JOptionPane.showMessageDialog(BrowserController.this, "Failed to read source DICOM", "DICOM Export",
-                        JOptionPane.ERROR_MESSAGE);
-                return;
+                if (showMessages)
+                    JOptionPane.showMessageDialog(BrowserController.this, "Failed to read source DICOM", "DICOM Export",
+                            JOptionPane.ERROR_MESSAGE);
+                return false;
             }
             String newSopInstanceUID = java.util.UUID.randomUUID().toString();
             attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // SOPClassUID
@@ -10133,11 +10295,17 @@ public class BrowserController extends JFrame {
                 fos.write(fmiBytes);
                 fos.write(pixelData);
             }
-            JOptionPane.showMessageDialog(BrowserController.this, "Exported DICOM to: " + outputFile.getAbsolutePath(),
-                    "DICOM Export", JOptionPane.INFORMATION_MESSAGE);
+            if (showMessages)
+                JOptionPane.showMessageDialog(BrowserController.this,
+                        "Exported DICOM to: " + outputFile.getAbsolutePath(),
+                        "DICOM Export", JOptionPane.INFORMATION_MESSAGE);
+            return true;
         } catch (java.io.IOException ex) {
-            JOptionPane.showMessageDialog(BrowserController.this, "DICOM export failed: " + ex.getMessage(),
-                    "DICOM Export", JOptionPane.ERROR_MESSAGE);
+            if (showMessages)
+                JOptionPane.showMessageDialog(BrowserController.this,
+                        "DICOM export failed: " + ex.getMessage(),
+                        "DICOM Export", JOptionPane.ERROR_MESSAGE);
+            return false;
         }
     }
 

@@ -2461,4 +2461,54 @@ public class DatabaseOutlineView extends JXTreeTable {
             return label;
         }
     }
+
+    /**
+     * ツリー構造をCSVまたはタブ区切りテキストでエクスポート
+     * 現在表示中の全ノード（展開状態に関わらず）を深さ優先で列挙
+     */
+    public void exportAsText(boolean csv, java.io.Writer w) throws java.io.IOException {
+        org.jdesktop.swingx.treetable.TreeTableModel model = (org.jdesktop.swingx.treetable.TreeTableModel) getModel();
+        if (model == null) {
+            return;
+        }
+        int colCount = model.getColumnCount();
+        String sep = csv ? "," : "\t";
+        // ヘッダー行
+        StringBuilder header = new StringBuilder();
+        header.append("Depth");
+        for (int c = 0; c < colCount; c++) {
+            header.append(sep).append(escapeCsv(model.getColumnName(c), csv));
+        }
+        w.write(header.toString());
+        w.write("\n");
+        Object root = model.getRoot();
+        exportNode(root, model, 0, sep, csv, w);
+    }
+
+    private void exportNode(Object node, org.jdesktop.swingx.treetable.TreeTableModel model,
+            int depth, String sep, boolean csv, java.io.Writer w)
+            throws java.io.IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append(depth);
+        for (int c = 0; c < model.getColumnCount(); c++) {
+            Object v = model.getValueAt(node, c);
+            sb.append(sep).append(escapeCsv(v == null ? "" : v.toString(), csv));
+        }
+        w.write(sb.toString());
+        w.write("\n");
+        int childCount = model.getChildCount(node);
+        for (int i = 0; i < childCount; i++) {
+            exportNode(model.getChild(node, i), model, depth + 1, sep, csv, w);
+        }
+    }
+
+    private static String escapeCsv(String s, boolean csv) {
+        if (!csv) {
+            return s;
+        }
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return "\"" + s.replace("\"", "\"\"") + "\"";
+        }
+        return s;
+    }
 }

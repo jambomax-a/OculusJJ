@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-08-18 (P3.5: Resize/Flip・Rotate/FlipDataSeries/ConvertBW-RGB/KeyImage/WindowProtocol/WorkspaceState 実装) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-08-18 (P3.5: +Export実装: JPEG/TIFF/DICOMフォルダ一括・Email/DB List) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -224,7 +224,7 @@
 | Report | ~~PDF生成・DICOM SR変換~~ ✅HTMLレポート生成実装済（`generateReport`） | — | 中 |
 | Print | 12-bit display, Print slider | — | 低 |
 
-### 🔵 P3.5: 2D Viewer メニュー（一部実装済）
+### 🔵 P3.5: 2D Viewer メニュー（残り: Apply CLUT / Opacity）
 | # | 項目 | HOROS実装箇所 | 概要 |
 |---|------|-------------|------|
 | 1 | Apply CLUT / Add CLUT | `ApplyCLUT:` / `AddCLUT:` (8-bit Editor) | カラーマッピング、LUT適用 |
@@ -233,7 +233,7 @@
 | 4 | ~~Workspace State~~ ✅実装済（Save/Load JSON・Reset） | `saveWindowsState:` / `loadWindowsState:` / `resetWindowsState:` | ウィンドウ配置の保存・復元 |
 | 5 | ~~Apply Window Protocol~~ ✅実装済（モダリティ別既定WL/WW） | `applyWindowProtocol:` (ViewerController.m:2747) | モダリティ/シリーズに応じた自動ウィンドウ設定 |
 | 6 | ~~Key Images（全5項目）~~ ✅実装済（mark/all/unmark/ROI/next・prev） | `setKeyImage:` / `findNextPreviousKeyImage:` | キー画像マーク付け・ナビゲーション |
-| 7 | Export (DICOM/JPEG/TIFF) | — | 画像エクスポート |
+| 7 | ~~Export (DICOM/JPEG/TIFF)~~ ✅実装済（JPEG/TIFF/DICOM全フレームフォルダ一括出力 + Email/DB Listエクスポート） | `exportJPEG:` / `exportTIFF:` / `exportDICOMFile:` | 画像エクスポート |
 | 8 | ~~Flip Data Series~~ ✅実装済（インデックスリマップ） | `flipDataSeries:` (ViewerController.m:10400) | データシリーズ全体反転 |
 | 9 | ~~Convert to RGB/BW~~ ✅実装済（`DicomPix.convertToBW/RGB` 8メニュー） | `ConvertToRGBMenu:` / `ConvertToBWMenu:` | 画像形式変換 |
 
