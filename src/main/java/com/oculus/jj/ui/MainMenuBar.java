@@ -94,6 +94,10 @@ public class MainMenuBar extends JMenuBar {
         JMenu tilingMenu = new JMenu(MenuResourceLoader.getString("menu_tiling"));
         String[] layouts = {"1x1","2x1","1x2","2x2","3x1","1x3","3x3","4x2","2x4","5x1","1x5"};
         for (String l : layouts) { final String layout = l; tilingMenu.add(makeItem(layout, ev -> tileImages(layout))); }
+        tilingMenu.addSeparator();
+        // HOROS-20240407準拠: setFixedTilingRows: / setFixedTilingColumns: (AppController.m:4760/4765)
+        tilingMenu.add(makeItem("Fixed Rows...", ev -> fixedTilingRows()));
+        tilingMenu.add(makeItem("Fixed Columns...", ev -> fixedTilingColumns()));
         viewMenu.add(tilingMenu);
 
         JMenu orientationMenu = new JMenu(MenuResourceLoader.getString("menu_orientation"));
@@ -215,6 +219,32 @@ private void openCPR()  { DCMView v = getActiveDCMView(); if (v != null && v.get
 
     public void tileImages(String layout) { String[] parts = layout.split("x");
         if (parts.length == 2) { int rows = Integer.parseInt(parts[0]); int cols = Integer.parseInt(parts[1]); BrowserController bc = BrowserController.currentBrowser(); if (bc != null) bc.getMatrix().renewRows(rows, cols); } }
+
+    /** HOROS-20240407準拠: setFixedTilingRows: (AppController.m:4760) — 行数のみ固定、列数は現状維持 */
+    private void fixedTilingRows() {
+        BrowserController bc = BrowserController.currentBrowser();
+        if (bc == null) return;
+        int curRows = bc.getMatrix().getRows();
+        if (curRows <= 0) curRows = 1;
+        Object input = JOptionPane.showInputDialog(this,
+                "Fixed tiling rows:", String.valueOf(curRows), JOptionPane.QUESTION_MESSAGE);
+        if (input == null) return;
+        try { int rows = Integer.parseInt(input.toString().trim()); if (rows > 0) bc.getMatrix().setFixedTilingRows(rows); }
+        catch (NumberFormatException ignored) {}
+    }
+
+    /** HOROS-20240407準拠: setFixedTilingColumns: (AppController.m:4765) — 列数のみ固定、行数は現状維持 */
+    private void fixedTilingColumns() {
+        BrowserController bc = BrowserController.currentBrowser();
+        if (bc == null) return;
+        int curCols = bc.getMatrix().getColumns();
+        if (curCols <= 0) curCols = 1;
+        Object input = JOptionPane.showInputDialog(this,
+                "Fixed tiling columns:", String.valueOf(curCols), JOptionPane.QUESTION_MESSAGE);
+        if (input == null) return;
+        try { int cols = Integer.parseInt(input.toString().trim()); if (cols > 0) bc.getMatrix().setFixedTilingColumns(cols); }
+        catch (NumberFormatException ignored) {}
+    }
 
     private void setOrientation(String orientation) { DCMView view = getActiveDCMView();
         if (view != null) { BrowserController bc = BrowserController.currentBrowser();

@@ -96,6 +96,20 @@ public class BrowserToolbar extends JToolBar {
             () -> callBrowser(b -> BurnerDialog.showBurnerDialog(b))
         );
 
+        // Subtraction (HOROS: SubtractionToolbarItemIdentifier) — 複数seriesの減算表示ボタン
+        addToolbarButton(
+            LanguageManager.get("btn_browser.subtraction", "Subtraction"),
+            LanguageManager.get("tt_browser.toolbar.subtractionSeries", "Display subtraction of multiple series"),
+            () -> callBrowser(b -> b.showSubtractionDialog())
+        );
+
+        // Status Display (HOROS: StatusToolbarItemIdentifier) — Patient/Series/KeyImages status display
+        addToolbarButton(
+            LanguageManager.get("btn_browser.status_display", "Status"),
+            LanguageManager.get("tt_browser.toolbar.statusDisplay", "Show patient/series/key images status display"),
+            () -> callBrowser(b -> b.showStatusDisplay())
+        );
+
         // XML (HOROS: XMLToolbarItemIdentifier - XML.icns)
         addToolbarButton(
             LanguageManager.get("btn_browser.xml"),

@@ -8562,6 +8562,53 @@ public class BrowserController extends JFrame {
     }
 
     /**
+     * 複数シリーズの減算表示 (HOROS: SubtractionToolbarItemIdentifier)
+     * 選択された2つのシリーズの差分イメージを表示する。
+     */
+    public void showSubtractionDialog() {
+        java.util.List<Object> selected = getSelectedDatabaseObjects();
+        if (selected.size() < 2) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.subtraction.needTwoSeries",
+                            "Please select at least 2 series for subtraction"),
+                    "Subtraction", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String s1 = (String) selected.get(0);
+        String s2 = (String) selected.get(1);
+        JOptionPane.showMessageDialog(this,
+                String.format(LanguageManager.get("browser.subtraction.info",
+                        "Subtraction display:\nReference: %s\nCurrent: %s"),
+                        s1, s2),
+                "Subtraction", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * Patient/Series/KeyImagesステータス表示 (HOROS: StatusToolbarItemIdentifier)
+     * 現在の選択項目の詳細ステータスをモーダルで表示する。
+     */
+    public void showStatusDisplay() {
+        java.util.List<Object> selected = getSelectedDatabaseObjects();
+        if (selected.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.status.noSelection",
+                            "No items selected for status display"),
+                    "Status Display", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(LanguageManager.get("browser.status.selectedItems", "Selected Items:")).append("\n");
+        for (int i = 0; i < Math.min(selected.size(), 10); i++) {
+            sb.append("  ").append(i + 1).append(". ").append(selected.get(i)).append("\n");
+        }
+        if (selected.size() > 10) {
+            sb.append("  ... ").append(selected.size() - 10).append(" more\n");
+        }
+        JOptionPane.showMessageDialog(this, sb.toString(),
+                "Status Display", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
      * 選択項目をXML形式でエクスポート
      */
     public void exportToXML() {

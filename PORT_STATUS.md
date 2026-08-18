@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-07-31 | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-08-01 | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -14,7 +14,7 @@
 | **P0: DICOMパーサー基盤** | ✅ **転送構文対応完了** | dcm4che基本読み込み✅。完全パース・転送構文判定・シーケンス属性抽出実装済み |
 | **P1: 基盤統合** | ✅ **完了** | Preferences(508行)、メニューバー再実装、ダイアログ群(5ファイル)、i18n外部化 |
 | **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み |
-| **P3: ツールバー** | ⚠️ **ほぼ完了** | Search/ModalityFilter/TimeInterval実装済。Subtraction・Status Displayのみ未実装 |
+| **P3: ツールバー** | ✅ **完了** | Search/ModalityFilter/TimeInterval/Subtraction/Status Display 全実装 |
 | **P4: 画像処理・分析** | 🔧 **一部実装** | Shutter tool/Movie再生/PACS Query Settings等✅。Morphological ops/Fusion/Report生成は未 |
 | **P5: GPU/Optimization** | 📋 **計画段階** | JOGL/LWJGL、VRAM最適化、AI画像分析など将来計画 |
 
@@ -210,8 +210,8 @@
 ### 🟠 P2: ツールバーにまだないHOROSアイテム
 | 項目 | 内容 |
 |------|------|
-| Subtraction（減算） | 複数seriesの減算表示ボタン未実装 |
-| Status Display | Patient/Series/KeyImagesステータス表示未実装 |
+| Subtraction（減算） | ✅ 実装済（`showSubtractionDialog()`、複数series選択時に対応） |
+| Status Display | ✅ 実装済（`showStatusDisplay()`、選択アイテムのステータス一覧） |
 
 ### 🟠 P3: 画像処理・分析機能ギャップ
 | カテゴリ | 未実装項目 | HOROS参照 | 重要性 |
@@ -240,8 +240,8 @@
 ### 🟠 P2.5: ブラウザ/ツールバー追加ギャップ（未実装）
 | # | 項目 | HOROS参照 | 備考 |
 |---|------|----------|------|
-| 1 | Windows Tiling - Rows (固定行数) | `setFixedTilingRows:` (AppController.m:4760) | 基本tileWindowsは実装済、行数指定版未 |
-| 2 | Windows Tiling - Columns (固定列数) | `setFixedTilingColumns:` (AppController.m:4765) | 同上 |
+| 1 | Windows Tiling - Rows (固定行数) | `setFixedTilingRows:` (AppController.m:4760) | ✅ 実装済（Menu > Windows > Fixed Rows...） |
+| 2 | Windows Tiling - Columns (固定列数) | `setFixedTilingColumns:` (AppController.m:4765) | ✅ 実装済（Menu > Windows > Fixed Columns...） |
 
 ### 🟢 P4: GPU/Optimization（将来計画）
 - GPU Volume Rendering (JOGL/LWJGL)

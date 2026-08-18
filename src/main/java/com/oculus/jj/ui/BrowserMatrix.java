@@ -307,6 +307,28 @@ public class BrowserMatrix extends JPanel implements DragGestureListener, DragSo
     public int getColumns() {
         return columns;
     }
+
+    /**
+     * 固定行数タイリング (HOROS: setFixedTilingRows: AppController.m:4760)
+     * 現在の列数を維持したまま、行数のみ指定値に上書きする。
+     */
+    public void setFixedTilingRows(int newRows) {
+        int curCols = this.columns;
+        if (curCols <= 0) curCols = 1;
+        if (newRows < 1) newRows = 1;
+        renewRows(newRows, curCols);
+    }
+
+    /**
+     * 固定列数タイリング (HOROS: setFixedTilingColumns: AppController.m:4765)
+     * 現在の行数を維持したまま、列数のみ指定値に上書きする。
+     */
+    public void setFixedTilingColumns(int newColumns) {
+        int curRows = this.rows;
+        if (curRows <= 0) curRows = 1;
+        if (newColumns < 1) newColumns = 1;
+        renewRows(curRows, newColumns);
+    }
     
     /**
      * セルサイズを設定
