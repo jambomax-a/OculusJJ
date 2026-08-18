@@ -79,3 +79,7 @@ weasis-native/
 
 # Maven local cache
 .m2-local/
+
+# Local database
+Database/
+*.noindex/

@@ -37,6 +37,17 @@ public class OculusJJApp {
      * 3. resourcesフォルダに配置して、実行時にJARから抽出してロード
      */
     private static void loadOpenCVNativeLibrary() {
+        try {
+            loadOpenCVNativeLibraryInternal();
+        } catch (UnsatisfiedLinkError | Exception e) {
+            // OpenCVネイティブライブラリの読み込み失敗は致命的ではない
+            // （未圧縮DICOMや標準JPEGはdcm4che-imageioで読める）
+            System.err.println("WARNING: Failed to load OpenCV native library: " + e.getMessage());
+            System.err.println("WARNING: Some compressed DICOM transfer syntaxes may be unavailable.");
+        }
+    }
+
+    private static void loadOpenCVNativeLibraryInternal() {
         String osName = System.getProperty("os.name", "").toLowerCase();
         String osArch = System.getProperty("os.arch", "").toLowerCase();
         String libraryName;
@@ -437,6 +448,20 @@ public class OculusJJApp {
             // // System.err.println("Uncaught exception in thread: " + t.getName());
             e.printStackTrace();
         });
+
+        // Headless環境（DISPLAY未設定など）ではSwing UIを表示できないため、早期に警告
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            String msg = "[OculusJJ] Headless環境で起動しました (DISPLAY=" + System.getenv("DISPLAY") + ").\n"+
+                    "Swing UIを表示するには、グラフィカル環境（X11/Wayland）から起動してください。\n"+
+                    "例: DISPLAY=:0 ./gradlew run";
+            System.err.println(msg);
+            try {
+                javax.swing.JOptionPane.showMessageDialog(null, msg, "OculusJJ - Headlessモード",
+                        javax.swing.JOptionPane.WARNING_MESSAGE);
+            } catch (java.awt.HeadlessException he) {
+                // ダイアログ自体が表示できない場合は標準エラーのみ
+            }
+        }
 
         // Swingイベントディスパッチスレッドで実行
         SwingUtilities.invokeLater(() -> {
