@@ -45,6 +45,8 @@ public class DicomPix {
     private int frameNumber;
     private String seriesId;
     private boolean isBonjour;
+    // HOROS-20240407準拠: isKeyImage フラグ
+    private boolean isKeyImage = false;
     private DicomImage imageObj;
 
     // 画像データ
@@ -1004,6 +1006,22 @@ public class DicomPix {
     }
 
     /**
+     * Key Image フラグを取得
+     * HOROS-20240407準拠: isKeyImage
+     */
+    public boolean getKeyImage() {
+        return isKeyImage;
+    }
+
+    /**
+     * Key Image フラグを設定
+     * HOROS-20240407準拠: isKeyImage
+     */
+    public void setKeyImage(boolean value) {
+        this.isKeyImage = value;
+    }
+
+    /**
      * 保存されたWindow Levelを取得
      * HOROS-20240407準拠: savedWL
      */
@@ -1052,6 +1070,71 @@ public class DicomPix {
      */
     public void changeWLWW(float newWL, float newWW) {
         setWindowLevelWidth(newWL, newWW);
+    }
+
+    /**
+     * RGB画像をグレースケールに変換する
+     * HOROS準拠: DCMPix.m 9051 ConvertToBW:mode
+     * @param mode 0=RED, 1=GREEN, 2=BLUE, 3=RGB平均
+     */
+    public void convertToBW(int mode) {
+        if (bufferedImage == null) loadImage();
+        if (bufferedImage == null) return;
+        BufferedImage src = bufferedImage;
+        int w = src.getWidth();
+        int h = src.getHeight();
+        BufferedImage dest = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int rgb = src.getRGB(x, y);
+                int val;
+                if (mode == 0) {
+                    val = (rgb >> 16) & 0xFF; // RED
+                } else if (mode == 1) {
+                    val = (rgb >> 8) & 0xFF; // GREEN
+                } else if (mode == 2) {
+                    val = rgb & 0xFF; // BLUE
+                } else {
+                    val = (((rgb >> 16) & 0xFF) + ((rgb >> 8) & 0xFF) + (rgb & 0xFF)) / 3; // 平均
+                }
+                dest.setRGB(x, y, (val << 16) | (val << 8) | val);
+            }
+        }
+        bufferedImage = dest;
+        isGrayscale = true;
+        changeWLWW(127, 256);
+    }
+
+    /**
+     * グレースケール画像をRGB画像に変換する
+     * HOROS準拠: DCMPix.m 9100 ConvertToRGB:mode
+     * @param mode 0=RED, 1=GREEN, 2=BLUE, 3=RGB全チャンネル
+     */
+    public void convertToRGB(int mode) {
+        if (bufferedImage == null) loadImage();
+        if (bufferedImage == null) return;
+        BufferedImage src = bufferedImage;
+        int w = src.getWidth();
+        int h = src.getHeight();
+        BufferedImage dest = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int rgb = src.getRGB(x, y);
+                int gray = (((rgb >> 16) & 0xFF) + ((rgb >> 8) & 0xFF) + (rgb & 0xFF)) / 3;
+                if (mode == 0) {
+                    dest.setRGB(x, y, (gray << 16)); // REDのみ
+                } else if (mode == 1) {
+                    dest.setRGB(x, y, (gray << 8)); // GREENのみ
+                } else if (mode == 2) {
+                    dest.setRGB(x, y, gray); // BLUEのみ
+                } else {
+                    dest.setRGB(x, y, (gray << 16) | (gray << 8) | gray); // 全チャンネル
+                }
+            }
+        }
+        bufferedImage = dest;
+        isGrayscale = false;
+        changeWLWW(127, 256);
     }
 
     /**

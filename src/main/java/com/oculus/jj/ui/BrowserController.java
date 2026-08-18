@@ -32,6 +32,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.JPopupMenu;
+import javax.swing.JFileChooser;
 import javax.swing.SwingUtilities;
 
 import com.oculus.jj.model.DicomDatabase;
@@ -7413,47 +7414,72 @@ public class BrowserController extends JFrame {
 
         javax.swing.JMenuItem redToBWItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_red_to_bw"));
-        redToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        redToBWItem.addActionListener(e -> ConvertToBWMenu(0));
         convertBWRGBMenu.add(redToBWItem);
 
         javax.swing.JMenuItem greenToBWItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_green_to_bw"));
-        greenToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        greenToBWItem.addActionListener(e -> ConvertToBWMenu(1));
         convertBWRGBMenu.add(greenToBWItem);
 
         javax.swing.JMenuItem blueToBWItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_blue_to_bw"));
-        blueToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        blueToBWItem.addActionListener(e -> ConvertToBWMenu(2));
         convertBWRGBMenu.add(blueToBWItem);
 
         javax.swing.JMenuItem rgbToBWItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_rgb_to_bw"));
-        rgbToBWItem.addActionListener(e -> ConvertToBWMenu(null));
+        rgbToBWItem.addActionListener(e -> ConvertToBWMenu(3));
         convertBWRGBMenu.add(rgbToBWItem);
 
         convertBWRGBMenu.addSeparator();
 
         javax.swing.JMenuItem bwToRedItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_bw_to_red"));
-        bwToRedItem.addActionListener(e -> ConvertToRGBMenu(null));
+        bwToRedItem.addActionListener(e -> ConvertToRGBMenu(0));
         convertBWRGBMenu.add(bwToRedItem);
 
         javax.swing.JMenuItem bwToGreenItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_bw_to_green"));
-        bwToGreenItem.addActionListener(e -> ConvertToRGBMenu(null));
+        bwToGreenItem.addActionListener(e -> ConvertToRGBMenu(1));
         convertBWRGBMenu.add(bwToGreenItem);
 
         javax.swing.JMenuItem bwToBlueItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_bw_to_blue"));
-        bwToBlueItem.addActionListener(e -> ConvertToRGBMenu(null));
+        bwToBlueItem.addActionListener(e -> ConvertToRGBMenu(2));
         convertBWRGBMenu.add(bwToBlueItem);
 
         javax.swing.JMenuItem bwToRGBItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_color_bw_to_rgb"));
-        bwToRGBItem.addActionListener(e -> ConvertToRGBMenu(null));
+        bwToRGBItem.addActionListener(e -> ConvertToRGBMenu(3));
         convertBWRGBMenu.add(bwToRGBItem);
 
         viewer2DMenu.add(convertBWRGBMenu);
+
+        // Apply Window Protocol
+        // HOROS-20240407準拠: - (IBAction) applyWindowProtocol
+        javax.swing.JMenuItem applyWindowProtocolItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("menu_viewer_2d_apply_window_protocol"));
+        applyWindowProtocolItem.addActionListener(e -> applyWindowProtocol(null));
+        viewer2DMenu.add(applyWindowProtocolItem);
+
+        // Workspace State
+        // HOROS-20240407準拠: Save/Load Workspace State
+        javax.swing.JMenu workspaceMenu = new javax.swing.JMenu(
+                MenuResourceLoader.getString("menu_workspace_state"));
+        javax.swing.JMenuItem saveWorkspaceItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("menu_workspace_save"));
+        saveWorkspaceItem.addActionListener(e -> saveWorkspaceState(null));
+        workspaceMenu.add(saveWorkspaceItem);
+        javax.swing.JMenuItem loadWorkspaceItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("menu_workspace_load"));
+        loadWorkspaceItem.addActionListener(e -> loadWorkspaceState(null));
+        workspaceMenu.add(loadWorkspaceItem);
+        javax.swing.JMenuItem resetWorkspaceItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("menu_workspace_reset"));
+        resetWorkspaceItem.addActionListener(e -> resetWorkspaceState(null));
+        workspaceMenu.add(resetWorkspaceItem);
+        viewer2DMenu.add(workspaceMenu);
 
         viewer2DMenu.addSeparator();
 
@@ -7723,7 +7749,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 907行目
         javax.swing.JMenuItem keyImageItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file_key_image"));
         keyImageItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K, 0));
-        keyImageItem.addActionListener(e -> setKeyImage(null));
+        keyImageItem.addActionListener(e -> setKeyImage(0));
         viewer2DMenu.add(keyImageItem);
 
         // Mark All Images as Key Images
@@ -7766,7 +7792,7 @@ public class BrowserController extends JFrame {
                 MenuResourceLoader.getString("file_find_next_key"));
         findNextKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK));
-        findNextKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
+        findNextKeyItem.addActionListener(e -> findNextPreviousKeyImage(1));
         viewer2DMenu.add(findNextKeyItem);
 
         // Find Previous Key Image
@@ -7775,7 +7801,7 @@ public class BrowserController extends JFrame {
                 MenuResourceLoader.getString("file_find_prev_key"));
         findPrevKeyItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_K,
                 java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
-        findPrevKeyItem.addActionListener(e -> findNextPreviousKeyImage(null));
+        findPrevKeyItem.addActionListener(e -> findNextPreviousKeyImage(-1));
         viewer2DMenu.add(findPrevKeyItem);
 
         // 注: 2D Viewerメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
@@ -8733,16 +8759,193 @@ public class BrowserController extends JFrame {
 
     /**
      * BW変換メニュー
-     * HOROS-20240407準拠: - (IBAction) ConvertToBWMenu: (id) sender
+     * HOROS-20240407準拠: - (IBAction) ConvertToBW:mode
+     * @param sender mode: 0=RED, 1=GREEN, 2=BLUE, 3=RGB平均
      */
     public void ConvertToBWMenu(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        int mode = (sender instanceof Integer) ? (Integer) sender : 3;
+        pix.convertToBW(mode);
+        view.repaint();
     }
 
     /**
      * RGB変換メニュー
-     * HOROS-20240407準拠: - (IBAction) ConvertToRGBMenu: (id) sender
+     * HOROS-20240407準拠: - (IBAction) ConvertToRGB:mode
+     * @param sender mode: 0=RED, 1=GREEN, 2=BLUE, 3=RGB全チャンネル
      */
     public void ConvertToRGBMenu(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        int mode = (sender instanceof Integer) ? (Integer) sender : 3;
+        pix.convertToRGB(mode);
+        view.repaint();
+    }
+
+    /**
+     * ウィンドウプロトコルを適用
+     * HOROS-20240407準拠: - (IBAction) applyWindowProtocol: (id) sender
+     * モダリティに応じた既定のWL/WWを適用する
+     */
+    public void applyWindowProtocol(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        List<DicomPix> list = view.getDcmPixList();
+        if (list == null || list.isEmpty()) return;
+        for (DicomPix pix : list) {
+            String modality = (pix.getModality() != null) ? pix.getModality().toUpperCase() : "";
+            float wl = 0, ww = 0;
+            boolean applied = false;
+            if (modality.equals("CT")) {
+                wl = 40; ww = 400; applied = true; // 骨窓
+            } else if (modality.equals("MR")) {
+                pix.computeBestFit();
+                applied = true;
+            } else if (modality.equals("US") || modality.equals("DR")
+                    || modality.equals("MG") || modality.equals("CR")
+                    || modality.equals("DX") || modality.equals("XA")) {
+                pix.computeBestFit();
+                applied = true;
+            }
+            if (!applied) {
+                pix.computeBestFit();
+            }
+        }
+        view.repaint();
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("window.protocol.applied", "Window protocol applied"),
+                "Window Protocol", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * ワークスペース状態を保存
+     * HOROS-20240407準拠: - (IBAction) saveWindowState
+     * 開いている2Dビューアの位置・サイズ・インデックス・スケール・WL/WWをJSONで保存
+     */
+    public void saveWorkspaceState(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayed2DViewers();
+        if (viewers == null || viewers.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("workspace.no.viewers", "No 2D viewers to save"),
+                    "Workspace State", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.node.ArrayNode root = mapper.createArrayNode();
+            for (ViewerController vc : viewers) {
+                com.fasterxml.jackson.databind.node.ObjectNode node = mapper.createObjectNode();
+                java.awt.Rectangle b = vc.getBounds();
+                node.put("x", b.x);
+                node.put("y", b.y);
+                node.put("w", b.width);
+                node.put("h", b.height);
+                DCMView view = vc.getImageView();
+                if (view != null) {
+                    node.put("index", view.getCurImage());
+                    node.put("scale", view.getScaleValue());
+                    DicomPix pix = view.getCurDCM();
+                    if (pix != null) {
+                        node.put("wl", pix.getWindowLevel());
+                        node.put("ww", pix.getWindowWidth());
+                        node.put("seriesUid", pix.getSeriesInstanceUID());
+                    }
+                }
+                root.add(node);
+            }
+            JFileChooser chooser = new JFileChooser();
+            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON", "json"));
+            if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+            java.io.File out = chooser.getSelectedFile();
+            if (!out.getName().toLowerCase().endsWith(".json")) out = new java.io.File(out.getParent(), out.getName() + ".json");
+            mapper.writerWithDefaultPrettyPrinter().writeValue(out, root);
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("workspace.saved", "Workspace state saved: ") + out.getAbsolutePath(),
+                    "Workspace State", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("workspace.save.failed", "Save failed: ") + ex.getMessage(),
+                    "Workspace State", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * ワークスペース状態を読み込み
+     * HOROS-20240407準拠: - (IBAction) loadWindowState
+     */
+    public void loadWorkspaceState(Object sender) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            JFileChooser chooser = new JFileChooser();
+            chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON", "json"));
+            if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+            java.io.File in = chooser.getSelectedFile();
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(in);
+            if (!root.isArray()) {
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("workspace.invalid.file", "Invalid workspace file"),
+                        "Workspace State", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            List<ViewerController> viewers = ViewerController.getDisplayed2DViewers();
+            int n = Math.min(root.size(), viewers.size());
+            for (int i = 0; i < n; i++) {
+                com.fasterxml.jackson.databind.JsonNode node = root.get(i);
+                ViewerController vc = viewers.get(i);
+                vc.setBounds(node.path("x").asInt(0), node.path("y").asInt(100),
+                        node.path("w").asInt(800), node.path("h").asInt(600));
+                DCMView view = vc.getImageView();
+                if (view != null) {
+                    List<DicomPix> list = view.getDcmPixList();
+                    int idx = node.path("index").asInt(0);
+                    if (list != null && idx >= 0 && idx < list.size()) {
+                        view.setIndex(idx);
+                    }
+                    float scale = (float) node.path("scale").asDouble(1.0);
+                    if (scale > 0) view.setScaleValue(scale);
+                    DicomPix pix = view.getCurDCM();
+                    if (pix != null && node.has("wl") && node.has("ww")) {
+                        pix.setWindowLevelWidth((float) node.path("wl").asDouble(0.0),
+                                (float) node.path("ww").asDouble(256.0));
+                    }
+                    view.repaint();
+                }
+            }
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("workspace.loaded", "Workspace state loaded"),
+                    "Workspace State", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("workspace.load.failed", "Load failed: ") + ex.getMessage(),
+                    "Workspace State", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * ワークスペース状態をリセット
+     * HOROS-20240407準拠: - (IBAction) resetWindowState
+     */
+    public void resetWorkspaceState(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayed2DViewers();
+        if (viewers == null || viewers.isEmpty()) return;
+        for (ViewerController vc : viewers) {
+            DCMView view = vc.getImageView();
+            if (view == null) continue;
+            view.setScaleValue(1.0f);
+            DicomPix pix = view.getCurDCM();
+            if (pix != null) {
+                pix.resetWLWW();
+            }
+            view.repaint();
+        }
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("workspace.reset", "Workspace state reset"),
+                "Workspace State", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**
@@ -8764,13 +8967,36 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) actualSize: (id) sender
      */
     public void actualSize(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        view.setScaleValue(1.0f);
+        view.repaint();
     }
 
     /**
      * 実サイズ
      * HOROS-20240407準拠: - (IBAction) realSize: (id) sender
+     * pixelSpacing で物理mm→画面px換算
      */
     public void realSize(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        double px = pix.getPixelSpacingX();
+        double py = pix.getPixelSpacingY();
+        if (px <= 0 || py <= 0) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("realsize.not.calibrated", "Image is not pixel-calibrated (no PixelSpacing)."),
+                    LanguageManager.get("menu_scale_actual_size", "Real Size"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        java.awt.GraphicsEnvironment ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
+        // 画面の物理密度 (px/mm) を 1.0/0.0264 で換算 (96dpi ≒ 3.7795 px/mm)
+        float screenPxPerMm = 3.7795f;
+        float scale = (float) (px * screenPxPerMm);
+        view.setScaleValue(scale);
+        view.repaint();
     }
 
     /**
@@ -8778,6 +9004,20 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) scaleToFit: (id) sender
      */
     public void scaleToFit(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        float w = view.getWidth();
+        float h = view.getHeight();
+        float pw = pix.getWidth();
+        float ph = pix.getHeight();
+        double ratio = pix.getPixelRatio();
+        if (pw <= 0 || ph <= 0) return;
+        float sx = w / pw;
+        float sy = (float) (h / ph / ratio);
+        view.setScaleValue(Math.min(sx, sy));
+        view.repaint();
     }
 
     /**
@@ -8792,6 +9032,10 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) flipHorizontal: (id) sender
      */
     public void flipHorizontal(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        view.toggleXFlipped();
+        view.repaint();
     }
 
     /**
@@ -8799,6 +9043,10 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) flipVertical: (id) sender
      */
     public void flipVertical(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        view.toggleYFlipped();
+        view.repaint();
     }
 
     /**
@@ -8806,6 +9054,10 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) rotate0: (id) sender
      */
     public void rotate0(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        view.setRotation(0);
+        view.repaint();
     }
 
     /**
@@ -8813,6 +9065,10 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) rotate90: (id) sender
      */
     public void rotate90(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        view.setRotation(1);
+        view.repaint();
     }
 
     /**
@@ -8820,6 +9076,10 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) rotate180: (id) sender
      */
     public void rotate180(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        view.setRotation(2);
+        view.repaint();
     }
 
     /**
@@ -8846,8 +9106,27 @@ public class BrowserController extends JFrame {
     /**
      * データシリーズを反転
      * HOROS-20240407準拠: - (IBAction) flipDataSeries: (id) sender
+     * フラグを反転し、現在インデックスを count-1-curImage に再マッピングする
      */
+    private static final java.util.Set<com.oculus.jj.ui.DCMView> flippedDataViews =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<com.oculus.jj.ui.DCMView>());
+
     public void flipDataSeries(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.getDcmPixList() == null || view.getDcmPixList().size() < 2) {
+            return;
+        }
+        boolean nowFlipped = !flippedDataViews.contains(view);
+        if (nowFlipped) {
+            flippedDataViews.add(view);
+        } else {
+            flippedDataViews.remove(view);
+        }
+        int count = view.getDcmPixList().size();
+        int cur = view.getCurImage();
+        int newIndex = count - 1 - cur;
+        view.setIndex(newIndex);
+        view.repaint();
     }
 
     /**
@@ -8932,9 +9211,16 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) setKeyImage: (id) sender
      */
     public void setKeyImage(Object sender) {
-        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
-        if (vc != null)
-            JOptionPane.showMessageDialog(this, "Key image set", "Key Image", JOptionPane.INFORMATION_MESSAGE);
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        boolean newVal = !pix.getKeyImage();
+        pix.setKeyImage(newVal);
+        view.repaint();
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("key.image.marked", newVal ? "Key image set" : "Key image unset"),
+                "Key Image", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**
@@ -8942,10 +9228,17 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) setAllKeyImages: (id) sender
      */
     public void setAllKeyImages(Object sender) {
-        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
-        if (vc != null)
-            JOptionPane.showMessageDialog(this, "All images marked as key", "Key Images",
-                    JOptionPane.INFORMATION_MESSAGE);
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        List<DicomPix> list = view.getDcmPixList();
+        if (list == null) return;
+        for (DicomPix pix : list) {
+            pix.setKeyImage(true);
+        }
+        view.repaint();
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("key.image.all.marked", "All images marked as key"),
+                "Key Images", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**
@@ -8953,10 +9246,17 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) setAllNonKeyImages: (id) sender
      */
     public void setAllNonKeyImages(Object sender) {
-        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
-        if (vc != null)
-            JOptionPane.showMessageDialog(this, "All key images unmarked", "Key Images",
-                    JOptionPane.INFORMATION_MESSAGE);
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        List<DicomPix> list = view.getDcmPixList();
+        if (list == null) return;
+        for (DicomPix pix : list) {
+            pix.setKeyImage(false);
+        }
+        view.repaint();
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("key.image.all.unmarked", "All key images unmarked"),
+                "Key Images", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**
@@ -8964,10 +9264,21 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) setROIsImagesKeyImages: (id) sender
      */
     public void setROIsImagesKeyImages(Object sender) {
-        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
-        if (vc != null)
-            JOptionPane.showMessageDialog(this, "All ROI images marked as key", "Key Images",
-                    JOptionPane.INFORMATION_MESSAGE);
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        List<DicomPix> list = view.getDcmPixList();
+        if (list == null) return;
+        int count = 0;
+        for (DicomPix pix : list) {
+            if (pix.getROIs() != null && !pix.getROIs().isEmpty()) {
+                pix.setKeyImage(true);
+                count++;
+            }
+        }
+        view.repaint();
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("key.image.roi.marked", count + " ROI images marked as key"),
+                "Key Images", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**
@@ -9065,9 +9376,25 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) findNextPreviousKeyImage: (id) sender
      */
     public void findNextPreviousKeyImage(Object sender) {
-        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
-        if (vc != null)
-            vc.loadSeriesDown();
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        List<DicomPix> list = view.getDcmPixList();
+        if (list == null || list.isEmpty()) return;
+        int cur = view.getCurImage();
+        int dir = (sender instanceof Integer) ? (Integer) sender : 1;
+        int count = list.size();
+        // 次の/前のキー画像を検索（ラップアラウンド）
+        for (int i = 1; i < count; i++) {
+            int idx = (cur + dir * i + count * 100) % count;
+            if (list.get(idx).getKeyImage()) {
+                view.setIndex(idx);
+                view.repaint();
+                return;
+            }
+        }
+        JOptionPane.showMessageDialog(this,
+                LanguageManager.get("key.image.not.found", "No key image found"),
+                "Key Image", JOptionPane.INFORMATION_MESSAGE);
     }
 
     // ========== 3D Viewerメニューアクションメソッド ==========
