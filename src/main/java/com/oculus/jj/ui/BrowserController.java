@@ -9241,18 +9241,82 @@ public class BrowserController extends JFrame {
     public void calibrate(Object sender) {
     }
 
+    /** 3D Position ウィンドウ（シングルトン相当） */
+    private static ThreeDPositionWindow threeDPositionWindow = null;
+
     /**
-     * 3Dパネル
+     * 3Dパネル（3D Position 表示）
      * HOROS-20240407準拠: - (IBAction) threeDPanel: (id) sender
+     * (ViewerController.m:22812) ThreeDPositionController（シングルトン）を表示する。
      */
     public void threeDPanel(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("position3d.no_viewer", "No active viewer."),
+                    LanguageManager.get("position3d.title", "3D Position"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        if (threeDPositionWindow == null || threeDPositionWindow.isDisposed()) {
+            threeDPositionWindow = new ThreeDPositionWindow();
+        }
+        threeDPositionWindow.showForView(view);
     }
+
+    /** ナビゲータウィンドウ（シングルトン相当） */
+    private static NavigatorWindow navigatorWindow = null;
 
     /**
      * ナビゲータ
      * HOROS-20240407準拠: - (IBAction) navigator: (id) sender
+     * (ViewerController.m:22787) RGBデータと非3Dシリーズをガードし、
+     * NavigatorWindowController（シングルトン）でサムネイルストリップを表示する。
      */
     public void navigator(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("navigator.no_viewer", "No active viewer to navigate."),
+                    LanguageManager.get("navigator.title", "Navigator"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        java.util.List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.size() < 2) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("navigator.not3d_error",
+                            "This tool works only with 3D data series with identical matrix sizes."),
+                    LanguageManager.get("navigator.title", "Navigator"),
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        // HOROS: if (curDCM isRGB) alert "This tool currently does not work with RGB data series."
+        if (view.getCurDCM() != null && view.getCurDCM().isRGB()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("navigator.rgb_error",
+                            "This tool currently does not work with RGB data series."),
+                    LanguageManager.get("navigator.title", "Navigator"),
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        // HOROS: 3D判定 - 同一マトリクスサイズの3Dデータシリーズのみ
+        int w0 = pixList.get(0).getWidth(), h0 = pixList.get(0).getHeight();
+        for (DicomPix p : pixList) {
+            if (p.getWidth() != w0 || p.getHeight() != h0) {
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("navigator.not3d_error",
+                                "This tool works only with 3D data series with identical matrix sizes."),
+                        LanguageManager.get("navigator.title", "Navigator"),
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        }
+
+        if (navigatorWindow == null || navigatorWindow.isDisposed()) {
+            navigatorWindow = new NavigatorWindow();
+        }
+        navigatorWindow.showForView(view);
     }
 
     /**

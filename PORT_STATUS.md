@@ -13,14 +13,39 @@
 |---------|------|------|
 | **P0: DICOMパーサー基盤** | ✅ **転送構文対応完了** | dcm4che基本読み込み✅。完全パース・転送構文判定・シーケンス属性抽出実装済み |
 | **P1: 基盤統合** | ✅ **完了** | Preferences(508行)、メニューバー再実装、ダイアログ群(5ファイル)、i18n外部化 |
-| **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み |
+| **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み。Navigator Panel（スライストリップ）/ 3D Position Panel も実装済 |
 | **P3: ツールバー** | ✅ **完了** | Search/ModalityFilter/TimeInterval/Subtraction/Status Display 全実装 |
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
 
-### 進捗率：約85%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋GPU Volume Rendering 完了）
+### 進捗率：約87%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering 完了）
 
 ---
+
+## [完了済みの変更] — Navigator Window / 3D Position Panel（HOROS navigator: / threeDPanel: 実装）
+
+### NavigatorWindow.java（新規作成）
+- **役割:** 3Dデータシリーズの全スライスをサムネイルストリップで表示、クリックでフレームジャンプ（HOROS NavigatorWindowController相当）
+- **実装内容:**
+  - サムネイル遅延描画（DicomPix.generateThumbnail / getBufferedImageNoLoad）
+  - 現在スライスのリアルタイムハイライト（150ms TimerポーリングでDCMView.getCurImage()追従）
+  - 現在位置の選択はDCMView.setIndex()で反映
+
+### ThreeDPositionWindow.java（新規作成）
+- **役割:** 3D Position パネル（スライスインプット位置・モダリティ・画像サイズをリアルタイム表示、HOROS ThreeDPositionController相当）
+
+### BrowserController.java
+- `navigator()` 実装：アクティブビューア取得 → RGBデータガード → 同一マトリクスサイズの3Dシリーズガード → NavigatorWindow表示（HOROS ViewerController.m:22787準拠）
+- `threeDPanel()` 実装：ThreeDPositionWindow表示（HOROS ViewerController.m:22812準拠）
+
+### ToolbarPanel.java
+- Navigatorボタン / 3D Positionボタン：「feature in development」ダイアログから本体実装に配線
+
+### DicomPix.java
+- `getPhotometricInterpretation()` / `isRGB()` ゲッター追加（NavigatorのRGBガード用）
+
+### i18n
+- messages_ja.properties / messages_en.properties に navigator.* / position3d.* キー追加
 
 ## [完了済みの変更] — P0.2 Navigator Panel logic integration
 

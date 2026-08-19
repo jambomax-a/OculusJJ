@@ -120,6 +120,20 @@ public class DicomPix {
     // HOROS-20240407準拠: DCMPix.m 3655行目 - modalityString
     // Modality (0008,0060) - モダリティ（CT, MR, CR, USなど）
     private String modality = null;
+    /**
+     * Photometric Interpretation を取得
+     * HOROS-20240407準拠: isRGB 判定用（NavigatorWindowController - isRGB guard）
+     */
+    public String getPhotometricInterpretation() {
+        return photometricInterpretation;
+    }
+
+    /** true の場合 RGB系データ（RGB / YBR_FULL / YBR_I422 等） */
+    public boolean isRGB() {
+        String pi = photometricInterpretation;
+        return pi != null && (pi.toUpperCase().contains("RGB") || pi.toUpperCase().contains("YBR"));
+    }
+
     /** raw short data を直接設定（内部使用） */
     public void setShortImageData(short[] data) {
         this.rawShortData = data;

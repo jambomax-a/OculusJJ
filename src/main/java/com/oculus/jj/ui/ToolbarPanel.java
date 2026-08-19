@@ -205,11 +205,23 @@ public class ToolbarPanel extends JFrame {
     }
 
     private void toggleOrientationWidget() {
-        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.position3d", "3D Position panel - feature in development"), "3D Position", JOptionPane.INFORMATION_MESSAGE);
+        // HOROS-20240407準拠: threeDPanel: → ThreeDPositionController（シングルトン）
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null) {
+            browser.threeDPanel(this);
+        } else {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("position3d.no_viewer", "No active viewer."), LanguageManager.get("position3d.title", "3D Position"), JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     private void toggleNavigatorPanel() {
-        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.navigator", "Navigator panel - feature in development"), "Navigator", JOptionPane.INFORMATION_MESSAGE);
+        // HOROS-20240407準拠: navigator: → NavigatorWindowController（シングルトン）
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null) {
+            browser.navigator(this);
+        } else {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("navigator.no_viewer", "No active viewer to navigate."), LanguageManager.get("navigator.title", "Navigator"), JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     private void toggleFusionMode() {
