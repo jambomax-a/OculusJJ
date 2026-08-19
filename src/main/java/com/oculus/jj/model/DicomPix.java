@@ -1403,6 +1403,14 @@ public class DicomPix {
     }
 
     /**
+     * BufferedImageを直接設定（fusionマージ用）。
+     * HOROS-20240407準拠: mergeFusedImages - 融合画像をベースに焼き込む
+     */
+    public void setBufferedImage(BufferedImage img) {
+        this.bufferedImage = img;
+    }
+
+    /**
      * ROIの統計情報を計算
      */
     public void computeROIStatistics(ROI roi) {
@@ -1589,12 +1597,40 @@ public class DicomPix {
         this.pixelRatio = pixelRatio;
     }
 
+    // HOROS-20240407準拠: calibrate (SetThicknessInterval) 用の setter
+    public void setOrigin(double x, double y, double z) {
+        this.originX = x;
+        this.originY = y;
+        this.originZ = z;
+    }
+
+    /** orientation は 9 要素 (3x3)。渡された配列が 6 要素 (ImageOrientationPatient) の場合は拡張する。 */
+    public void setOrientation(double[] v) {
+        if (v == null) return;
+        if (v.length == 6) {
+            // row / column ベクトルのみ → 法線 (外積) を補完
+            double rx = v[0], ry = v[1], rz = v[2];
+            double cx = v[3], cy = v[4], cz = v[5];
+            this.orientation[0] = rx; this.orientation[1] = ry; this.orientation[2] = rz;
+            this.orientation[3] = cx; this.orientation[4] = cy; this.orientation[5] = cz;
+            this.orientation[6] = ry * cz - rz * cy;
+            this.orientation[7] = rz * cx - rx * cz;
+            this.orientation[8] = rx * cy - ry * cx;
+        } else if (v.length >= 9) {
+            for (int i = 0; i < 9; i++) this.orientation[i] = v[i];
+        }
+    }
+
     /**
      * Slice Thicknessを取得
      * HOROS-20240407準拠: DCMPix.h 283行目 - @property double sliceThickness;
      */
     public double getSliceThickness() {
         return sliceThickness;
+    }
+
+    public void setSliceThickness(double v) {
+        this.sliceThickness = v;
     }
 
     /**

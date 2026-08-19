@@ -2111,7 +2111,13 @@ public class DCMView extends JPanel {
             g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
             // 画像の読み込み状態を確認 (非同期読み込みを待たない)
-            java.awt.image.BufferedImage image = curDCM.getBufferedImageNoLoad();
+            // HOROS-20240407準拠: blendWindows/ActivateBlending - 融合オーバーレイがある場合は融合画像を描画
+            java.awt.image.BufferedImage image = curDCM.hasFusion()
+                    ? curDCM.getFusedOverlay()
+                    : curDCM.getBufferedImageNoLoad();
+            if (image == null) {
+                image = curDCM.getBufferedImageNoLoad();
+            }
 
             if (image != null) {
                 int panelWidth = getWidth();

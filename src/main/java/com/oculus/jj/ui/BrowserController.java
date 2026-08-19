@@ -9264,9 +9264,136 @@ public class BrowserController extends JFrame {
 
     /**
      * キャリブレート
-     * HOROS-20240407準拠: - (IBAction) calibrate: (id) sender
+     * HOROS-20240407準拠: - (IBAction) calibrate: (ViewerController.m:9343)
+     * 警告ダイアログ → 間隔/方位/原点を入力するシート (SetThicknessInterval) を表示。
+     * 入力値は pixList の全ピクセルへ反映され、表示が再レンダリングされる。
      */
     public void calibrate(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.getCurDCM() == null) return;
+
+        int choice = JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("calibrate.warning",
+                        "Modifying these parameters will:\n\n"
+                        + "- Change the measurement results (length, surface, volume, ...)\n"
+                        + "- Change the orientation of the slices and of the 3D objects (Left, Right, ...)\n"
+                        + "- Change the aspect of the 3D images. It can introduce distortions.\n\n"
+                        + "ONLY change these parameters if you know WHAT and WHY you are doing it."),
+                LanguageManager.get("calibrate.title", "Warning !"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) return; // "I agree" vs "Cancel"
+
+        java.util.List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.isEmpty()) return;
+        DicomPix p0 = pixList.get(0);
+
+        showCalibrateDialog(view, pixList, p0);
+    }
+
+    /**
+     * ホロス-20240407準拠: SetThicknessInterval (ViewerController.m:11068)
+     * sliceInterval / pixelSpacing / orientation / origin を編集可能に表示し、
+     * OK 押下時は全ピクセルへ反映して再レンダリングする。
+     */
+    private void showCalibrateDialog(final DCMView view, final java.util.List<DicomPix> pixList, final DicomPix p0) {
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(this,
+                LanguageManager.get("calibrate.window.title", "Calibrate"), true);
+
+        javax.swing.JTextField intervalField = new javax.swing.JTextField(
+                String.valueOf(p0.getSliceThickness()), 12);
+        javax.swing.JTextField xSpacingField = new javax.swing.JTextField(
+                String.valueOf(p0.getPixelSpacingX()), 12);
+        javax.swing.JTextField ySpacingField = new javax.swing.JTextField(
+                String.valueOf(p0.getPixelSpacingY()), 12);
+        javax.swing.JTextField originX = new javax.swing.JTextField(
+                String.valueOf(p0.getOriginX()), 10);
+        javax.swing.JTextField originY = new javax.swing.JTextField(
+                String.valueOf(p0.getOriginY()), 10);
+        javax.swing.JTextField originZ = new javax.swing.JTextField(
+                String.valueOf(p0.getOriginZ()), 10);
+
+        javax.swing.JPanel form = new javax.swing.JPanel();
+        form.setLayout(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints c = new java.awt.GridBagConstraints();
+        c.insets = new java.awt.Insets(5, 8, 5, 8);
+        c.anchor = java.awt.GridBagConstraints.WEST;
+        c.fill = java.awt.GridBagConstraints.HORIZONTAL;
+
+        c.gridx = 0; c.gridy = 0;
+        form.add(new javax.swing.JLabel(LanguageManager.get("calibrate.sliceThickness", "Slice Thickness (mm):")), c);
+        c.gridx = 1; c.gridy = 0;
+        form.add(intervalField, c);
+
+        c.gridx = 0; c.gridy = 1;
+        form.add(new javax.swing.JLabel(LanguageManager.get("calibrate.xSpacing", "X Spacing (mm):")), c);
+        c.gridx = 1; c.gridy = 1;
+        form.add(xSpacingField, c);
+
+        c.gridx = 0; c.gridy = 2;
+        form.add(new javax.swing.JLabel(LanguageManager.get("calibrate.ySpacing", "Y Spacing (mm):")), c);
+        c.gridx = 1; c.gridy = 2;
+        form.add(ySpacingField, c);
+
+        c.gridx = 0; c.gridy = 3;
+        form.add(new javax.swing.JLabel(LanguageManager.get("calibrate.origin", "Origin (X, Y, Z mm):")), c);
+        javax.swing.JPanel originRow = new javax.swing.JPanel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints oc = new java.awt.GridBagConstraints();
+        oc.insets = new java.awt.Insets(0, 2, 0, 2);
+        originRow.add(originX, oc); oc.gridx = 1;
+        originRow.add(originY, oc); oc.gridx = 2;
+        originRow.add(originZ, oc);
+        c.gridx = 1; c.gridy = 3;
+        form.add(originRow, c);
+
+        final javax.swing.JLabel statusLabel = new javax.swing.JLabel(" ");
+        statusLabel.setForeground(java.awt.Color.BLUE);
+        c.gridx = 0; c.gridy = 4; c.gridwidth = 2;
+        form.add(statusLabel, c);
+
+        final java.util.concurrent.atomic.AtomicBoolean applied = new java.util.concurrent.atomic.AtomicBoolean(false);
+        javax.swing.JButton okBtn = new javax.swing.JButton(LanguageManager.get("common.ok", "OK"));
+        okBtn.addActionListener(e -> {
+            try {
+                double interval = Double.parseDouble(intervalField.getText().trim());
+                double xs = Double.parseDouble(xSpacingField.getText().trim());
+                double ys = Double.parseDouble(ySpacingField.getText().trim());
+                double ox = Double.parseDouble(originX.getText().trim());
+                double oy = Double.parseDouble(originY.getText().trim());
+                double oz = Double.parseDouble(originZ.getText().trim());
+                if (interval <= 0) throw new NumberFormatException("interval");
+                if (xs <= 0) throw new NumberFormatException("xs");
+                if (ys <= 0) throw new NumberFormatException("ys");
+                // HOROS: 全ピクセルへスライスマップを再計算して適用
+                for (DicomPix p : pixList) {
+                    p.setSliceThickness(interval);
+                    p.setPixelSpacingX(xs);
+                    p.setPixelSpacingY(ys);
+                    p.setOrigin(ox, oy, oz);
+                }
+                DicomPix cur = view.getCurDCM();
+                if (cur != null) {
+                    cur.setWindowLevelWidth(cur.getSavedWL(), cur.getSavedWW());
+                }
+                view.repaint();
+                applied.set(true);
+                dlg.dispose();
+            } catch (NumberFormatException ex) {
+                statusLabel.setText(LanguageManager.get("calibrate.invalid_number", "Please enter valid positive numbers."));
+            }
+        });
+        javax.swing.JButton cancelBtn = new javax.swing.JButton(LanguageManager.get("common.cancel", "Cancel"));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        javax.swing.JPanel buttons = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+        buttons.add(okBtn);
+        buttons.add(cancelBtn);
+
+        dlg.getContentPane().setLayout(new java.awt.BorderLayout());
+        dlg.getContentPane().add(form, java.awt.BorderLayout.CENTER);
+        dlg.getContentPane().add(buttons, java.awt.BorderLayout.SOUTH);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
     }
 
     /** 3D Position ウィンドウ（シングルトン相当） */
@@ -9521,17 +9648,198 @@ public class BrowserController extends JFrame {
     }
 
     /**
-     * ウィンドウをブレンド
+     * ウィンドウをブレンド (Fuse/De-Fuse PET/SPECT - CT)
      * HOROS-20240407準拠: - (IBAction) blendWindows: (id) sender
+     *   - 表示中の2Dビューアから同一Study・平行平面の CT と PET/SPECT のペアを探す
+     *   - 見つかれば FusionImageProcessor を通して融合オーバーレイを CT 側に設定
+     *   - もう一度実行すると融合を解除 (toggle)
      */
     public void blendWindows(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayed2DViewers();
+        if (viewers.isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("fuse.no_viewer", "No active 2D viewer to fuse."),
+                    LanguageManager.get("fuse.error.title", "Fuse Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // 現在どこかが融合状態か確認 (toggle)
+        boolean anyFusing = false;
+        for (ViewerController vc : viewers) {
+            DCMView view = vc.getImageView();
+            if (view == null) continue;
+            List<DicomPix> list = view.getDcmPixList();
+            if (list == null) continue;
+            for (DicomPix p : list) {
+                if (p != null && p.hasFusion()) { anyFusing = true; break; }
+            }
+            if (anyFusing) break;
+        }
+
+        com.oculus.jj.model.FusionImageProcessor.FusionMode mode =
+                com.oculus.jj.config.AppPreferences.getFusionMode();
+        double weight = com.oculus.jj.config.AppPreferences.getFusionWeight();
+
+        // De-Fuse: 既存融合を全ビューアからクリア
+        if (anyFusing) {
+            for (ViewerController vc : viewers) {
+                DCMView view = vc.getImageView();
+                if (view == null) continue;
+                List<DicomPix> list = view.getDcmPixList();
+                if (list == null) continue;
+                for (DicomPix p : list) {
+                    if (p != null && p.hasFusion()) {
+                        p.clearFusion();
+                        view.repaint();
+                    }
+                }
+            }
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("fuse.disabled", "PET/SPECT + CT fusion disabled."),
+                    LanguageManager.get("fuse.error.title", "Fuse Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Fuse: CT 側と PET/SPECT 側のペアを探す
+        boolean found = false;
+        int matchedCT = 0;
+        for (ViewerController vc : viewers) {
+            DCMView view = vc.getImageView();
+            if (view == null) continue;
+            List<DicomPix> list = view.getDcmPixList();
+            if (list == null || list.isEmpty()) continue;
+
+            DicomPix activeCT = null;
+            for (DicomPix p : list) {
+                if (p != null && isCTModality(p.getModality())) { activeCT = p; break; }
+            }
+            if (activeCT == null) continue;
+
+            // 同一 Study の PET/SPECT を別のビューアから探す
+            DicomPix petPix = findPetOrSpectFor(activeCT, viewers);
+            if (petPix == null) continue;
+
+            activeCT.setFusionOverlay(petPix, weight, mode);
+            found = true;
+            matchedCT++;
+            view.repaint();
+        }
+
+        if (found) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("fuse.enabled", "PET/SPECT + CT fusion enabled."),
+                    LanguageManager.get("fuse.error.title", "Fuse Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        } else if (sender != null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("fuse.no_pair",
+                            "No compatible CT + PET/SPECT pair found in the displayed viewers (same study, parallel planes)."),
+                    LanguageManager.get("fuse.error.title", "Fuse Error"),
+                    javax.swing.JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     /**
-     * 融合画像をマージ
+     * CT と融合可能な PET/SPECT (PT/NM) 画像を探す
+     * HOROS-20240407準拠: blendWindows: 中の PET/SPECT シリーズ特定
+     */
+    private DicomPix findPetOrSpectFor(DicomPix ctPix, List<ViewerController> viewers) {
+        String ctStudy = ctPix.getStudyInstanceUID();
+        if (ctStudy == null) ctStudy = ctPix.getFrameOfReferenceUID();
+        if (ctStudy == null) return null;
+
+        int ctSlice = ctPix.getSliceIndex();
+        DicomPix best = null;
+        int bestDist = Integer.MAX_VALUE;
+
+        for (ViewerController vc : viewers) {
+            DCMView view = vc.getImageView();
+            if (view == null) continue;
+            List<DicomPix> list = view.getDcmPixList();
+            if (list == null) continue;
+            for (DicomPix p : list) {
+                if (p == null || p == ctPix) continue;
+                if (!isPetOrSpectModality(p.getModality())) continue;
+                // 同一Study (FrameOfReferenceUID で代用可)
+                String study = p.getStudyInstanceUID();
+                if (study == null) study = p.getFrameOfReferenceUID();
+                if (study == null) continue;
+                if (!study.equalsIgnoreCase(ctStudy)) continue;
+                // 平行平面 (sliceIndex 近接 — 許容 0.5スライス)
+                int dist = Math.abs(p.getSliceIndex() - ctSlice);
+                if (dist > bestDist) continue;
+                bestDist = dist;
+                best = p;
+            }
+        }
+        return best;
+    }
+
+    private static boolean isCTModality(String m) {
+        if (m == null) return false;
+        String u = m.trim().toUpperCase();
+        return u.equals("CT") || u.equals("XA") || u.equals("XA7");
+    }
+
+    private static boolean isPetOrSpectModality(String m) {
+        if (m == null) return false;
+        String u = m.trim().toUpperCase();
+        return u.equals("PT") || u.equals("NM") || u.equals("PET");
+    }
+
+    /**
+     * 融合画像をマージ (Flatten Fused Image)
      * HOROS-20240407準拠: - (IBAction) mergeFusedImages: (id) sender
+     *   - 現在のCT側の融合オーバーレイ結果をバッファに焼き込み、融合状態をクリア
      */
     public void mergeFusedImages(Object sender) {
+        DCMView active = getActiveDCMViewForEdit();
+        if (active == null || active.getCurDCM() == null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("flatten.no_fusion", "No fused image to flatten."),
+                    LanguageManager.get("flatten.error.title", "Flatten Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        List<DicomPix> list = active.getDcmPixList();
+        if (list == null || list.isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("flatten.no_fusion", "No fused image to flatten."),
+                    LanguageManager.get("flatten.error.title", "Flatten Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        boolean merged = false;
+        for (DicomPix p : list) {
+            if (p != null && p.hasFusion()) {
+                java.awt.image.BufferedImage fused = p.getFusedOverlay();
+                if (fused != null) {
+                    java.awt.image.BufferedImage copy = new java.awt.image.BufferedImage(
+                            fused.getWidth(), fused.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
+                    copy.getGraphics().drawImage(fused, 0, 0, null);
+                    p.setBufferedImage(copy);
+                }
+                p.clearFusion();
+                merged = true;
+            }
+        }
+
+        active.repaint();
+        if (merged) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("flatten.applied", "Fused image flattened."),
+                    LanguageManager.get("flatten.error.title", "Flatten Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        } else if (sender != null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("flatten.no_fusion", "No fused image to flatten."),
+                    LanguageManager.get("flatten.error.title", "Flatten Error"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     /**
