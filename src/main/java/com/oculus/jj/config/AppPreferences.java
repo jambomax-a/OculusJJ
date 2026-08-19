@@ -83,6 +83,14 @@ public class AppPreferences {
     public static final String KEY_LISTENER_PORT = "listener.port";
     public static final String KEY_LISTENER_AUTO_START = "listener.autoStart";
 
+    // === Viewer 2D preference keys ===
+    // HOROS-20240407準拠: NSUserDefaults "UseVOILUT" (ViewerController.m useVOILUT:)
+    public static final String KEY_USE_VOILUT = "viewer2d.useVOILUT";
+    // HOROS-20240407準拠: SUV変換パラメータ (displaySUVWindow)
+    public static final String KEY_SUV_PATIENTS_WEIGHT = "viewer2d.suv.patientsWeight";
+    public static final String KEY_SUV_RADIONUCLIDE_TOTAL_DOSE = "viewer2d.suv.radionuclideTotalDose";
+    public static final String KEY_SUV_RADIONUCLIDE_HALFLIFE = "viewer2d.suv.radionuclideHalfLife";
+
     // === Web Server preference keys ===
     public static final String KEY_WEB_SERVER_PORT = "webserver.port";
     public static final String KEY_WEB_WADO_ENABLED = "webserver.wadoEnabled";
@@ -122,6 +130,41 @@ public class AppPreferences {
 
     public static void setFusionWeight(double weight) {
         prefs.putDouble(KEY_FUSION_WEIGHT, weight);
+    }
+
+    // --- Viewer 2D (Use VOI LUT) ---
+    /** HOROS-20240407準拠: NSUserDefaults "UseVOILUT" (default: true) */
+    public static boolean isUseVOILUT() {
+        return prefs.getBoolean(KEY_USE_VOILUT, true);
+    }
+
+    public static void setUseVOILUT(boolean use) {
+        prefs.putBoolean(KEY_USE_VOILUT, use);
+    }
+
+    // --- SUV conversion parameters (HOROS-20240407: displaySUVWindow) ---
+    public static float getSUVPatientsWeight() {
+        return (float) prefs.getDouble(KEY_SUV_PATIENTS_WEIGHT, 70.0);
+    }
+
+    public static void setSUVPatientsWeight(float w) {
+        prefs.putDouble(KEY_SUV_PATIENTS_WEIGHT, w);
+    }
+
+    public static float getSUVRadionuclideTotalDose() {
+        return (float) prefs.getDouble(KEY_SUV_RADIONUCLIDE_TOTAL_DOSE, 370.0);
+    }
+
+    public static void setSUVRadionuclideTotalDose(float d) {
+        prefs.putDouble(KEY_SUV_RADIONUCLIDE_TOTAL_DOSE, d);
+    }
+
+    public static float getSUVRadionuclideHalfLife() {
+        return (float) prefs.getDouble(KEY_SUV_RADIONUCLIDE_HALFLIFE, 110.0);
+    }
+
+    public static void setSUVRadionuclideHalfLife(float h) {
+        prefs.putDouble(KEY_SUV_RADIONUCLIDE_HALFLIFE, h);
     }
 
     public static String getDefaultDicomFolder() {

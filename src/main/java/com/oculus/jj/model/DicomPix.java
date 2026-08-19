@@ -72,6 +72,15 @@ public class DicomPix {
     private float rescaleIntercept = 0.0f;
     private String rescaleType = "";
 
+    // HOROS-20240407準拠: DCMPix.m checkSUV / readHeader (6327行目 - SUV)
+    // PET/SUV 変換に使用する DICOM 属性
+    private float patientsWeight = 0.0f;              // PatientsWeight (0010,1030)
+    private String units = null;                      // Units (0008,103E)
+    private String decayCorrection = null;            // DecayCorrection (0008,2112)
+    private float radionuclideTotalDose = 0.0f;       // RadionuclideTotalDose (0008,2114)
+    private float halflife = 0.0f;                    // RadionuclideHalfLife (0008,2116)
+    private boolean hasSUV = false;                   // checkSUV 相当の判定結果
+
     // 画像サイズ
     private int width;
     private int height;
@@ -282,6 +291,26 @@ public class DicomPix {
                 // sequence. High priority.");
                 // VOI LUTがある場合は、後で適用することを検討するか、BestFitを促す
             }
+
+            // HOROS-20240407準拠: DCMPix.m 6327-6464行目 - SUV 属性の読み込み
+            // PatientsWeight (0010,1030)
+            this.patientsWeight = attrs.getFloat(0x00101030, 0.0f);
+            // Units (0008,103E)
+            this.units = attrs.getString(0x0008103E, null);
+            // DecayCorrection (0008,2112)
+            this.decayCorrection = attrs.getString(0x00082112, null);
+            // RadiopharmaceuticalInformationSequence (0008,2110)
+            org.dcm4che3.data.Sequence radSeq = attrs.getSequence(0x00082110);
+            if (radSeq != null && !radSeq.isEmpty()) {
+                org.dcm4che3.data.Attributes radItem = radSeq.get(0);
+                if (radItem != null) {
+                    // RadionuclideTotalDose (0008,2114)
+                    this.radionuclideTotalDose = radItem.getFloat(0x00082114, 0.0f);
+                    // RadionuclideHalfLife (0008,2116)
+                    this.halflife = radItem.getFloat(0x00082116, 0.0f);
+                }
+            }
+            this.hasSUV = hasSUV();
 
             // Rescale Slope/Intercept
             this.rescaleSlope = attrs.getFloat(0x00281053, 1.0f); // RescaleSlope
@@ -1237,6 +1266,31 @@ public class DicomPix {
     public void resetWLWW() {
         setWindowLevelWidth(defaultWL, defaultWW);
     }
+
+    /**
+     * HOROS-20240407準拠: DCMPix.m checkSUV (10570-10600行目)
+     * SUV変換が可能な場合 true。判定条件:
+     * - units が "BQML" または "CNTS" であること
+     * - decayCorrection が "START"/"NONE"/"ADMIN" のいずれかであること
+     * - radionuclideTotalDose > 0 であること
+     * - 非RGBであること
+     */
+    public boolean hasSUV() {
+        if (isRGB()) return false;
+        if (units == null) return false;
+        if (!"BQML".equals(units) && !"CNTS".equals(units)) return false;
+        if (decayCorrection == null) return false;
+        if (!"START".equals(decayCorrection) && !"NONE".equals(decayCorrection) && !"ADMIN".equals(decayCorrection)) return false;
+        if (radionuclideTotalDose <= 0.0f) return false;
+        return true;
+    }
+
+    // --- SUV property getters (HOROS-20240407準拠: DCMPix.h) ---
+    public float getPatientsWeight() { return patientsWeight; }
+    public String getUnits() { return units; }
+    public String getDecayCorrection() { return decayCorrection; }
+    public float getRadionuclideTotalDose() { return radionuclideTotalDose; }
+    public float getHalfLife() { return halflife; }
 
     /**
      * Window Levelを設定

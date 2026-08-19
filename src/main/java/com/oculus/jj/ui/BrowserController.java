@@ -7642,8 +7642,8 @@ public class BrowserController extends JFrame {
 
         // Use VOI LUT
         // HOROS-20240407準拠: MainMenu.xib 780行目
-        javax.swing.JCheckBoxMenuItem useVOILUTItem = new javax.swing.JCheckBoxMenuItem("Use VOI LUT");
-        useVOILUTItem.setSelected(true);
+        useVOILUTItem = new javax.swing.JCheckBoxMenuItem("Use VOI LUT");
+        useVOILUTItem.setSelected(com.oculus.jj.config.AppPreferences.isUseVOILUT());
         useVOILUTItem.addActionListener(e -> useVOILUT(null));
         viewer2DMenu.add(useVOILUTItem);
 
@@ -9105,13 +9105,41 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) resetImage: (id) sender
      */
     public void resetImage(Object sender) {
+        // HOROS-20240407準拠: - (IBAction) resetImage: (ViewerController.m:10231)
+        // 各viewの origin=0 / scaleToFit / rotation=0 / savedWL&WW を再適用
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.getCurDCM() == null) return;
+        view.setRotation(0);
+        view.scaleToFit();
+        view.getCurDCM().setWindowLevelWidth(view.getCurDCM().getSavedWL(), view.getCurDCM().getSavedWW());
+        view.repaint();
     }
 
     /**
      * シリーズを元に戻す
-     * HOROS-20240407準拠: - (IBAction) revertSeries: (id) sender
+     * HOROS-20240407準拠: - (IBAction) revertSeries: (ViewerController.m:21950)
+     * executeRevert相当: pixをリセットし、表示状態(origin/scale/rotation)とsavedWL/WWを復元
      */
     public void revertSeries(Object sender) {
+        // HOROS-20240407準拠: postprocessed(再スライス/MPR)データはrevert不可
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        java.util.List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList != null) {
+            for (DicomPix pix : pixList) {
+                // HOROS: [pix revert] — WL/WW等をデフォルト(保存値)にリセット
+                pix.resetWLWW();
+            }
+        }
+        // HOROS: [imageView updatePresentationStateFromSeries]
+        // origin=0 / scaleToFit / rotation=0 / savedWL&WW を再適用
+        view.setRotation(0);
+        view.scaleToFit();
+        DicomPix cur = view.getCurDCM();
+        if (cur != null) {
+            cur.setWindowLevelWidth(cur.getSavedWL(), cur.getSavedWW());
+        }
+        view.repaint();
     }
 
     /**
@@ -9347,16 +9375,149 @@ public class BrowserController extends JFrame {
 
     /**
      * VOI LUTを使用
-     * HOROS-20240407準拠: - (IBAction) useVOILUT: (id) sender
+     * HOROS-20240407準拠: - (IBAction) useVOILUT: (ViewerController.m:16444)
+     * "UseVOILUT"プリファレンスをトグルし、applyLUT相当(savedWL/WWを再適用)を実行
      */
+    private javax.swing.JCheckBoxMenuItem useVOILUTItem = null;
     public void useVOILUT(Object sender) {
+        // HOROS: [[NSUserDefaults standardUserDefaults] setBool:!boolForKey:@"UseVOILUT" forKey:@"UseVOILUT"]
+        boolean nowUse = !com.oculus.jj.config.AppPreferences.isUseVOILUT();
+        com.oculus.jj.config.AppPreferences.setUseVOILUT(nowUse);
+        // チェックボックス状態を同期
+        if (useVOILUTItem != null) {
+            useVOILUTItem.setSelected(nowUse);
+        }
+        // HOROS: applyLUT: — savedWL/savedWW を再適用して再レンダリング
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        DicomPix pix = view.getCurDCM();
+        if (pix != null) {
+            pix.setWindowLevelWidth(pix.getSavedWL(), pix.getSavedWW());
+        }
+        view.repaint();
     }
 
     /**
      * SUVを表示
-     * HOROS-20240407準拠: - (IBAction) displaySUV: (id) sender
+     * HOROS-20240407準拠: - (IBAction) displaySUV: (ViewerController.m:16312)
+     * curDCM が hasSUV なら SUV 変換ウィンドウ (patientsWeight /
+     * radionuclideTotalDose / halflife) を表示、できない場合は
+     * "Cannot compute SUV on these data." を警告する。
      */
     public void displaySUV(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("suv.no_viewer", "No active viewer to compute SUV."),
+                    LanguageManager.get("menu_viewer_2d_suv", "Convert from/to SUV"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        DicomPix pix = view.getCurDCM();
+        if (pix == null) return;
+        // HOROS: if ([[imageView curDCM] hasSUV] == NO)
+        //         NSRunAlertPanel(@"SUV Error", @"Cannot compute SUV on these data.", ...)
+        if (!pix.hasSUV()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("suv.error", "Cannot compute SUV on these data."),
+                    LanguageManager.get("suv.error.title", "SUV Error"),
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        // HOROS: else beginSheet: displaySUVWindow — 3パラメータを表示/編集
+        showSUVDialog(view, pix);
+    }
+
+    /**
+     * SUV 変換ダイアログ
+     * HOROS-20240407準拠: DisplaySUVWindowController (displaySUVWindow.nib)
+     * patientsWeight / radionuclideTotalDose / radionuclideHalfLife を
+     * 編集可能に表示し、変更を AppPreferences に保存して再レンダリングする。
+     */
+    private void showSUVDialog(final DCMView view, final DicomPix pix) {
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(
+                this,
+                LanguageManager.get("suv.window.title", "SUV Conversion"), true);
+
+        final javax.swing.JTextField weightField = new javax.swing.JTextField(
+                String.valueOf(pix.getPatientsWeight()), 12);
+        final javax.swing.JTextField doseField = new javax.swing.JTextField(
+                String.valueOf(pix.getRadionuclideTotalDose()), 12);
+        final javax.swing.JTextField halflifeField = new javax.swing.JTextField(
+                String.valueOf(pix.getHalfLife()), 12);
+
+        javax.swing.JPanel form = new javax.swing.JPanel();
+        form.setLayout(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints c = new java.awt.GridBagConstraints();
+        c.insets = new java.awt.Insets(6, 8, 6, 8);
+        c.anchor = java.awt.GridBagConstraints.WEST;
+        c.fill = java.awt.GridBagConstraints.HORIZONTAL;
+
+        c.gridx = 0; c.gridy = 0;
+        form.add(new javax.swing.JLabel(LanguageManager.get("suv.patientsWeight", "Patients Weight (kg):")), c);
+        c.gridx = 1; c.gridy = 0;
+        form.add(weightField, c);
+
+        c.gridx = 0; c.gridy = 1;
+        form.add(new javax.swing.JLabel(LanguageManager.get("suv.totalDose", "Radionuclide Total Dose (MBq):")), c);
+        c.gridx = 1; c.gridy = 1;
+        form.add(doseField, c);
+
+        c.gridx = 0; c.gridy = 2;
+        form.add(new javax.swing.JLabel(LanguageManager.get("suv.halflife", "Radionuclide Half-Life (min):")), c);
+        c.gridx = 1; c.gridy = 2;
+        form.add(halflifeField, c);
+
+        final javax.swing.JLabel statusLabel = new javax.swing.JLabel(" ");
+        statusLabel.setForeground(java.awt.Color.BLUE);
+        c.gridx = 0; c.gridy = 3; c.gridwidth = 2;
+        form.add(statusLabel, c);
+
+        final java.util.ArrayList<String> errors = new java.util.ArrayList<>();
+        final java.util.List<float[]> values = new java.util.ArrayList<>();
+        javax.swing.JButton okBtn = new javax.swing.JButton(LanguageManager.get("common.ok", "OK"));
+        okBtn.addActionListener(e -> {
+            try {
+                float w = Float.parseFloat(weightField.getText().trim());
+                float d = Float.parseFloat(doseField.getText().trim());
+                float h = Float.parseFloat(halflifeField.getText().trim());
+                if (w < 0) throw new NumberFormatException("weight");
+                if (d <= 0) throw new NumberFormatException("dose");
+                if (h < 0) throw new NumberFormatException("halflife");
+                values.add(new float[]{w, d, h});
+                dlg.dispose();
+            } catch (NumberFormatException ex) {
+                errors.add(LanguageManager.get("suv.invalid_number", "Please enter valid positive numbers."));
+                statusLabel.setText(errors.get(errors.size() - 1));
+            }
+        });
+        javax.swing.JButton cancelBtn = new javax.swing.JButton(LanguageManager.get("common.cancel", "Cancel"));
+        cancelBtn.addActionListener(e -> dlg.dispose());
+
+        javax.swing.JPanel buttons = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+        buttons.add(okBtn);
+        buttons.add(cancelBtn);
+
+        dlg.getContentPane().setLayout(new java.awt.BorderLayout());
+        dlg.getContentPane().add(form, java.awt.BorderLayout.CENTER);
+        dlg.getContentPane().add(buttons, java.awt.BorderLayout.SOUTH);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+
+        if (!values.isEmpty()) {
+            float[] v = values.get(0);
+            // HOROS: SUV 変換には these 3 values を用いる (patientsWeight /
+            // radionuclideTotalDose / radionuclideHalfLife)。ここで保存値を反映して再レンダリング。
+            com.oculus.jj.config.AppPreferences.setSUVPatientsWeight(v[0]);
+            com.oculus.jj.config.AppPreferences.setSUVRadionuclideTotalDose(v[1]);
+            com.oculus.jj.config.AppPreferences.setSUVRadionuclideHalfLife(v[2]);
+            DicomPix cur = view.getCurDCM();
+            if (cur != null) {
+                cur.setWindowLevelWidth(cur.getSavedWL(), cur.getSavedWW());
+            }
+            view.repaint();
+        }
     }
 
     /**
