@@ -18,7 +18,7 @@
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
 
-### 進捗率：約87%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering 完了）
+### 進捗率：約90%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合) 完了）
 
 ---
 
@@ -261,6 +261,12 @@
 | 7 | ~~Export (DICOM/JPEG/TIFF)~~ ✅実装済（JPEG/TIFF/DICOM全フレームフォルダ一括出力 + Email/DB Listエクスポート） | `exportJPEG:` / `exportTIFF:` / `exportDICOMFile:` | 画像エクスポート |
 | 8 | ~~Flip Data Series~~ ✅実装済（インデックスリマップ） | `flipDataSeries:` (ViewerController.m:10400) | データシリーズ全体反転 |
 | 9 | ~~Convert to RGB/BW~~ ✅実装済（`DicomPix.convertToBW/RGB` 8メニュー） | `ConvertToRGBMenu:` / `ConvertToBWMenu:` | 画像形式変換 |
+| 10 | ~~Use VOI LUT~~ ✅実装済（`useVOILUT` + AppPreferences + チェックボックス同期） | `useVOILUT:` | ウィンドウプロトコルでVOI LUTを使用 |
+| 11 | ~~Revert Series / Reset Image~~ ✅実装済（`revertSeries` / `resetImage`） | `revertSeries:` / `resetImage:` | WL/WW/回転/スケールのリセット |
+| 12 | ~~SUV Conversion~~ ✅実装済（`displaySUV` + `DicomPix.hasSUV`/SUV属性読み込み + AppPreferences SUVキー） | `displaySUV:` (ViewerController.m) | PET SUV変換（体重/総用量/半減期入力ダイアログ） |
+| 13 | ~~Calibrate~~ ✅実装済（`calibrate` + スライス厚み・ピクセル間隔・原点のダイアログ） | `calibrate:` | シリーズ全体の幾何パラメータ校正 |
+| 14 | ~~Fuse/De-Fuse PET-SPECT-CT~~ ✅実装済（`blendWindows` + FusionImageProcessor toggle、同一Study・平行平面のCT/PETペア検索） | `blendWindows:` (ViewerController.m:12476) | CT+PET/SPECT 融合/解除 |
+| 15 | ~~Flatten Fused Image~~ ✅実装済（`mergeFusedImages` + `DicomPix.setBufferedImage`） | `mergeFusedImages:` | 融合結果をベース画像に焼き込み |
 
 ### 🟠 P2.5: ブラウザ/ツールバー追加ギャップ（未実装）
 | # | 項目 | HOROS参照 | 備考 |
@@ -313,6 +319,8 @@
 ---
 
 ## 最終更新日
+
+**2026-08-19** — P3.5 2D Viewerメニュー追加: Use VOI LUT / Revert Series / Reset Image / SUV Conversion / Calibrate / Fuse-DeFuse / Flatten Fused Image 実装済みの反映（進捗率 約87% → 約90%）
 
 **2026-08-19** — P5 GPU Volume Rendering 実装済みの反映（進捗率 約75% → 約85%）
 
