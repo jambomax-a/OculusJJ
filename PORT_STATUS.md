@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-08-18 (P3.5完了: +Apply CLUT(8プリセット)/Opacity(25-100%)) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-08-19 (P5 GPU Volume Rendering 実装済みの反映) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -16,9 +16,9 @@
 | **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み |
 | **P3: ツールバー** | ✅ **完了** | Search/ModalityFilter/TimeInterval/Subtraction/Status Display 全実装 |
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
-| **P5: GPU/Optimization** | 📋 **計画段階** | JOGL/LWJGL、VRAM最適化、AI画像分析など将来計画 |
+| **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
 
-### 進捗率：約75%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model完了）
+### 進捗率：約85%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋GPU Volume Rendering 完了）
 
 ---
 
@@ -243,10 +243,19 @@
 | 1 | Windows Tiling - Rows (固定行数) | `setFixedTilingRows:` (AppController.m:4760) | ✅ 実装済（Menu > Windows > Fixed Rows...） |
 | 2 | Windows Tiling - Columns (固定列数) | `setFixedTilingColumns:` (AppController.m:4765) | ✅ 実装済（Menu > Windows > Fixed Columns...） |
 
-### 🟢 P4: GPU/Optimization（将来計画）
-- GPU Volume Rendering (JOGL/LWJGL)
-- OpenGL textures to VRAM最適化
-- AI画像分析連携
+### 🟢 P5: GPU/Optimization
+
+| 項目 | 状態 | 実体 |
+|------|------|------|
+| GPU Volume Rendering | ✅ 実装済 | `GLViewer3D.java`（LWJGL 3.2.3 / OpenGL 3.3、1548行） |
+| レンダリング手法 | ✅ 実装済 | MIP / Volume Rendering(レイマーチ) / Isosurface の3モード |
+| 照明 | ✅ 実装済 | Phong (Ambient+Diffuse+Specular) + 事前勾配計算 |
+| Transfer Function | ✅ 実装済 | `TransferFunction.java`（1D GLテクスチャ、735行） |
+| CPUレイキャストフォールバック | ✅ 実装済 | `CPURaycastRenderer.java`（GPUコンテキスト失敗時） |
+| ステレオ表示 | ✅ 実装済 | 単眼L/R / バッファーステレオ |
+| WW/WL・クリッピング・方位ボックス | ✅ 実装済 | Orientation Cube (A/P/S/I/R/L) |
+| VRAM最適化（OpenGL textures to VRAM） | 📋 計画 | ボリュームデータ永駐テクスチャ化・Mipmap等 |
+| AI画像分析連携 | 📋 計画 | 未着手 |
 
 ---
 
@@ -280,7 +289,7 @@
 
 ## 最終更新日
 
-**2026-07-30** — ドキュメント最適化完了
+**2026-08-19** — P5 GPU Volume Rendering 実装済みの反映（進捗率 約75% → 約85%）
 
 ## [関連ドキュメント]
 
