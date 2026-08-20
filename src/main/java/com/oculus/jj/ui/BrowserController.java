@@ -7833,6 +7833,13 @@ public class BrowserController extends JFrame {
         saveDICOMSCItem.addActionListener(e -> captureAndSetKeyImage(null));
         viewer2DMenu.add(saveDICOMSCItem);
 
+        // Export Key Images as DICOM SC Series
+        // HOROS-20240407準拠: BrowserController.m:17815 exportROIAndKeyImagesAsDICOMSeries:
+        javax.swing.JMenuItem exportKeySCItem = new javax.swing.JMenuItem(
+                LanguageManager.get("export.sc.menu", "Export Key Images as DICOM SC Series"));
+        exportKeySCItem.addActionListener(e -> exportKeyImagesAsDICOM(null));
+        viewer2DMenu.add(exportKeySCItem);
+
         // Find Next Key Image
         // HOROS-20240407準拠: MainMenu.xib 936行目
         javax.swing.JMenuItem findNextKeyItem = new javax.swing.JMenuItem(
@@ -10135,89 +10142,234 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) captureAndSetKeyImage: (id) sender
      */
     public void captureAndSetKeyImage(Object sender) {
-        ViewerController vc = ViewerController.frontMostDisplayed2DViewer();
-        if (vc == null) {
-            JOptionPane.showMessageDialog(BrowserController.this, "No active 2D viewer to capture key image",
-                    "Key Image", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
         DCMView view = getActiveDCMViewForEdit();
         if (view == null || view.curDCM == null) {
-            JOptionPane.showMessageDialog(BrowserController.this, "No active viewer for key image", "Key Image",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(BrowserController.this,
+                    LanguageManager.get("key.image.no.viewer", "No active viewer to capture key image"),
+                    LanguageManager.get("key.image.title", "Key Image"), JOptionPane.WARNING_MESSAGE);
             return;
         }
         DicomPix pix = view.curDCM;
-        if (pix.getPath() == null || !pix.getPath().toFile().exists()) {
-            JOptionPane.showMessageDialog(BrowserController.this, "Source file not available", "Key Image",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
-        }
         try {
-            java.io.File srcFile = pix.getPath().toFile();
-            org.dcm4che3.io.DicomInputStream dis = new org.dcm4che3.io.DicomInputStream(srcFile);
-            org.dcm4che3.data.Attributes attrs;
-            try {
-                dis.readFileMetaInformation();
-                org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
-                if (fmi != null) {
-                    String tsuid = fmi.getString(0x00080010);
-                }
-                attrs = dis.readDataset();
-                dis.close();
-            } catch (Exception e) {
-                try (org.dcm4che3.io.DicomInputStream dis2 = new org.dcm4che3.io.DicomInputStream(srcFile)) {
-                    attrs = dis2.readDataset();
-                }
-            }
-            if (attrs == null) {
-                JOptionPane.showMessageDialog(BrowserController.this, "Failed to read source DICOM", "Key Image",
-                        JOptionPane.ERROR_MESSAGE);
+            java.awt.image.BufferedImage img = renderViewToBufferedImage(view, pix);
+            if (img == null) {
+                JOptionPane.showMessageDialog(BrowserController.this,
+                        LanguageManager.get("export.no.image", "No image data available"),
+                        LanguageManager.get("key.image.title", "Key Image"), JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            String newSopInstanceUID = java.util.UUID.randomUUID().toString();
-            attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7");
-            attrs.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID);
-            attrs.setString(0x00080060, org.dcm4che3.data.VR.CS, "SC");
-            java.io.File dir = new java.io.File(new java.io.File(".", "OculusJJ Data"), "KeyImages");
+            java.io.File dir = new java.io.File(new java.io.File(System.getProperty("user.dir"), "OculusJJ Data"),
+                    "KeyImages");
             if (!dir.exists())
                 dir.mkdirs();
-            java.io.File outFile = new java.io.File(dir, srcFile.getName().replace(".", "_key.") + ".dcm");
-            byte[] srcBytes = java.nio.file.Files.readAllBytes(srcFile.toPath());
-            int fmiStart = -1;
-            for (int i = 272; i >= 128 && i <= 300; i--) {
-                if ((char) srcBytes[i] == 'D' && (char) srcBytes[i + 1] == 'I' && (char) srcBytes[i + 2] == 'C'
-                        && (char) srcBytes[i + 3] == 'M') {
-                    fmiStart = i;
-                    break;
-                }
+            String base = (pix.getSeriesDescription() != null && !pix.getSeriesDescription().isEmpty())
+                    ? pix.getSeriesDescription().replaceAll("[^A-Za-z0-9._-]", "_")
+                    : "KeyImage";
+            String ts = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+            int frame = pix.getFrameNumber();
+            java.io.File outFile = new java.io.File(dir, String.format("%s_%s_%02d.dcm", base, ts, frame));
+            if (writeSCImage(outFile, img, pix, 1,
+                    LanguageManager.get("export.sc.series.key", "Key Image"))) {
+                pix.setKeyImage(true);
+                view.repaint();
+                JOptionPane.showMessageDialog(BrowserController.this,
+                        LanguageManager.get("key.image.saved", "Key image saved:") + "\n" + outFile.getAbsolutePath(),
+                        LanguageManager.get("key.image.title", "Key Image"), JOptionPane.INFORMATION_MESSAGE);
             }
-            byte[] pixelData = (fmiStart > 0) ? java.util.Arrays.copyOfRange(srcBytes, fmiStart + 132, srcBytes.length)
-                    : srcBytes;
-            java.io.File tmpFmi = java.io.File.createTempFile("fmi", "tmp");
-            org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(tmpFmi);
-            org.dcm4che3.data.Attributes fmo = new org.dcm4che3.data.Attributes();
-            fmo.setString(0x00080016, org.dcm4che3.data.VR.UI,
-                    "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
-            fmo.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID); // MediaStorageSOPInstanceUID
-            fmo.setString(0x00080010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID
-            dos.writeFileMetaInformation(fmo);
-            dos.close();
-            byte[] fmiBytes = java.nio.file.Files.readAllBytes(tmpFmi.toPath());
-            tmpFmi.delete();
-            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile)) {
-                byte[] pad = new byte[128];
-                fos.write(pad);
-                fos.write("DICM".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-                fos.write(fmiBytes);
-                fos.write(pixelData);
-            }
-            JOptionPane.showMessageDialog(BrowserController.this, "Key image saved: " + outFile.getAbsolutePath(),
-                    "Key Image", JOptionPane.INFORMATION_MESSAGE);
-        } catch (java.io.IOException ex) {
-            JOptionPane.showMessageDialog(BrowserController.this, "Key image capture failed: " + ex.getMessage(),
-                    "Key Image", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(BrowserController.this,
+                    LanguageManager.get("key.image.capture.failed", "Key image capture failed:") + " " + ex.getMessage(),
+                    LanguageManager.get("key.image.title", "Key Image"), JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    /**
+     * キー画像をすべて DICOM SC (Secondary Capture) シリーズとしてエクスポート
+     * HOROS-20240407準拠: BrowserController.m:17815 exportROIAndKeyImagesAsDICOMSeries:
+     * (各キー画像を DicomImage.m:1266 imageAsDICOMScreenCapture: 相当の描画キャプチャで
+     *  8bit RGB の SC オブジェクトとして出力、SeriesDescription="ROIs and Key Images")
+     */
+    public void exportKeyImagesAsDICOM(Object sender) {
+        java.util.Map<DicomPix, DCMView> targets = new java.util.LinkedHashMap<>();
+        for (ViewerController vc : ViewerController.getDisplayed2DViewers()) {
+            DCMView view = vc.getImageView();
+            if (view == null || view.dcmPixList == null)
+                continue;
+            for (DicomPix pix : view.dcmPixList) {
+                if (pix.getKeyImage())
+                    targets.put(pix, view);
+            }
+        }
+        if (targets.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("key.image.export.none",
+                            "No key images marked. Mark images as Key Image first (K)."),
+                    LanguageManager.get("export.sc.title", "Export Key Images as DICOM SC"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle(LanguageManager.get("export.sc.title", "Export Key Images as DICOM SC"));
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setApproveButtonText("Export");
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File dir = fc.getSelectedFile();
+        if (!dir.exists())
+            dir.mkdirs();
+        int saved = 0;
+        java.util.List<DCMView> usedViews = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<DicomPix, DCMView> entry : targets.entrySet()) {
+            DicomPix pix = entry.getKey();
+            DCMView view = entry.getValue();
+            int idx = view.dcmPixList.indexOf(pix);
+            int prev = view.getCurImage();
+            if (!usedViews.contains(view))
+                usedViews.add(view);
+            try {
+                if (idx >= 0 && idx != prev)
+                    view.setIndex(idx);
+                java.awt.image.BufferedImage img = renderViewToBufferedImage(view, pix);
+                if (img == null)
+                    continue;
+                saved++;
+                java.io.File outFile = new java.io.File(dir, String.format("KeyImage_%02d.dcm", saved));
+                writeSCImage(outFile, img, pix, saved,
+                        LanguageManager.get("export.sc.series.description", "ROIs and Key Images"));
+            } catch (Exception ex) {
+                System.err.println("[KeyImageSC] export failed: " + ex.getMessage());
+            } finally {
+                if (idx >= 0 && idx != prev)
+                    view.setIndex(prev);
+            }
+        }
+        for (DCMView v : usedViews)
+            v.repaint();
+        JOptionPane.showMessageDialog(this,
+                String.format(LanguageManager.get("export.sc.saved", "Exported %d key image(s) as DICOM SC to:"))
+                        + "\n" + dir.getAbsolutePath(),
+                LanguageManager.get("export.sc.title", "Export Key Images as DICOM SC"),
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * DCMView（ROI/アノテーションを含む描画状態）を元画像サイズの 8bit RGB BufferedImage にレンダリング
+     * HOROS-20240407準拠: DCMView.m:11115 exportDCMCurrentImage:
+     * (getRawPixelsViewWidth screenCapture: force8bits: 相当)
+     */
+    private java.awt.image.BufferedImage renderViewToBufferedImage(DCMView view, DicomPix pix) {
+        int w = pix.getWidth();
+        int h = pix.getHeight();
+        if (w <= 0 || h <= 0)
+            return null;
+        try {
+            java.awt.image.BufferedImage canvas = new java.awt.image.BufferedImage(w, h,
+                    java.awt.image.BufferedImage.TYPE_3BYTE_BGR);
+            java.awt.Graphics2D g = canvas.createGraphics();
+            g.setColor(java.awt.Color.WHITE);
+            g.fillRect(0, 0, w, h);
+            g.translate(-view.getInsets().left, -view.getInsets().top);
+            view.paint(g);
+            g.dispose();
+            return canvas;
+        } catch (Exception ex) {
+            System.err.println("[KeyImageSC] render failed: " + ex.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 8bit RGB BufferedImage を DICOM Secondary Capture Image Storage (SC) ファイルとして書き出す
+     * HOROS-20240407準拠: DICOMExport.mm (SOP 1.2.840.10008.5.1.4.1.1.7, Modality="SC")
+     */
+    private boolean writeSCImage(java.io.File outFile, java.awt.image.BufferedImage img, DicomPix pix,
+            int seriesNumber, String seriesDescription) throws java.io.IOException {
+        int w = img.getWidth();
+        int h = img.getHeight();
+        // 8bit RGB バイト列 (BGR 3バイト/ピクセル)
+        java.awt.image.BufferedImage rgb = new java.awt.image.BufferedImage(w, h,
+                java.awt.image.BufferedImage.TYPE_3BYTE_BGR);
+        rgb.getGraphics().drawImage(img, 0, 0, null);
+        byte[] pixelData = ((java.awt.image.DataBufferByte) rgb.getRaster().getDataBuffer()).getData();
+
+        String now = new java.text.SimpleDateFormat("yyyyMMddHHmmss").format(new java.util.Date());
+        String uidRoot = "1.2.826.0.1.3680043.8.498"; // OculusJJ private UID root
+        String seriesUID = uidRoot + "." + System.currentTimeMillis();
+        String sopUID = seriesUID + "." + (System.nanoTime() % 100000L);
+
+        org.dcm4che3.data.Attributes attrs = new org.dcm4che3.data.Attributes();
+        attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // SOPClassUID
+        attrs.setString(0x00080018, org.dcm4che3.data.VR.UI, sopUID); // SOPInstanceUID
+        attrs.setString(0x00080020, org.dcm4che3.data.VR.DA, now.substring(0, 8)); // StudyDate
+        attrs.setString(0x00080030, org.dcm4che3.data.VR.DA, now.substring(0, 8)); // SeriesDate
+        attrs.setString(0x00080033, org.dcm4che3.data.VR.TM, now.substring(8)); // StudyTime
+        attrs.setString(0x00080060, org.dcm4che3.data.VR.CS, "SC"); // Modality
+        attrs.setString(0x00080070, org.dcm4che3.data.VR.LO, "OculusJJ"); // Manufacturer
+        attrs.setString(0x00081010, org.dcm4che3.data.VR.SH, "OculusJJ"); // InstitutionName
+        attrs.setString(0x00081030, org.dcm4che3.data.VR.SH, "OculusJJ"); // StationName
+        if (pix.getStudyDescription() != null && !pix.getStudyDescription().isEmpty())
+            attrs.setString(0x00081030, org.dcm4che3.data.VR.LO, pix.getStudyDescription()); // StudyDescription
+        attrs.setString(0x0008103E, org.dcm4che3.data.VR.LO, seriesDescription); // SeriesDescription
+        if (pix.getAccessionNumber() != null && !pix.getAccessionNumber().isEmpty())
+            attrs.setString(0x00080050, org.dcm4che3.data.VR.SH, pix.getAccessionNumber()); // AccessionNumber
+        if (pix.getPatientID() != null && !pix.getPatientID().isEmpty())
+            attrs.setString(0x00100020, org.dcm4che3.data.VR.SH, pix.getPatientID()); // PatientID
+        com.oculus.jj.model.DicomImage imageObj = pix.getImageObj();
+        if (imageObj != null) {
+            if (imageObj.getPatientName() != null && !imageObj.getPatientName().isEmpty())
+                attrs.setString(0x00100010, org.dcm4che3.data.VR.PN, imageObj.getPatientName()); // PatientName
+            if (imageObj.getStudyDate() != null)
+                attrs.setString(0x00080020, org.dcm4che3.data.VR.DA,
+                        imageObj.getStudyDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")));
+            if (imageObj.getAcquisitionDate() != null)
+                attrs.setString(0x00080033, org.dcm4che3.data.VR.TM,
+                        imageObj.getAcquisitionDate().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss")));
+        }
+        String studyUID = pix.getStudyInstanceUID();
+        if (studyUID == null || studyUID.isEmpty())
+            studyUID = uidRoot + ".study." + System.currentTimeMillis();
+        attrs.setString(0x0020000D, org.dcm4che3.data.VR.UI, studyUID); // StudyInstanceUID
+        attrs.setString(0x0020000E, org.dcm4che3.data.VR.UI, seriesUID); // SeriesInstanceUID
+        attrs.setString(0x00200010, org.dcm4che3.data.VR.SH, "OCULUSJJ"); // StudyID
+        attrs.setString(0x00201001, org.dcm4che3.data.VR.IS, String.valueOf(seriesNumber)); // SeriesNumber
+        attrs.setString(0x00201002, org.dcm4che3.data.VR.IS, "1"); // InstanceNumber
+        attrs.setString(0x00280002, org.dcm4che3.data.VR.CS,
+                new String[] { "ORIGINAL", "PRIMARY", "SC" }); // ImageType
+        attrs.setString(0x00280004, org.dcm4che3.data.VR.CS, "RGB"); // PhotometricInterpretation
+        attrs.setInt(0x00280006, org.dcm4che3.data.VR.US, 3); // SamplesPerPixel
+        attrs.setInt(0x00280010, org.dcm4che3.data.VR.US, h); // Rows
+        attrs.setInt(0x00280011, org.dcm4che3.data.VR.US, w); // Columns
+        attrs.setInt(0x00280101, org.dcm4che3.data.VR.US, 8); // BitsAllocated
+        attrs.setInt(0x00280102, org.dcm4che3.data.VR.US, 8); // BitsStored
+        attrs.setInt(0x00280103, org.dcm4che3.data.VR.US, 7); // HighBit
+        attrs.setInt(0x00280104, org.dcm4che3.data.VR.US, 0); // PixelRepresentation
+        double psx = pix.getPixelSpacingX();
+        double psy = pix.getPixelSpacingY();
+        if (psx > 0 && psy > 0)
+            attrs.setString(0x00280030, org.dcm4che3.data.VR.DS,
+                    new String[] { Double.toString(psy), Double.toString(psx) }); // PixelSpacing
+        if (pix.getSrcFile() != null) {
+            String src = pix.getSrcFile();
+            if (src.length() > 64)
+                src = src.substring(src.length() - 64);
+            attrs.setString(0x00280008, org.dcm4che3.data.VR.LO, src); // ImageComments
+        }
+        attrs.setBytes(0x7FE00010, org.dcm4che3.data.VR.OB, pixelData); // PixelData
+
+        java.io.File parent = outFile.getParentFile();
+        if (parent != null && !parent.exists())
+            parent.mkdirs();
+        org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(outFile);
+        org.dcm4che3.data.Attributes fmi = new org.dcm4che3.data.Attributes();
+        fmi.setString(0x00020000, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
+        fmi.setString(0x00020001, org.dcm4che3.data.VR.UI, sopUID); // MediaStorageSOPInstanceUID
+        fmi.setString(0x00020002, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID (Explicit VR LE)
+        dos.writeFileMetaInformation(fmi);
+        dos.writeDataset(attrs, null);
+        dos.finish();
+        dos.close();
+        return true;
     }
 
     /**
