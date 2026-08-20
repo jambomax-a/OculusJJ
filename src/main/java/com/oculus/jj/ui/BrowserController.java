@@ -2461,7 +2461,8 @@ public class BrowserController extends JFrame {
             // HOROS-20240407準拠: Modality Filter (15261行目辺り NSPredicate modality CONTAINS)
             if (browserToolbar != null && browserToolbar.getModalityCombo() != null) {
                 String selectedModality = (String) browserToolbar.getModalityCombo().getSelectedItem();
-                if (selectedModality != null && !"".equals(selectedModality) && !"All Modalities".equals(selectedModality)) {
+                // index 0 = All modalities (localized label, do not string-compare)
+                if (selectedModality != null && !"".equals(selectedModality) && browserToolbar.getModalityCombo().getSelectedIndex() != 0) {
                     final String modCode = selectedModality;
                     synchronized (outlineViewArray) {
                         java.util.List<Object> modalityFiltered = new java.util.ArrayList<>();

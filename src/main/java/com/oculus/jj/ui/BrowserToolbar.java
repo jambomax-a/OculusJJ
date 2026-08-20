@@ -161,7 +161,15 @@ public class BrowserToolbar extends JToolBar {
         // Time Interval popup (HOROS-20240407準拠: timeIntervalView / NSPopUpButton 11619)
         // HOROS menu items by tag: None(0), 1 hour(1), 6 hours(2), 12 hours(3), 24 hours(7), 48 hours(8), Today(4), Last 7 days(5), One month(6), Custom(100)
         intervalCombo = new JComboBox<>(new String[] {
-            "None", "1 Hour", "6 Hours", "12 Hours", "24 Hours", "48 Hours", "Today", "Last 7 Days", "One Month"
+            LanguageManager.get("browser.time.none", "None"),
+            LanguageManager.get("browser.time.1h", "1 Hour"),
+            LanguageManager.get("browser.time.6h", "6 Hours"),
+            LanguageManager.get("browser.time.12h", "12 Hours"),
+            LanguageManager.get("browser.time.24h", "24 Hours"),
+            LanguageManager.get("browser.time.48h", "48 Hours"),
+            LanguageManager.get("browser.time.today", "Today"),
+            LanguageManager.get("browser.time.7d", "Last 7 Days"),
+            LanguageManager.get("browser.time.1m", "One Month")
         });
         intervalCombo.setFont(new Font("SansSerif", Font.PLAIN, 10));
         intervalCombo.setSelectedIndex(0);
@@ -189,7 +197,7 @@ public class BrowserToolbar extends JToolBar {
         // Modality Filter popup (HOROS-20240407準拠: modalityFilterMenu / NSPopUpButton 14782)
         // HOROS menu items: All modalities | CR(1) SC(2) CT(3) MR(7) PT(100) NM US XA MG DR RG DX AU OT RF XC ES VL SR
         modalityCombo = new JComboBox<>(new String[] {
-            "All Modalities", "CR", "SC", "CT", "MR", "PT", "NM", "US", "XA", "MG", "DR", "RG", "DX", "AU", "OT", "RF", "XC", "ES", "VL", "SR"
+            LanguageManager.get("browser.modality.all", "All Modalities"), "CR", "SC", "CT", "MR", "PT", "NM", "US", "XA", "MG", "DR", "RG", "DX", "AU", "OT", "RF", "XC", "ES", "VL", "SR"
         });
         modalityCombo.setFont(new Font("SansSerif", Font.PLAIN, 10));
         modalityCombo.setSelectedIndex(0);
@@ -224,8 +232,14 @@ public class BrowserToolbar extends JToolBar {
         searchField.setToolTipText(LanguageManager.get("tt_browser.search_placeholder", "Search all fields"));
 
         searchTypeCombo = new JComboBox<>(new String[] {
-            "All Fields", "Patient Name", "Study Date", "Accession Number",
-            "Modality", "Series Description", "Institution", "Other"
+            LanguageManager.get("search.field.all", "All Fields"),
+            LanguageManager.get("search.field.patient", "Patient Name"),
+            LanguageManager.get("search.field.studydate", "Study Date"),
+            LanguageManager.get("search.field.accession", "Accession Number"),
+            LanguageManager.get("search.field.modality", "Modality"),
+            LanguageManager.get("search.field.seriesdesc", "Series Description"),
+            LanguageManager.get("search.field.institution", "Institution"),
+            LanguageManager.get("search.field.other", "Other")
         });
         searchTypeCombo.setFont(new Font("SansSerif", Font.PLAIN, 10));
         searchTypeCombo.setSelectedIndex(0);
@@ -252,10 +266,19 @@ public class BrowserToolbar extends JToolBar {
     /** Shutter Tool popup 生成 */
     private static void createShutterPopup(JButton ownerBtn) {
         JPopupMenu popup = new JPopupMenu();
-        String[] modes = {"Off", "Top", "Bottom", "Left", "Right"};
-        for (String m : modes) {
-            JMenuItem item = new JMenuItem(m);
-            final String mode = m;
+        String[] modes = {
+            "Off", "Top", "Bottom", "Left", "Right"
+        };
+        String[] modeLabels = {
+            LanguageManager.get("shutter.off", "Off"),
+            LanguageManager.get("shutter.top", "Top"),
+            LanguageManager.get("shutter.bottom", "Bottom"),
+            LanguageManager.get("shutter.left", "Left"),
+            LanguageManager.get("shutter.right", "Right")
+        };
+        for (int i = 0; i < modes.length; i++) {
+            final String mode = modes[i];
+            JMenuItem item = new JMenuItem(modeLabels[i]);
             item.addActionListener(e -> callBrowser(b -> b.setShutterMode(mode)));
             popup.add(item);
         }
