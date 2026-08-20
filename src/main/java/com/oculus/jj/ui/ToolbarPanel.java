@@ -201,7 +201,22 @@ public class ToolbarPanel extends JFrame {
     // --- Action handlers (existing logic) ---
 
     private void toggleAnnotationsPanel() {
-        JOptionPane.showMessageDialog(this, LanguageManager.get("toolbar.panel.annotations", "Annotations panel - feature in development"), "Annotations", JOptionPane.INFORMATION_MESSAGE);
+        // HOROS-20240407準拠: AnnotationsToolbarItemIdentifier = @"Annotations"
+        // (ViewerController.m:182) - 現在ビューのアノテーション(ROI)一覧/統計/削除
+        DCMView view = null;
+        if (viewer != null && viewer.getImageView() != null) {
+            view = viewer.getImageView();
+        } else if (BrowserController.currentBrowser() != null) {
+            view = BrowserController.currentBrowser().getActiveDCMViewForEdit();
+        }
+        if (view == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("annotations.no_viewer", "No active viewer to show annotations for."),
+                    LanguageManager.get("annotations.title", "Annotations"),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        AnnotationsPanel.toggle(this, view);
     }
 
     private void toggleOrientationWidget() {
