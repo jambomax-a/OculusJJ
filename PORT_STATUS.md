@@ -18,7 +18,7 @@
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
 
-### 進捗率：約92%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合/伝播) 完了）
+### 進捗率：約93%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合/伝播)＋ツールバー Annotations Panel 完了）
 
 ---
 
@@ -274,6 +274,7 @@
 |---|------|----------|------|
 | 1 | Windows Tiling - Rows (固定行数) | `setFixedTilingRows:` (AppController.m:4760) | ✅ 実装済（Menu > Windows > Fixed Rows...） |
 | 2 | Windows Tiling - Columns (固定列数) | `setFixedTilingColumns:` (AppController.m:4765) | ✅ 実装済（Menu > Windows > Fixed Columns...） |
+| 3 | Annotations Panel (ROI一覧) | `AnnotationsToolbarItemIdentifier` (ViewerController.m:182) | ✅ 実装済（`AnnotationsPanel.java`：ROI種類・面積・平均・SD・最小・最大・ロックの一覧 + 更新/削除 + `ToolbarPanel.toggleAnnotationsPanel` 配線） |
 
 ### 🟢 P5: GPU/Optimization
 
@@ -320,6 +321,8 @@
 ---
 
 ## 最終更新日
+
+**2026-08-21** — P2.5 Annotations Panel (toggleAnnotationsPanel / AnnotationsPanel.java) 実装済みの反映（進捗率 約92% → 約93%）
 
 **2026-08-20** — P3.5 Propagate Settings (copySettingsToOthers / switchCopySettingsInSeries) 実装済みの反映（進捗率 約90% → 約92%）
 
