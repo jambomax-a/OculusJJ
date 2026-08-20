@@ -419,8 +419,8 @@ public class OculusJJApp {
         // ConfigManagerから設定を読み込み、アプリケーションを初期化
         com.oculus.jj.config.ConfigManager config = com.oculus.jj.config.ConfigManager.getInstance();
 
-        // 言語設定を適用
-        String language = config.getLanguage();
+        // 言語設定を適用（ユーザーの明示的選択=AppPreferencesを優先、未設定ならConfigManager既定値）
+        String language = com.oculus.jj.config.AppPreferences.getAppLanguage().contains("ja") ? "ja" : "en";
         com.oculus.jj.utils.LanguageManager.getInstance().loadLanguage(language);
 
         // OpenCVネイティブライブラリをロード（JPEG圧縮DICOM画像を読み込むために必要）
