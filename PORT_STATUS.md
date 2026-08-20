@@ -18,7 +18,7 @@
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
 
-### 進捗率：約90%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合) 完了）
+### 進捗率：約92%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合/伝播) 完了）
 
 ---
 
@@ -267,6 +267,7 @@
 | 13 | ~~Calibrate~~ ✅実装済（`calibrate` + スライス厚み・ピクセル間隔・原点のダイアログ） | `calibrate:` | シリーズ全体の幾何パラメータ校正 |
 | 14 | ~~Fuse/De-Fuse PET-SPECT-CT~~ ✅実装済（`blendWindows` + FusionImageProcessor toggle、同一Study・平行平面のCT/PETペア検索） | `blendWindows:` (ViewerController.m:12476) | CT+PET/SPECT 融合/解除 |
 | 15 | ~~Flatten Fused Image~~ ✅実装済（`mergeFusedImages` + `DicomPix.setBufferedImage`） | `mergeFusedImages:` | 融合結果をベース画像に焼き込み |
+| 16 | ~~Propagate Settings~~ ✅実装済（`copySettingsToOthers` + `switchCopySettingsInSeries` + `DCMView.propagateSettings`/`copySettingsInSeries`フラグ） | `copySettingsToOthers:` / `propagateSettings` (ViewerController.m:16804) | 他ビューアへのWL/WW・スケール・回転の伝播 + シリーズ内伝播トグル |
 
 ### 🟠 P2.5: ブラウザ/ツールバー追加ギャップ（未実装）
 | # | 項目 | HOROS参照 | 備考 |
@@ -319,6 +320,8 @@
 ---
 
 ## 最終更新日
+
+**2026-08-20** — P3.5 Propagate Settings (copySettingsToOthers / switchCopySettingsInSeries) 実装済みの反映（進捗率 約90% → 約92%）
 
 **2026-08-19** — P3.5 2D Viewerメニュー追加: Use VOI LUT / Revert Series / Reset Image / SUV Conversion / Calibrate / Fuse-DeFuse / Flatten Fused Image 実装済みの反映（進捗率 約87% → 約90%）
 

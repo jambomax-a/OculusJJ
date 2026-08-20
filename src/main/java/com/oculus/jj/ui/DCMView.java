@@ -172,6 +172,17 @@ public class DCMView extends JPanel {
     // HOROS-20240407準拠: グローバル同期変数 (DCMView.m 285行目付近相当)
     public static int syncro = syncroOFF; // デフォルトはOFF。ユーザーが必要に応じて同期をオンにする（Horos準拠）
     public static boolean SYNCSERIES = true; // デフォルトはTRUE (シリーズ間同期)
+
+    // HOROS-20240407準拠: COPYSETTINGS (Viewers→2D"Propagate Settings Between Series")
+    // falseの場合、他ビューアへのWL/WW・スケール・回転の伝播を停止
+    public static boolean propagateSettings = true;
+
+    // HOROS-20240407準拠: COPYSETTINGSINSERIES (Viewers→2D"Propagate Settings in Current Series")
+    // trueの場合、スライス切替時にビューレベルのWL/WW・スケール・回転・flipを継続適用 (デフォルト値にリセットされない)
+    public static boolean copySettingsInSeries = false;
+
+    // NOTE: copySettingsInSeries によるスライス切替時設定の継続適用は setIndex() 内で
+    // (oldWL/oldWW を new pix に再適用する形で) 行われる。
     public static boolean gDontListenToSyncMessage = false;
 
     // HOROS-20240407準拠: DCMView.m 6931行目 - avoidRecursiveSync
@@ -706,8 +717,9 @@ public class DCMView extends JPanel {
                         // 画像が更新されたので再描画
                         repaint();
 
-                        // 同期が必要な場合
-                        sendSyncMessageWLWW(newWL, newWW);
+                        // 同期が必要な場合 (Propagate Settings Between Series が有効時のみ)
+                        if (propagateSettings)
+                            sendSyncMessageWLWW(newWL, newWW);
                     }
                 }
             }
@@ -1451,7 +1463,15 @@ public class DCMView extends JPanel {
                     // self.curDCM = [dcmPixList objectAtIndex:curImage];
                     if (this.curImage >= 0 && this.curImage < this.dcmPixList.size()) {
                         DicomPix oldCurDCM = this.curDCM;
+                        final float oldWL = oldCurDCM != null ? oldCurDCM.getWindowLevel() : 0f;
+                        final float oldWW = oldCurDCM != null ? oldCurDCM.getWindowWidth() : 0f;
                         this.curDCM = this.dcmPixList.get(this.curImage);
+
+                        // HOROS-20240407準拠: DCMView.m 1717/1742 (COPYSETTINGSINSERIES)
+                        // スライス切替時にビューレベル設定を継続適用する
+                        if (copySettingsInSeries && this.curDCM != null && oldWL > 0 && oldWW > 0) {
+                            this.curDCM.setWindowLevelWidth(oldWL, oldWW);
+                        }
 
                         // プレビュー表示などでpixelsがnullの場合、ファイルリストから遅延生成する
                         if (this.curDCM == null && this.dcmFilesList != null
@@ -1977,6 +1997,14 @@ public class DCMView extends JPanel {
             repaint();
             sendSyncMessage(0);
         }
+    }
+
+    public boolean getXFlipped() {
+        return xFlipped;
+    }
+
+    public boolean getYFlipped() {
+        return yFlipped;
     }
 
     /**
@@ -3266,6 +3294,8 @@ public class DCMView extends JPanel {
      * sendSyncMessageWLWW - WL/WW同期メッセージを送信
      */
     public void sendSyncMessageWLWW(float wl, float ww) {
+        if (!propagateSettings)
+            return;
         if (avoidRecursiveSync > 0)
             return;
 
@@ -3372,7 +3402,8 @@ public class DCMView extends JPanel {
 
         curDCM.setWindowLevelWidth(wl, ww);
         repaint();
-        sendSyncMessageWLWW(wl, ww);
+        if (propagateSettings)
+            sendSyncMessageWLWW(wl, ww);
     }
 
     public void onSyncNotification(String name, Object object, java.util.Map<String, Object> userInfo) {

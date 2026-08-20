@@ -7691,9 +7691,26 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 821行目
         javax.swing.JCheckBoxMenuItem propagateSettingsItem = new javax.swing.JCheckBoxMenuItem(
                 "Propagate Settings Between Series");
-        propagateSettingsItem.setSelected(true);
+        propagateSettingsItem.setSelected(DCMView.propagateSettings);
         propagateSettingsItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_G, 0));
-        propagateSettingsItem.addActionListener(e -> copySettingsToOthers(null));
+        // 有効/無効の切り替え + 有効時オンクリックで即座に伝播
+        propagateSettingsItem.addActionListener(e -> {
+            boolean was = DCMView.propagateSettings;
+            DCMView.propagateSettings = propagateSettingsItem.isSelected();
+            if (DCMView.propagateSettings) {
+                copySettingsToOthers(null);
+            } else {
+                // アクセラレータ押下等で再度ONになった場合は状態を元に戻す (再発火ループ防止)
+                if (was) {
+                    propagateSettingsItem.setSelected(true);
+                    DCMView.propagateSettings = true;
+                } else {
+                    for (ViewerController vc : ViewerController.getDisplayed2DViewers()) {
+                        if (vc.getImageView() != null) vc.getImageView().repaint();
+                    }
+                }
+            }
+        });
         viewer2DMenu.add(propagateSettingsItem);
 
         // Don't Propagate WL&WW Between Series
@@ -9843,17 +9860,164 @@ public class BrowserController extends JFrame {
     }
 
     /**
-     * 設定を他にコピー
-     * HOROS-20240407準拠: - (IBAction) copySettingsToOthers: (id) sender
+     * 設定を他にコピー (Propagate Settings)
+     * HOROS-20240407準拠: - (IBAction) copySettingsToOthers: → propagateSettings → propagateSettingsToViewer:
+     *   - アクティブビューアの WL/WW・スケール・回転 を他2Dビューアに伝播
+     *   - 同一Study かつ同一Modality でのみ WL/WW を伝播 (HOROS propagateSettingsToViewer: 準拠)
+     *   - 平行平面 (Orientationベクトルがほぼ同一) でのみ スケール・回転 を伝播
      */
     public void copySettingsToOthers(Object sender) {
+        if (!DCMView.propagateSettings) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("propagate.disabled",
+                            "Propagation is disabled. Enable \"Propagate Settings Between Series\" in the 2D menu."),
+                    LanguageManager.get("propagate.title", "Propagate Settings"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        List<ViewerController> viewers = ViewerController.getDisplayed2DViewers();
+        if (viewers.isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("propagate.no_viewer", "No active 2D viewer to propagate from."),
+                    LanguageManager.get("propagate.title", "Propagate Settings"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // アクティブ(最後にフォーカスしたKeyView)のビューアをソースとする
+        ViewerController source = null;
+        for (ViewerController vc : viewers) {
+            if (vc.getImageView() != null && vc.getImageView().isKeyView) {
+                source = vc;
+                break;
+            }
+        }
+        if (source == null) {
+            source = viewers.get(0);
+        }
+
+        DCMView srcView = source.getImageView();
+        if (srcView == null || srcView.getCurDCM() == null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("propagate.no_viewer", "No active 2D viewer to propagate from."),
+                    LanguageManager.get("propagate.title", "Propagate Settings"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        DicomPix srcPix = srcView.getCurDCM();
+        float srcWL = srcPix.getWindowLevel();
+        float srcWW = srcPix.getWindowWidth();
+        float srcScale = srcView.getScaleValue();
+        int srcRotation = srcView.getRotation();
+        boolean srcXFlipped = srcView.getXFlipped();
+        boolean srcYFlipped = srcView.getYFlipped();
+        String srcModality = srcPix.getModality();
+        String srcStudy = srcPix.getStudyInstanceUID();
+        if (srcStudy == null) srcStudy = srcPix.getFrameOfReferenceUID();
+        double[] srcNormal = orientationNormal(srcPix);
+
+        int propagated = 0;
+        for (ViewerController vc : viewers) {
+            if (vc == source) continue;
+            DCMView tgtView = vc.getImageView();
+            if (tgtView == null || tgtView.getCurDCM() == null) continue;
+            DicomPix tgtPix = tgtView.getCurDCM();
+
+            // WL/WW: 同一Studyかつ同一Modalityでのみ伝播 (HOROS準拠)
+            boolean propagateWLWW = true;
+            if (srcModality != null && tgtPix.getModality() != null
+                    && !srcModality.equalsIgnoreCase(tgtPix.getModality())) {
+                propagateWLWW = false;
+            }
+            String tgtStudy = tgtPix.getStudyInstanceUID();
+            if (tgtStudy == null) tgtStudy = tgtPix.getFrameOfReferenceUID();
+            if (srcStudy != null && tgtStudy != null && !srcStudy.equalsIgnoreCase(tgtStudy)) {
+                propagateWLWW = false;
+            }
+            if (propagateWLWW
+                    && (tgtPix.getWindowLevel() != srcWL || tgtPix.getWindowWidth() != srcWW)) {
+                tgtPix.setWindowLevelWidth(srcWL, srcWW);
+            }
+
+            // スケール・回転・flip: 平行平面でのみ伝播
+            double[] tgtNormal = orientationNormal(tgtPix);
+            if (normalsParallel(srcNormal, tgtNormal)) {
+                double srcSpacing = srcPix.getPixelSpacingX();
+                double tgtSpacing = tgtPix.getPixelSpacingX();
+                float newScale;
+                if (srcSpacing > 0 && tgtSpacing > 0 && srcScale > 0) {
+                    newScale = (float) ((srcScale / srcSpacing) * tgtSpacing);
+                } else {
+                    newScale = srcScale;
+                }
+                if (Math.abs(tgtView.getScaleValue() - newScale) > 1e-4f)
+                    tgtView.setScaleValue(newScale);
+                if (tgtView.getRotation() != srcRotation)
+                    tgtView.setRotation(srcRotation);
+                if (tgtView.getXFlipped() != srcXFlipped)
+                    tgtView.setXFlipped(srcXFlipped);
+                if (tgtView.getYFlipped() != srcYFlipped)
+                    tgtView.setYFlipped(srcYFlipped);
+            }
+
+            tgtView.repaint();
+            propagated++;
+        }
+
+        if (propagated > 0) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("propagate.applied",
+                            "Settings propagated to %d viewer(s).").replace("%d", String.valueOf(propagated)),
+                    LanguageManager.get("propagate.title", "Propagate Settings"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        } else if (sender != null) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("propagate.none", "No other viewer to propagate to."),
+                    LanguageManager.get("propagate.title", "Propagate Settings"),
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /** Orientationベクトルから法線成分 (ベクトル[6..8]) を取得 */
+    private static double[] orientationNormal(DicomPix pix) {
+        double[] o = pix.getOrientation();
+        if (o != null && o.length >= 9) {
+            return new double[] { o[6], o[7], o[8] };
+        }
+        return new double[] { 0, 0, 1 };
+    }
+
+    /** 2つの法線ベクトルが平行 (または反平行) かどうか */
+    private static boolean normalsParallel(double[] a, double[] b) {
+        double dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        return Math.abs(Math.abs(dot) - 1.0) < 0.001;
     }
 
     /**
-     * シリーズ内で設定を切り替え
-     * HOROS-20240407準拠: - (IBAction) switchCopySettingsInSeries: (id) sender
+     * シリーズ内で設定を切り替え (Propagate Settings in Current Series)
+     * HOROS-20240407準拠: - (IBAction) switchCopySettingsInSeries: → DCMView.m switchCopySettingsInSeries:
+     *   - COPYSETTINGSINSERIES をトグル
+     *   - 有効時: スライス切替後もWL/WW・スケール・回転・flipがビューレベルで継続適用される
      */
     public void switchCopySettingsInSeries(Object sender) {
+        DCMView.copySettingsInSeries = !DCMView.copySettingsInSeries;
+
+        // 表示中の2Dビューアを再描画
+        for (ViewerController vc : ViewerController.getDisplayed2DViewers()) {
+            DCMView v = vc.getImageView();
+            if (v != null) v.repaint();
+        }
+
+        javax.swing.JOptionPane.showMessageDialog(this,
+                DCMView.copySettingsInSeries
+                        ? LanguageManager.get("propagate.in_series.enabled",
+                                "Propagate Settings in Current Series: ON (WL/WW & view settings persist across slices).")
+                        : LanguageManager.get("propagate.in_series.disabled",
+                                "Propagate Settings in Current Series: OFF."),
+                LanguageManager.get("propagate.title", "Propagate Settings"),
+                javax.swing.JOptionPane.INFORMATION_MESSAGE);
     }
 
     /**
