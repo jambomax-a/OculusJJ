@@ -177,10 +177,10 @@ public class BrowserToolbar extends JToolBar {
             p.setOpaque(false);
             p.setPreferredSize(new Dimension(180, 26));
             p.setMinimumSize(new Dimension(150, 24));
-            JLabel lbl = new JLabel("Time:", SwingConstants.CENTER);
+            JLabel lbl = new JLabel(LanguageManager.get("browser.time_label", "Time:"), SwingConstants.CENTER);
             lbl.setFont(new Font("SansSerif", Font.PLAIN, 10));
             lbl.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
-            lbl.setToolTipText("Filter by Time Interval");
+            lbl.setToolTipText(LanguageManager.get("browser.tt_time_filter", "Filter by Time Interval"));
             p.add(lbl, BorderLayout.WEST);
             p.add(intervalCombo, BorderLayout.CENTER);
             add(p);
@@ -206,10 +206,10 @@ public class BrowserToolbar extends JToolBar {
             p.setOpaque(false);
             p.setPreferredSize(new Dimension(180, 26));
             p.setMinimumSize(new Dimension(150, 24));
-            JLabel lbl = new JLabel("Mod:", SwingConstants.CENTER);
+            JLabel lbl = new JLabel(LanguageManager.get("browser.mod_label", "Mod:"), SwingConstants.CENTER);
             lbl.setFont(new Font("SansSerif", Font.PLAIN, 10));
             lbl.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
-            lbl.setToolTipText("Filter by Modality");
+            lbl.setToolTipText(LanguageManager.get("browser.tt_mod_filter", "Filter by Modality"));
             modalityCombo.setPreferredSize(new Dimension(140, 22));
             p.add(lbl, BorderLayout.WEST);
             p.add(modalityCombo, BorderLayout.CENTER);
