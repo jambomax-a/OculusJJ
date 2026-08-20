@@ -278,6 +278,10 @@
 
 ### 🟢 P5: GPU/Optimization
 
+> **注:** 以下の「VRAM最適化」と「AI画像分析連携」は、HOROS-20240407 には直接的な対応機能がない OculusJJ 独自の拡張計画項目です。
+> - VRAM 関連: HOROS は `VTKView.mm:182` / `DefaultsOsiriX.m:206` で GPU の VRAM サイズを検出（IORegistry の `VRAM,totalsize`）し、`VRView.mm:1020`「Your graphic board has only %d MB of VRAM. Performances will be very limited with large dataset.」や `VRView.mm:6310`「3D Dataset volume is larger than the amount of graphic board VRAM: GPU Rendering could be slower than CPU Rendering.」の警告を提示するのみで、ボリュームデータ自体の VRAM 永駐化 / Mipmap 生成等の最適化は VTK 内部に委ねる形です。
+> - AI 関連: HOROS ソース内の ML 推論（`machinelearning` / `mlmodel` / `coreml` / `neural` / `inference` / `tensorflow` / `pytorch` / `onnx` / `weights`）は 0 件。`MSRGSegmentation.*` / `ITKSegmentation3DController.m` はマウス操作ベースのインタラクティブ・セグメンテーションであり AI 推論ではありません。
+
 | 項目 | 状態 | 実体 |
 |------|------|------|
 | GPU Volume Rendering | ✅ 実装済 | `GLViewer3D.java`（LWJGL 3.2.3 / OpenGL 3.3、1548行） |
@@ -323,6 +327,8 @@
 ## 最終更新日
 
 **2026-08-21** — P2.5 Annotations Panel (toggleAnnotationsPanel / AnnotationsPanel.java) 実装済みの反映（進捗率 約92% → 約93%）
+
+**2026-08-20** — P5 セクションに「VRAM最適化 / AI画像分析連携 は HOROS-20240407 に直接対応する機能はなく、OculusJJ の独自拡張計画項目である」という注記を追加（HOROS 側には `VTKView.mm:182` / `VRView.mm:1020,6310` の VRAM 検出・警告のみ、AI 推論関連ファイル 0 件を確認）
 
 **2026-08-20** — P3.5 Propagate Settings (copySettingsToOthers / switchCopySettingsInSeries) 実装済みの反映（進捗率 約90% → 約92%）
 
