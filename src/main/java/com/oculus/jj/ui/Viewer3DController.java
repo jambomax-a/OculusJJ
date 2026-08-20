@@ -882,14 +882,14 @@ public class Viewer3DController extends JFrame {
             JMenu modeMenu = new JMenu("3D Mode");
             modeMenu.setForeground(Color.BLACK);
 
-            JMenuItem mipItem = new JMenuItem("MIP");
+            JMenuItem mipItem = new JMenuItem(LanguageManager.get("v3d.mip", "MIP"));
             mipItem.addActionListener(e -> {
                 setMode("MIP");
                 repaint();
             });
             modeMenu.add(mipItem);
 
-            JMenuItem vrItem = new JMenuItem("Volume Rendering");
+            JMenuItem vrItem = new JMenuItem(LanguageManager.get("v3d.vr", "Volume Rendering"));
             vrItem.addActionListener(e -> {
                 setMode("VR");
                 repaint();
@@ -945,7 +945,7 @@ public class Viewer3DController extends JFrame {
         JPanel gridLeft = new JPanel(new GridLayout(3, 2, 2, 2));
         gridLeft.setOpaque(false);
 
-        JLabel lblWL = new JLabel("WL/WW:", JLabel.RIGHT);
+        JLabel lblWL = new JLabel(LanguageManager.get("v3d.wlww", "WL/WW:"), JLabel.RIGHT);
         lblWL.setFont(new Font("SansSerif", Font.PLAIN, 10));
         JComboBox<String> cbWL = new JComboBox<>(new String[] {
                 LanguageManager.get("vr.wlww.other"),
@@ -999,7 +999,7 @@ public class Viewer3DController extends JFrame {
         gridLeft.add(lblWL);
         gridLeft.add(cbWL);
 
-        JLabel lblCLUT = new JLabel("CLUT:", JLabel.RIGHT);
+        JLabel lblCLUT = new JLabel(LanguageManager.get("v3d.clut", "CLUT:"), JLabel.RIGHT);
         lblCLUT.setFont(new Font("SansSerif", Font.PLAIN, 10));
         JComboBox<String> cbCLUT = new JComboBox<>(new String[] {
                 "No CLUT",
@@ -1061,7 +1061,7 @@ public class Viewer3DController extends JFrame {
         gridLeft.add(lblCLUT);
         gridLeft.add(cbCLUT);
 
-        JLabel lblOpacity = new JLabel("Opacity:", JLabel.RIGHT);
+        JLabel lblOpacity = new JLabel(LanguageManager.get("v3d.opacity", "Opacity:"), JLabel.RIGHT);
         lblOpacity.setFont(new Font("SansSerif", Font.PLAIN, 10));
         JComboBox<String> cbOpacity = new JComboBox<>(new String[] {
                 "Linear Table",
@@ -1382,7 +1382,7 @@ public class Viewer3DController extends JFrame {
         rbPersp.setFont(new Font("SansSerif", Font.PLAIN, 9));
         rbPersp.setOpaque(false);
         rbPersp.setFocusable(false);
-        JRadioButton rbEndo = new JRadioButton("Endoscopy", false);
+        JRadioButton rbEndo = new JRadioButton(LanguageManager.get("v3d.endoscopy", "Endoscopy"), false);
         rbEndo.setFont(new Font("SansSerif", Font.PLAIN, 9));
         rbEndo.setOpaque(false);
         rbEndo.setFocusable(false);

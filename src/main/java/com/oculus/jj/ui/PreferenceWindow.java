@@ -24,10 +24,10 @@ public class PreferenceWindow extends JDialog {
         JTabbedPane tabbedPane = new JTabbedPane();
 
         // 3D Settings Tab
-        tabbedPane.addTab("3D Viewer", create3DPane());
+        tabbedPane.addTab(LanguageManager.get("prefwin.tab_3d", "3D Viewer"), create3DPane());
 
         // General Tab (Placeholder)
-        tabbedPane.addTab("General", createGeneralPane());
+        tabbedPane.addTab(LanguageManager.get("prefwin.tab_general", "General"), createGeneralPane());
 
         add(tabbedPane, BorderLayout.CENTER);
 

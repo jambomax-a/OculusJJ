@@ -822,8 +822,8 @@ public class DCMView extends JPanel {
                                 } else {
                                     // 有効なROIが見つからない場合は警告 (Horos準拠)
                                     javax.swing.JOptionPane.showMessageDialog(DCMView.this,
-                                            "Repulsorツールを使用するには、画像上にROI（Length、Polygon、Pencil）が必要です。",
-                                            "Repulsor",
+                                            com.oculus.jj.utils.LanguageManager.get("dcmview.repulsor_need_roi", "To use the Repulsor tool, an ROI (Length, Polygon, or Pencil) is required on the image."),
+                                            com.oculus.jj.utils.LanguageManager.get("dcmview.repulsor", "Repulsor"),
                                             javax.swing.JOptionPane.WARNING_MESSAGE);
                                     repulsorRadius = 0;
                                 }

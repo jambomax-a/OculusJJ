@@ -246,7 +246,7 @@ public class QueryController extends JFrame {
     private void performQuery() {
         DicomNode node = nodeList.getSelectedValue();
         if (node == null) {
-            JOptionPane.showMessageDialog(this, "Select a source server.");
+            JOptionPane.showMessageDialog(this, LanguageManager.get("query.select_server", "Select a source server."));
             return;
         }
 
@@ -357,7 +357,7 @@ public class QueryController extends JFrame {
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
-                    JOptionPane.showMessageDialog(QueryController.this, "Query failed: " + e.getMessage());
+                    JOptionPane.showMessageDialog(QueryController.this, LanguageManager.get("query.failed", "Query failed: ") + e.getMessage());
                 } finally {
                     queryButton.setEnabled(true);
                 }
@@ -369,7 +369,7 @@ public class QueryController extends JFrame {
     private void performRetrieve() {
         int[] selectedRows = resultsTable.getSelectedRows();
         if (selectedRows.length == 0) {
-            JOptionPane.showMessageDialog(this, "Select study/studies to retrieve.");
+            JOptionPane.showMessageDialog(this, LanguageManager.get("query.select_studies", "Select study/studies to retrieve."));
             return;
         }
 
@@ -418,7 +418,7 @@ public class QueryController extends JFrame {
                     } catch (Exception e) {
                         e.printStackTrace();
                         JOptionPane.showMessageDialog(QueryController.this,
-                                "Retrieve failed for " + patientName + ": " + e.getMessage());
+                                LanguageManager.get("query.retrieve_failed", "Retrieve failed for ") + patientName + ": " + e.getMessage());
                     } finally {
                         // 全てのworkerが完了したかチェックしてボタンを有効化するのは複雑なため、
                         // 最後の行の処理が完了したタイミングか、簡易的に個別に有効化検討。
@@ -448,11 +448,11 @@ public class QueryController extends JFrame {
                 try {
                     boolean success = get();
                     if (success)
-                        JOptionPane.showMessageDialog(QueryController.this, "Verify Successful!");
+                        JOptionPane.showMessageDialog(QueryController.this, LanguageManager.get("query.verify_success", "Verify Successful!"));
                     else
-                        JOptionPane.showMessageDialog(QueryController.this, "Verify Failed.");
+                        JOptionPane.showMessageDialog(QueryController.this, LanguageManager.get("query.verify_failed", "Verify Failed."));
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(QueryController.this, "Verify Error: " + e.getMessage());
+                    JOptionPane.showMessageDialog(QueryController.this, LanguageManager.get("query.verify_error", "Verify Error: ") + e.getMessage());
                 } finally {
                     verifyButton.setEnabled(true);
                 }
