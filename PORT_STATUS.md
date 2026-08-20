@@ -18,7 +18,7 @@
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
 
-### 進捗率：約93%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合/伝播)＋ツールバー Annotations Panel 完了）
+### 進捗率：約94%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合/伝播)＋ツールバー Annotations Panel＋Key Image → DICOM SC出力 完了）
 
 ---
 
@@ -245,7 +245,7 @@
 | 画像操作 | Subtraction operations, convolution, resample | — | 低 |
 | 画像操作 | ~~Shutter tool~~ ✅実装済み / Full-screen mode | — | 中 |
 | Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
-| Key Image | captureAndSetKeyImage → DICOM SC出力 | — | 中 |
+| Key Image | ~~captureAndSetKeyImage → DICOM SC出力~~ ✅実装済（描画キャプチャ + `exportKeyImagesAsDICOM`） | `captureAndSetKeyImage:` / `exportROIAndKeyImagesAsDICOMSeries:` (BrowserController.m:17815, DicomImage.m:1266, DCMView.m:11115) | 中 |
 | Report | ~~PDF生成・DICOM SR変換~~ ✅HTMLレポート生成実装済（`generateReport`） | — | 中 |
 | Print | 12-bit display, Print slider | — | 低 |
 
@@ -325,6 +325,8 @@
 ---
 
 ## 最終更新日
+
+**2026-08-22** — P3 Key Image: `captureAndSetKeyImage` をHOROS準拠（描画ビュー+アノテーションの8bit RGBキャプチャ → 本物の DICOM SC オブジェクト: SOP `1.2.840.10008.5.1.4.1.1.7` / Modality=SC）に書き換え + 2Dメニュー「キー画像をDICOM SCシリーズとして書き出す」（`exportKeyImagesAsDICOM`、HOROS `exportROIAndKeyImagesAsDICOMSeries:` 相当、全表示ビューアのキー画像一括出力）。i18n `key.image.*` / `export.sc.*` 追加（進捗率 約93% → 約94%）
 
 **2026-08-21** — P2.5 Annotations Panel (toggleAnnotationsPanel / AnnotationsPanel.java) 実装済みの反映（進捗率 約92% → 約93%）
 
