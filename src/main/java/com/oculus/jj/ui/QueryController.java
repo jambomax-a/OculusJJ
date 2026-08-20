@@ -15,6 +15,7 @@ import com.oculus.jj.model.DicomNodeManager;
 import com.oculus.jj.model.DicomService;
 import com.oculus.jj.model.DicomDatabase;
 import com.oculus.jj.model.DicomStudy;
+import com.oculus.jj.utils.LanguageManager;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 
@@ -49,7 +50,7 @@ public class QueryController extends JFrame {
     }
 
     private QueryController() {
-        setTitle("DICOM Query/Retrieve");
+        setTitle(LanguageManager.get("query.title", "DICOM Query/Retrieve"));
         setSize(1000, 750);
         setLocationRelativeTo(null);
         initComponents();
@@ -63,8 +64,13 @@ public class QueryController extends JFrame {
 
         // HOROS準拠: セグメント化されたコントロールのようなボタン行
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        String[] tabs = { "Name", "Patient ID", "Accession Number", "Birthdate", "Description", "Referring Physician",
-                "Institution" };
+        String[] tabs = { LanguageManager.get("query.tab.name", "Name"),
+                LanguageManager.get("query.tab.patientid", "Patient ID"),
+                LanguageManager.get("query.tab.accession", "Accession Number"),
+                LanguageManager.get("query.tab.birthdate", "Birthdate"),
+                LanguageManager.get("query.tab.description", "Description"),
+                LanguageManager.get("query.tab.refphys", "Referring Physician"),
+                LanguageManager.get("query.tab.institution", "Institution") };
         searchTypeButtons = new ArrayList<>();
         ButtonGroup group = new ButtonGroup();
 
@@ -105,7 +111,7 @@ public class QueryController extends JFrame {
 
         // 1. Nodes
         JPanel nodesPanel = new JPanel(new BorderLayout());
-        nodesPanel.setBorder(BorderFactory.createTitledBorder("DICOM Nodes:"));
+        nodesPanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("query.nodes", "DICOM Nodes:")));
         nodeList = new JList<>(new Vector<>(DicomNodeManager.getInstance().getNodes()));
         nodeList.setSelectedIndex(0);
         nodesPanel.add(new JScrollPane(nodeList), BorderLayout.CENTER);
@@ -114,13 +120,13 @@ public class QueryController extends JFrame {
         // 2. Dates
         JPanel datePanel = new JPanel();
         datePanel.setLayout(new BoxLayout(datePanel, BoxLayout.Y_AXIS));
-        datePanel.setBorder(BorderFactory.createTitledBorder("Date:"));
+        datePanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("query.date", "Date:")));
         ButtonGroup dateGroup = new ButtonGroup();
-        anyDateBtn = new JRadioButton("Any date", true);
-        todayBtn = new JRadioButton("Today");
-        yesterdayBtn = new JRadioButton("Yesterday");
-        last7DaysBtn = new JRadioButton("Last 7 days");
-        lastMonthBtn = new JRadioButton("Last month");
+        anyDateBtn = new JRadioButton(LanguageManager.get("query.date.any", "Any date"), true);
+        todayBtn = new JRadioButton(LanguageManager.get("query.date.today", "Today"));
+        yesterdayBtn = new JRadioButton(LanguageManager.get("query.date.yesterday", "Yesterday"));
+        last7DaysBtn = new JRadioButton(LanguageManager.get("query.date.last7", "Last 7 days"));
+        lastMonthBtn = new JRadioButton(LanguageManager.get("query.date.lastmonth", "Last month"));
         dateGroup.add(anyDateBtn);
         dateGroup.add(todayBtn);
         dateGroup.add(yesterdayBtn);
@@ -135,7 +141,7 @@ public class QueryController extends JFrame {
 
         // 3. Modalities
         JPanel modPanel = new JPanel(new GridLayout(0, 3));
-        modPanel.setBorder(BorderFactory.createTitledBorder("Modality:"));
+        modPanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("query.modality", "Modality:")));
         String[] mods = { "CR", "CT", "MR", "US", "XA", "PT", "MG", "DX", "RF", "NM", "SC", "OT" };
         modalityCheckBoxes = new ArrayList<>();
         for (String m : mods) {
@@ -149,16 +155,16 @@ public class QueryController extends JFrame {
 
         // Action Toolbar
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        toolbar.add(new JLabel("Retrieve to:"));
+        toolbar.add(new JLabel(LanguageManager.get("query.retrieve_to", "Retrieve to:")));
         retrieveToCombo = new JComboBox<>(
                 new String[] { "This Computer - " + DicomNodeManager.getInstance().getLocalAET() });
         toolbar.add(retrieveToCombo);
 
-        queryButton = new JButton("Query");
-        queryPatientButton = new JButton("Query Patient");
-        retrieveButton = new JButton("Retrieve");
-        verifyButton = new JButton("Verify");
-        settingsButton = new JButton("Settings");
+        queryButton = new JButton(LanguageManager.get("query.btn.query", "Query"));
+        queryPatientButton = new JButton(LanguageManager.get("query.btn.querypatient", "Query Patient"));
+        retrieveButton = new JButton(LanguageManager.get("query.btn.retrieve", "Retrieve"));
+        verifyButton = new JButton(LanguageManager.get("query.btn.verify", "Verify"));
+        settingsButton = new JButton(LanguageManager.get("query.btn.settings", "Settings"));
 
         queryButton.addActionListener(e -> performQuery());
         queryPatientButton.addActionListener(e -> performQuery());
@@ -175,8 +181,16 @@ public class QueryController extends JFrame {
         centerPanel.add(toolbar, BorderLayout.CENTER);
 
         // Results Table
-        String[] columnNames = { "Patient Name", "Patient ID", "Date of Birth", "Description", "Modality", "# im",
-                "Date", "Time", "Source", "Accession #", "StudyInstanceUID" };
+        String[] columnNames = { LanguageManager.get("query.col.patientname", "Patient Name"),
+                LanguageManager.get("query.col.patientid", "Patient ID"),
+                LanguageManager.get("query.col.dob", "Date of Birth"),
+                LanguageManager.get("query.col.description", "Description"),
+                LanguageManager.get("query.col.modality", "Modality"),
+                LanguageManager.get("query.col.numim", "# im"),
+                LanguageManager.get("query.col.date", "Date"),
+                LanguageManager.get("query.col.time", "Time"),
+                LanguageManager.get("query.col.source", "Source"),
+                LanguageManager.get("query.col.accession", "Accession #"), "StudyInstanceUID" };
         tableModel = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
@@ -218,7 +232,7 @@ public class QueryController extends JFrame {
         // Status bar
         JPanel statusBar = new JPanel(new BorderLayout());
         statusBar.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
-        JLabel keepOnTop = new JLabel("Keep this window on top");
+        JLabel keepOnTop = new JLabel(LanguageManager.get("query.keepontop", "Keep this window on top"));
         statusBar.add(keepOnTop, BorderLayout.WEST);
         statusBar.add(new JLabel("127.0.0.1"), BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);

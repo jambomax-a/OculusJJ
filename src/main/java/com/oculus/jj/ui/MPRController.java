@@ -1575,7 +1575,7 @@ public void updateAllViews() {
     private static void openMPR(ViewerController viewer, LayoutType layout) {
         if (viewer == null || viewer.getImageView() == null || viewer.getImageView().getDcmPixList() == null
                 || viewer.getImageView().getDcmPixList().isEmpty()) {
-            JOptionPane.showMessageDialog(null, "No images found for MPR reconstruction.", "3D MPR Error",
+            JOptionPane.showMessageDialog(null, com.oculus.jj.utils.LanguageManager.get("mpr.noimages", "No images found for MPR reconstruction."), com.oculus.jj.utils.LanguageManager.get("mpr.error", "3D MPR Error"),
                     JOptionPane.ERROR_MESSAGE);
             return;
         }
@@ -1586,7 +1586,7 @@ public void updateAllViews() {
                 mpr.setVisible(true);
             } catch (Exception ex) {
                 ex.printStackTrace();
-                JOptionPane.showMessageDialog(null, "Failed to start 3D MPR: " + ex.getMessage(), "3D MPR Error",
+                JOptionPane.showMessageDialog(null, com.oculus.jj.utils.LanguageManager.get("mpr.startfailed", "Failed to start 3D MPR: ") + ex.getMessage(), com.oculus.jj.utils.LanguageManager.get("mpr.error", "3D MPR Error"),
                         JOptionPane.ERROR_MESSAGE);
             }
         });

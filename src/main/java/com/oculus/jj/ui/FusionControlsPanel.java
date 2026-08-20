@@ -5,6 +5,7 @@ import java.awt.*;
 import com.oculus.jj.config.AppPreferences;
 import com.oculus.jj.model.DicomPix;
 import com.oculus.jj.model.FusionImageProcessor;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * FusionControlsPanel — PET/CT 融合コントロールパネル。
@@ -42,7 +43,7 @@ public class FusionControlsPanel extends JPanel {
         // Mode selection
         JPanel modePanel = new JPanel(new BorderLayout(8, 0));
         modePanel.setBackground(BG);
-        JLabel modeLabel = new JLabel("Mode:");
+        JLabel modeLabel = new JLabel(LanguageManager.get("fusion.mode", "Mode:"));
         modeLabel.setForeground(FG);
         modeLabel.setFont(modeLabel.getFont().deriveFont(12f));
 
@@ -60,7 +61,7 @@ public class FusionControlsPanel extends JPanel {
         // Weight slider
         JPanel weightPanel = new JPanel(new BorderLayout(8, 0));
         weightPanel.setBackground(BG);
-        JLabel wLabel = new JLabel("Blend:");
+        JLabel wLabel = new JLabel(LanguageManager.get("fusion.blend", "Blend:"));
         wLabel.setForeground(FG);
         wLabel.setFont(wLabel.getFont().deriveFont(12f));
 
@@ -89,14 +90,14 @@ public class FusionControlsPanel extends JPanel {
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 2));
         btnPanel.setBackground(BG);
 
-        applyButton = new JButton("\u25B6 Apply");
+        applyButton = new JButton("\u25B6 " + LanguageManager.get("fusion.apply", "Apply"));
         applyButton.setFont(applyButton.getFont().deriveFont(12f));
         applyButton.setPreferredSize(new Dimension(90, 28));
         applyButton.setBackground(new Color(60, 140, 60));
         applyButton.setForeground(Color.WHITE);
         applyButton.setFocusPainted(false);
 
-        clearButton = new JButton("\u2715 Clear");
+        clearButton = new JButton("\u2715 " + LanguageManager.get("fusion.clear", "Clear"));
         clearButton.setFont(clearButton.getFont().deriveFont(12f));
         clearButton.setPreferredSize(new Dimension(90, 28));
         clearButton.setBackground(new Color(180, 60, 60));
@@ -215,7 +216,7 @@ public class FusionControlsPanel extends JPanel {
             }
         });
 
-        JDialog dlg = new JDialog((java.awt.Frame)owner, "Fusion Controls", java.awt.Dialog.ModalityType.MODELESS);
+        JDialog dlg = new JDialog((java.awt.Frame)owner, LanguageManager.get("fusion.title", "Fusion Controls"), java.awt.Dialog.ModalityType.MODELESS);
         dlg.add(panel);
         dlg.pack();
         dlg.setLocationRelativeTo(owner);

@@ -5,6 +5,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumn;
 import java.awt.event.MouseEvent;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * AlbumTableView - アルバムテーブルビュー
@@ -32,7 +33,7 @@ public class AlbumTableView extends JTable {
         // HOROS-20240407準拠: デフォルトのアルバムモデルを設定（初期は空）
         // HOROS-20240407準拠: albumArrayはrefreshAlbums()で設定される
         DefaultTableModel model = new DefaultTableModel(
-            new String[] { "Albums" },
+            new String[] { LanguageManager.get("album.col", "Albums") },
             0
         ) {
             @Override
@@ -57,7 +58,7 @@ public class AlbumTableView extends JTable {
     private javax.swing.JPopupMenu createContextMenu() {
         javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
         
-        javax.swing.JMenuItem addItem = new javax.swing.JMenuItem("Add Album");
+        javax.swing.JMenuItem addItem = new javax.swing.JMenuItem(LanguageManager.get("album.add", "Add Album"));
         addItem.addActionListener(e -> {
             if (browserController != null) {
                 browserController.addAlbum(e.getSource());
@@ -65,7 +66,7 @@ public class AlbumTableView extends JTable {
         });
         menu.add(addItem);
         
-        javax.swing.JMenuItem addSmartItem = new javax.swing.JMenuItem("Add Smart Album");
+        javax.swing.JMenuItem addSmartItem = new javax.swing.JMenuItem(LanguageManager.get("album.addsmart", "Add Smart Album"));
         addSmartItem.addActionListener(e -> {
             if (browserController != null) {
                 browserController.addSmartAlbum(e.getSource());
@@ -75,7 +76,7 @@ public class AlbumTableView extends JTable {
         
         menu.addSeparator();
         
-        javax.swing.JMenuItem removeItem = new javax.swing.JMenuItem("Delete Album");
+        javax.swing.JMenuItem removeItem = new javax.swing.JMenuItem(LanguageManager.get("album.delete", "Delete Album"));
         removeItem.addActionListener(e -> {
             if (browserController != null) {
                 browserController.removeAlbum(e.getSource());

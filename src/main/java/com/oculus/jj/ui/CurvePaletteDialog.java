@@ -4,6 +4,7 @@ import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import java.awt.*;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * Curve Palette Dialog
@@ -29,7 +30,7 @@ public class CurvePaletteDialog extends JDialog {
 
         // --- Thickness selection ---
         JPanel thicknessPanel = new JPanel(new BorderLayout());
-        thicknessPanel.setBorder(BorderFactory.createTitledBorder("Display Thickness (mm)"));
+        thicknessPanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("curve.thickness", "Display Thickness (mm)")));
 
         thicknessSlider = new JSlider(0, 100, 0); // 0 to 10.0 mm
         thicknessLabel = new JLabel("0.0");
@@ -50,7 +51,7 @@ public class CurvePaletteDialog extends JDialog {
 
         // --- Other options ---
         JPanel optPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        interpolateCheck = new JCheckBox("Interpolate Points", true);
+        interpolateCheck = new JCheckBox(LanguageManager.get("curve.interpolate", "Interpolate Points"), true);
         optPanel.add(interpolateCheck);
         mainPanel.add(optPanel);
 

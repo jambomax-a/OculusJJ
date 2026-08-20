@@ -1,6 +1,7 @@
 package com.oculus.jj.ui;
 
 import com.oculus.jj.model.ROI;
+import com.oculus.jj.utils.LanguageManager;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -41,7 +42,7 @@ public class ROIPropertyDialog extends JDialog {
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.EAST;
-        mainPanel.add(new JLabel("Name:"), gbc);
+        mainPanel.add(new JLabel(LanguageManager.get("roi.name", "Name:")), gbc);
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         String[] presets = { "Unnamed", "Tumor", "Nodule", "Cyst", "Calcification" };
@@ -70,7 +71,7 @@ public class ROIPropertyDialog extends JDialog {
         gbc.gridy = 1;
         gbc.weightx = 0;
         gbc.anchor = GridBagConstraints.NORTHEAST;
-        mainPanel.add(new JLabel("Comments:"), gbc);
+        mainPanel.add(new JLabel(LanguageManager.get("roi.comments", "Comments:")), gbc);
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         gbc.weighty = 0.5;
@@ -99,7 +100,7 @@ public class ROIPropertyDialog extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         JPanel colorRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         gbc.gridx = 0;
-        mainPanel.add(new JLabel("Color:"), gbc);
+        mainPanel.add(new JLabel(LanguageManager.get("roi.color", "Color:")), gbc);
         gbc.gridx = 1;
 
         colorButton = new JButton(" ");
@@ -108,7 +109,7 @@ public class ROIPropertyDialog extends JDialog {
         colorButton.setOpaque(true);
         colorButton.setBorder(BorderFactory.createLineBorder(Color.GRAY));
         colorButton.addActionListener(e -> {
-            Color newColor = JColorChooser.showDialog(this, "Choose ROI Color", selectedColor);
+            Color newColor = JColorChooser.showDialog(this, LanguageManager.get("roi.choosecolor", "Choose ROI Color"), selectedColor);
             if (newColor != null) {
                 selectedColor = newColor;
                 colorButton.setBackground(selectedColor);
@@ -117,14 +118,14 @@ public class ROIPropertyDialog extends JDialog {
         });
         colorRow.add(colorButton);
         colorRow.add(Box.createHorizontalStrut(20));
-        sameNameCheck = new JCheckBox("All with same name");
+        sameNameCheck = new JCheckBox(LanguageManager.get("roi.all_samename", "All with same name"));
         colorRow.add(sameNameCheck);
         mainPanel.add(colorRow, gbc);
 
         // Thickness
         gbc.gridx = 0;
         gbc.gridy = 3;
-        mainPanel.add(new JLabel("Thickness:"), gbc);
+        mainPanel.add(new JLabel(LanguageManager.get("roi.thickness", "Thickness:")), gbc);
         gbc.gridx = 1;
         thicknessSlider = new JSlider(1, 20,
                 (int) (roi.getThickness() * (roi.getType() == DCMView.ToolMode.tBrush ? 1.0f : 2.0f)));
@@ -134,7 +135,7 @@ public class ROIPropertyDialog extends JDialog {
         // Opacity
         gbc.gridx = 0;
         gbc.gridy = 4;
-        mainPanel.add(new JLabel("Opacity:"), gbc);
+        mainPanel.add(new JLabel(LanguageManager.get("roi.opacity", "Opacity:")), gbc);
         gbc.gridx = 1;
         opacitySlider = new JSlider(0, 100, (int) (roi.getOpacity() * 100));
         opacitySlider.addChangeListener(e -> applyChanges());
@@ -143,13 +144,13 @@ public class ROIPropertyDialog extends JDialog {
         // Action Buttons Grid (matching screenshot)
         JPanel actionPanel = new JPanel(new GridLayout(3, 2, 8, 8));
         actionPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-        actionPanel.add(new JButton("Save as file"));
-        actionPanel.add(new JButton("Histogram"));
-        actionPanel.add(new JButton("Export to XML"));
-        JButton recalBtn = new JButton("Recalibrate");
+        actionPanel.add(new JButton(LanguageManager.get("roi.savefile", "Save as file")));
+        actionPanel.add(new JButton(LanguageManager.get("roi.histogram", "Histogram")));
+        actionPanel.add(new JButton(LanguageManager.get("roi.exportxml", "Export to XML")));
+        JButton recalBtn = new JButton(LanguageManager.get("roi.recalibrate", "Recalibrate"));
         recalBtn.setEnabled(false);
         actionPanel.add(recalBtn);
-        JButton xyBtn = new JButton("X-Y Plot");
+        JButton xyBtn = new JButton(LanguageManager.get("roi.xyplot", "X-Y Plot"));
         xyBtn.setEnabled(false);
         actionPanel.add(xyBtn);
         // HOROS: Delete button is NOT in the property dialog. User uses

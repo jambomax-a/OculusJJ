@@ -1,6 +1,7 @@
 package com.oculus.jj.ui;
 
 import com.oculus.jj.utils.UIStyle;
+import com.oculus.jj.utils.LanguageManager;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -299,7 +300,7 @@ public class ViewerController extends JFrame {
      * initWithPix:withFiles:withVolume:
      */
     public ViewerController() {
-        super("DICOM Viewer");
+        super(LanguageManager.get("viewer.title", "DICOM Viewer"));
 
         // リストに追加
         displayedViewers.add(this);
@@ -343,7 +344,7 @@ public class ViewerController extends JFrame {
         imageSlider.setFocusable(false);
         imageSlider.setOpaque(false);
         imageSlider.setVisible(false);
-        imageSlider.setToolTipText("Image Selection Slider");
+        imageSlider.setToolTipText(LanguageManager.get("viewer.slider", "Image Selection Slider"));
 
         // スライダーの外観を調整（Horosに寄せて薄くする）
         imageSlider.setPreferredSize(new java.awt.Dimension(100, 15));
@@ -1269,26 +1270,26 @@ public class ViewerController extends JFrame {
             StringBuilder studyInfo = new StringBuilder();
             studyInfo.append(allStudies.indexOf(study) + 1).append("\n");
             if (multiplePatients) {
-                studyInfo.append(study.getName() != null ? study.getName() : "Anonymous").append("\n");
-                studyInfo.append(study.getStudyName() != null ? study.getStudyName() : "No Description").append("\n");
+                studyInfo.append(study.getName() != null ? study.getName() : LanguageManager.get("viewer.anonymous", "Anonymous")).append("\n");
+                studyInfo.append(study.getStudyName() != null ? study.getStudyName() : LanguageManager.get("viewer.nodescription", "No Description")).append("\n");
             } else {
-                studyInfo.append(study.getStudyName() != null ? study.getStudyName() : "No Description").append("\n");
+                studyInfo.append(study.getStudyName() != null ? study.getStudyName() : LanguageManager.get("viewer.nodescription", "No Description")).append("\n");
             }
 
             if (study.getDate() != null) {
                 studyInfo.append(study.getDate().toLocalDate().toString()).append(" ")
                         .append(study.getDate().toLocalTime().toString()).append("\n");
             } else {
-                studyInfo.append("No Date\n");
+                studyInfo.append(LanguageManager.get("viewer.nodate", "No Date") + "\n");
             }
 
             studyInfo.append(study.getModality() != null ? study.getModality() : "??")
-                    .append(": ").append(seriesCount).append(" series").append("\n");
+                    .append(": ").append(seriesCount).append(" ").append(LanguageManager.get("viewer.series", "series")).append("\n");
 
             if (collapsedStudies.contains(study)) {
-                studyInfo.append("Show Series");
+                studyInfo.append(LanguageManager.get("viewer.showseries", "Show Series"));
             } else {
-                studyInfo.append("Hide Series");
+                studyInfo.append(LanguageManager.get("viewer.hideseries", "Hide Series"));
             }
 
             studyButton.setText(studyInfo.toString());
@@ -1355,15 +1356,15 @@ public class ViewerController extends JFrame {
 
                         StringBuilder seriesInfo = new StringBuilder();
                         seriesInfo.append((series.getName() != null && !series.getName().isEmpty()) ? series.getName()
-                                : "Unnamed").append("\n");
+                                : LanguageManager.get("viewer.unnamed", "Unnamed")).append("\n");
                         if (series.getDate() != null) {
                             seriesInfo.append(series.getDate().toLocalDate().toString());
                         } else {
-                            seriesInfo.append("No Date");
+                            seriesInfo.append(LanguageManager.get("viewer.nodate", "No Date"));
                         }
                         seriesInfo.append("\n");
                         seriesInfo.append(series.getNumberOfImages() != null ? series.getNumberOfImages() : 0)
-                                .append(" Images");
+                                .append(" ").append(LanguageManager.get("viewer.images", "Images"));
 
                         button.setText(seriesInfo.toString());
 
@@ -1408,7 +1409,7 @@ public class ViewerController extends JFrame {
         }
 
         if (limitationReached) {
-            JLabel limitLabel = new JLabel("... and more (Limited for performance)");
+            JLabel limitLabel = new JLabel(LanguageManager.get("viewer.limited", "... and more (Limited for performance)"));
             limitLabel.setForeground(Color.RED);
             limitLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
             previewMatrix.add(limitLabel);

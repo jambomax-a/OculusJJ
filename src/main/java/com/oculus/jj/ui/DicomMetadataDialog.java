@@ -11,6 +11,7 @@ import java.awt.*;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * DicomMetadataDialog - DICOM メタデータ（タグ一覧）を表示するウィンドウ。
@@ -47,7 +48,7 @@ public class DicomMetadataDialog extends JFrame {
     }
 
     public DicomMetadataDialog(Window owner, String filePath) {
-        super("DICOM Meta-Data");
+        super(LanguageManager.get("meta.title", "DICOM Meta-Data"));
         this.dicomFilePath = filePath;
         setSize(850, 600);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
@@ -69,7 +70,7 @@ public class DicomMetadataDialog extends JFrame {
         topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JPanel searchPanel = new JPanel(new BorderLayout(5, 5));
-        searchPanel.add(new JLabel("Search: "), BorderLayout.WEST);
+        searchPanel.add(new JLabel(LanguageManager.get("meta.search", "Search: ")), BorderLayout.WEST);
         searchField = new JTextField();
         searchField.addActionListener(e -> applyFilter());
         searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
@@ -90,7 +91,7 @@ public class DicomMetadataDialog extends JFrame {
         });
         searchPanel.add(searchField, BorderLayout.CENTER);
 
-        JButton clearBtn = new JButton("Clear");
+        JButton clearBtn = new JButton(LanguageManager.get("meta.clear", "Clear"));
         clearBtn.addActionListener(e -> {
             searchField.setText("");
             applyFilter();
@@ -99,7 +100,7 @@ public class DicomMetadataDialog extends JFrame {
 
         topPanel.add(searchPanel, BorderLayout.NORTH);
 
-        infoLabel = new JLabel("File: " + (dicomFilePath != null ? dicomFilePath : "None"));
+        infoLabel = new JLabel(LanguageManager.get("meta.file", "File: ") + (dicomFilePath != null ? dicomFilePath : LanguageManager.get("meta.none", "None")));
         infoLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
         topPanel.add(infoLabel, BorderLayout.SOUTH);
 
@@ -132,7 +133,7 @@ public class DicomMetadataDialog extends JFrame {
         // 下部：閉じるボタン
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         bottomPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        JButton closeBtn = new JButton("Close");
+        JButton closeBtn = new JButton(LanguageManager.get("meta.close", "Close"));
         closeBtn.addActionListener(e -> dispose());
         bottomPanel.add(closeBtn);
         add(bottomPanel, BorderLayout.SOUTH);
@@ -140,18 +141,18 @@ public class DicomMetadataDialog extends JFrame {
 
     private void loadMetadata() {
         if (dicomFilePath == null || dicomFilePath.isEmpty()) {
-            infoLabel.setText("No DICOM file selected.");
+            infoLabel.setText(LanguageManager.get("meta.nofile", "No DICOM file selected."));
             return;
         }
 
         File file = new File(dicomFilePath);
         if (!file.exists()) {
-            infoLabel.setText("File not found: " + dicomFilePath);
+            infoLabel.setText(LanguageManager.get("meta.notfound", "File not found: ") + dicomFilePath);
             return;
         }
 
         long fileSizeKb = file.length() / 1024;
-        setTitle("Meta-Data: " + file.getName() + " (" + fileSizeKb + " KB)");
+        setTitle(LanguageManager.get("meta.metaprefix", "Meta-Data: ") + file.getName() + " (" + fileSizeKb + " KB)");
 
         try (DicomInputStream dis = new DicomInputStream(file)) {
             // ファイルメタ情報の読み込み
@@ -175,7 +176,7 @@ public class DicomMetadataDialog extends JFrame {
             updateTableData();
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Failed to read DICOM metadata:\n" + e.getMessage(), "Error",
+            JOptionPane.showMessageDialog(this, LanguageManager.get("meta.failed", "Failed to read DICOM metadata:\n") + e.getMessage(), LanguageManager.get("meta.error", "Error"),
                     JOptionPane.ERROR_MESSAGE);
         }
     }

@@ -35,10 +35,10 @@ public class BrushPaletteDialog extends JDialog {
 
         // --- Mode selection ---
         JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        modePanel.setBorder(BorderFactory.createTitledBorder("Mode"));
+        modePanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("brush.mode", "Mode")));
 
-        drawBtn = new JRadioButton("Draw", true);
-        eraseBtn = new JRadioButton("Erase");
+        drawBtn = new JRadioButton(LanguageManager.get("brush.draw", "Draw"), true);
+        eraseBtn = new JRadioButton(LanguageManager.get("brush.erase", "Erase"));
         ButtonGroup group = new ButtonGroup();
         group.add(drawBtn);
         group.add(eraseBtn);
@@ -49,7 +49,7 @@ public class BrushPaletteDialog extends JDialog {
 
         // --- Size selection ---
         JPanel sizePanel = new JPanel(new BorderLayout());
-        sizePanel.setBorder(BorderFactory.createTitledBorder("Brush Size"));
+        sizePanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("brush.size", "Brush Size")));
 
         // HOROS-20240407: Slider 1 to 17 (Radius)
         sizeSlider = new JSlider(1, 17, 3);
@@ -95,14 +95,14 @@ public class BrushPaletteDialog extends JDialog {
         if (view == null) {
             JOptionPane.showMessageDialog(this,
                     LanguageManager.get("brush.morph.no.roi", "Select a Brush ROI first."),
-                    "Brush", JOptionPane.WARNING_MESSAGE);
+                    LanguageManager.get("brush.title", "Brush"), JOptionPane.WARNING_MESSAGE);
             return;
         }
         boolean applied = view.applyBrushMorph(dilate, 1);
         if (!applied) {
             JOptionPane.showMessageDialog(this,
                     LanguageManager.get("brush.morph.no.roi", "Select a Brush ROI first."),
-                    "Brush", JOptionPane.WARNING_MESSAGE);
+                    LanguageManager.get("brush.title", "Brush"), JOptionPane.WARNING_MESSAGE);
         }
     }
 

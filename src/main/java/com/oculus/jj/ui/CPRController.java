@@ -5,6 +5,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import com.oculus.jj.model.DicomPix;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * CPRController - Curved Planar Reformation (Curved MPR) 実装
@@ -370,31 +371,31 @@ public class CPRController extends JFrame {
         toolbar.setFloatable(false);
 
         // --- Standard Tools (Tool Matrix 相当) ---
-        JButton selectBtn = new JButton("Select");
+        JButton selectBtn = new JButton(LanguageManager.get("cpr.select", "Select"));
         selectBtn.addActionListener(e -> DCMView.currentTool = DCMView.ToolMode.tPlain);
         toolbar.add(selectBtn);
 
-        JButton wlBtn = new JButton("WL/WW");
+        JButton wlBtn = new JButton(LanguageManager.get("cpr.wlww", "WL/WW"));
         wlBtn.addActionListener(e -> DCMView.currentTool = DCMView.ToolMode.tWLWW);
         toolbar.add(wlBtn);
 
-        JButton zoomBtn = new JButton("Zoom");
+        JButton zoomBtn = new JButton(LanguageManager.get("cpr.zoom", "Zoom"));
         zoomBtn.addActionListener(e -> DCMView.currentTool = DCMView.ToolMode.tZoom);
         toolbar.add(zoomBtn);
 
-        JButton panBtn = new JButton("Pan");
+        JButton panBtn = new JButton(LanguageManager.get("cpr.pan", "Pan"));
         panBtn.addActionListener(e -> DCMView.currentTool = DCMView.ToolMode.tTranslate);
         toolbar.add(panBtn);
 
         toolbar.addSeparator();
 
-        JButton curvedBtn = new JButton("Draw Path");
-        curvedBtn.setToolTipText("Enable Path Drawing Tool (Click in 2D or 3D views)");
+        JButton curvedBtn = new JButton(LanguageManager.get("cpr.drawpath", "Draw Path"));
+        curvedBtn.setToolTipText(LanguageManager.get("cpr.drawpath.tip", "Enable Path Drawing Tool (Click in 2D or 3D views)"));
         curvedBtn.addActionListener(e -> DCMView.currentTool = DCMView.ToolMode.tCurvedROI);
         toolbar.add(curvedBtn);
 
-        JButton resetBtn = new JButton("Clear Path");
-        resetBtn.setToolTipText("Clear the current curved path");
+        JButton resetBtn = new JButton(LanguageManager.get("cpr.clearpath", "Clear Path"));
+        resetBtn.setToolTipText(LanguageManager.get("cpr.clearpath.tip", "Clear the current curved path"));
         resetBtn.addActionListener(e -> clearCurve());
         toolbar.add(resetBtn);
 
@@ -402,9 +403,9 @@ public class CPRController extends JFrame {
 
         // Reformation Type (Straightened / Stretched)
         JPanel typePanel = new JPanel();
-        typePanel.setBorder(BorderFactory.createTitledBorder("Reformation Type"));
-        JRadioButton stRadio = new JRadioButton("Straightened", true);
-        JRadioButton strRadio = new JRadioButton("Stretched");
+        typePanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("cpr.reformtype", "Reformation Type")));
+        JRadioButton stRadio = new JRadioButton(LanguageManager.get("cpr.straightened", "Straightened"), true);
+        JRadioButton strRadio = new JRadioButton(LanguageManager.get("cpr.stretched", "Stretched"));
         ButtonGroup group = new ButtonGroup();
         group.add(stRadio);
         group.add(strRadio);
@@ -416,7 +417,7 @@ public class CPRController extends JFrame {
 
         // Rotation (Curved MPR Angle) - Toolbar に直接置くのが Horos 流
         toolbar.addSeparator();
-        toolbar.add(new JLabel(" Angle: "));
+        toolbar.add(new JLabel(LanguageManager.get("cpr.angle", " Angle: ")));
         rotSlider = new JSlider(0, 360, 0);
         rotSlider.setPreferredSize(new Dimension(150, 40));
         rotSlider.addChangeListener(e -> {
@@ -427,7 +428,7 @@ public class CPRController extends JFrame {
         toolbar.add(rotSlider);
 
         toolbar.addSeparator();
-        JButton curveBtn = new JButton("Palette");
+        JButton curveBtn = new JButton(LanguageManager.get("cpr.palette", "Palette"));
         curveBtn.addActionListener(e -> {
             CurvePaletteDialog.showPalette(this, this);
         });

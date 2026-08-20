@@ -3,6 +3,7 @@ package com.oculus.jj.ui;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * AnonymizationDialog - HOROS AnonymizationViewController 相当。
@@ -21,14 +22,14 @@ public class AnonymizationDialog extends JDialog {
 
         // Top: Template selection
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        topPanel.add(new JLabel("Template:"));
+        topPanel.add(new JLabel(LanguageManager.get("anon.template", "Template:")));
         String[] templates = {"Default (ISO 12056)", "DICOM PS3.15", "Custom", "None"};
         JComboBox<String> templateCombo = new JComboBox<>(templates);
         templateCombo.setSelectedIndex(0);
         topPanel.add(templateCombo);
         
-        JButton saveTplBtn = new JButton("Save As Template");
-        JButton delTplBtn = new JButton("Delete Template");
+        JButton saveTplBtn = new JButton(LanguageManager.get("anon.save_template", "Save As Template"));
+        JButton delTplBtn = new JButton(LanguageManager.get("anon.delete_template", "Delete Template"));
         topPanel.add(saveTplBtn);
         topPanel.add(delTplBtn);
         add(topPanel, BorderLayout.NORTH);
@@ -36,7 +37,8 @@ public class AnonymizationDialog extends JDialog {
         // Center: Tags table (Horos AnonymizationTagsView equivalent)
         JPanel centerPanel = new JPanel(new BorderLayout());
         
-        String[] cols = {"Tag", "Attribute Name", "Value", "Action"};
+        String[] cols = { LanguageManager.get("anon.col.tag", "Tag"), LanguageManager.get("anon.col.attr", "Attribute Name"),
+                LanguageManager.get("anon.col.value", "Value"), LanguageManager.get("anon.col.action", "Action") };
         DefaultTableModel model = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int row, int col) { return col == 3; }
         };
@@ -67,9 +69,9 @@ public class AnonymizationDialog extends JDialog {
 
         // Add/Edit button row
         JPanel editPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton addBtn = new JButton("+ Add Tag");
-        JButton editBtn = new JButton("Edit Selected");
-        JButton delBtn = new JButton("- Remove");
+        JButton addBtn = new JButton(LanguageManager.get("anon.add_tag", "+ Add Tag"));
+        JButton editBtn = new JButton(LanguageManager.get("anon.edit_tag", "Edit Selected"));
+        JButton delBtn = new JButton(LanguageManager.get("anon.remove_tag", "- Remove"));
         editPanel.add(addBtn);
         editPanel.add(editBtn);
         editPanel.add(delBtn);
@@ -100,8 +102,8 @@ public class AnonymizationDialog extends JDialog {
 
         // OK/Cancel buttons
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton okBtn = new JButton("OK");
-        JButton cancelBtn = new JButton("Cancel");
+        JButton okBtn = new JButton(LanguageManager.get("anon.ok", "OK"));
+        JButton cancelBtn = new JButton(LanguageManager.get("anon.cancel", "Cancel"));
         
         okBtn.addActionListener(e -> {
             // Collect all tag changes
@@ -110,8 +112,8 @@ public class AnonymizationDialog extends JDialog {
                 sb.append(String.format("%s=%s(%s)%n", 
                     model.getValueAt(i, 0), model.getValueAt(i, 2), model.getValueAt(i, 3)));
             }
-            JOptionPane.showMessageDialog(this, "Anonymization applied:\n" + sb.toString(), 
-                "Result", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, LanguageManager.get("anon.applied", "Anonymization applied:") + "\n" + sb.toString(), 
+                LanguageManager.get("anon.result", "Result"), JOptionPane.INFORMATION_MESSAGE);
             dispose();
         });
         cancelBtn.addActionListener(e -> dispose());

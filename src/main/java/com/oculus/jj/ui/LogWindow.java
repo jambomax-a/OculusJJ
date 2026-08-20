@@ -6,6 +6,7 @@ import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * LogWindow - HOROS LogWindowController 相当。ネットワークログ表示ウィンドウ。
@@ -43,39 +44,39 @@ public class LogWindow extends JDialog {
         sendLogModel = new DefaultListModel<>();
         JList<String> sendList = new JList<>(sendLogModel);
         sendList.setCellRenderer(new LogListCellRenderer("Send"));
-        tabs.addTab("Send", new JScrollPane(sendList));
+        tabs.addTab(LanguageManager.get("log.tab.send", "Send"), new JScrollPane(sendList));
 
         // Receive logs
         receiveLogModel = new DefaultListModel<>();
         JList<String> recvList = new JList<>(receiveLogModel);
         recvList.setCellRenderer(new LogListCellRenderer("Receive"));
-        tabs.addTab("Receive", new JScrollPane(recvList));
+        tabs.addTab(LanguageManager.get("log.tab.receive", "Receive"), new JScrollPane(recvList));
 
         // Move logs
         moveLogModel = new DefaultListModel<>();
         JList<String> moveList = new JList<>(moveLogModel);
         moveList.setCellRenderer(new LogListCellRenderer("Move"));
-        tabs.addTab("Move", new JScrollPane(moveList));
+        tabs.addTab(LanguageManager.get("log.tab.move", "Move"), new JScrollPane(moveList));
 
         mainPanel.add(tabs, BorderLayout.SOUTH);
         add(mainPanel, BorderLayout.CENTER);
 
         // Bottom buttons
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton exportBtn = new JButton("Export Log");
+        JButton exportBtn = new JButton(LanguageManager.get("log.export", "Export Log"));
         exportBtn.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             chooser.setSelectedFile(new java.io.File("oculusjj_log.txt"));
             if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                 try (PrintWriter pw = new PrintWriter(chooser.getSelectedFile())) {
                     pw.println(logArea.getText());
-                    JOptionPane.showMessageDialog(this, "Log exported.");
+                    JOptionPane.showMessageDialog(this, LanguageManager.get("log.exported", "Log exported."));
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage());
+                    JOptionPane.showMessageDialog(this, LanguageManager.get("log.export_failed", "Export failed:") + " " + ex.getMessage());
                 }
             }
         });
-        JButton clearBtn = new JButton("Clear All");
+        JButton clearBtn = new JButton(LanguageManager.get("log.clear", "Clear All"));
         clearBtn.addActionListener(e -> logArea.setText(""));
         btnPanel.add(exportBtn);
         btnPanel.add(clearBtn);

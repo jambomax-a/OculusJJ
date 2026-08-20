@@ -3,6 +3,7 @@ package com.oculus.jj.ui;
 import javax.swing.*;
 import java.awt.*;
 import java.net.URI;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * AboutDialog - HOROS About Horos ダイアログ相当。
@@ -56,9 +57,9 @@ public class AboutDialog extends JDialog {
 
         // Links button
         JPanel linkPanel = new JPanel();
-        JButton websiteBtn = new JButton("Website");
-        JButton licenseBtn = new JButton("License");
-        JButton closeBtn = new JButton("Close");
+        JButton websiteBtn = new JButton(LanguageManager.get("about.website", "Website"));
+        JButton licenseBtn = new JButton(LanguageManager.get("about.license", "License"));
+        JButton closeBtn = new JButton(LanguageManager.get("about.close", "Close"));
         
         websiteBtn.addActionListener(e -> {
             try { Desktop.getDesktop().browse(new URI("https://github.com/oculusjj")); } catch(Exception ex) {}

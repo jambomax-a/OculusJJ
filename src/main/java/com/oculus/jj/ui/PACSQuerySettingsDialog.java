@@ -4,6 +4,7 @@ import javax.swing.*;
 import java.awt.Dialog;
 import java.awt.*;
 import java.util.prefs.Preferences;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * PACSQuerySettingsDialog - PACS Query設定ダイアログ
@@ -23,7 +24,7 @@ public class PACSQuerySettingsDialog extends JDialog {
     private static final String[] DAYS_LABELS = { "1 Day", "7 Days", "30 Days", "90 Days", "1 Year", "All" };
 
     public PACSQuerySettingsDialog(Frame owner) {
-        super(owner, "PACS Query Settings", Dialog.ModalityType.MODELESS);
+        super(owner, LanguageManager.get("pacss.title", "PACS Query Settings"), Dialog.ModalityType.MODELESS);
         initComponents();
         pack();
         setLocationRelativeTo(owner);
@@ -40,8 +41,8 @@ public class PACSQuerySettingsDialog extends JDialog {
         add(filterPanel, BorderLayout.CENTER);
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        applyButton = makePrimaryButton("Apply");
-        cancelButton = makeButton("Cancel");
+        applyButton = makePrimaryButton(LanguageManager.get("pacss.apply", "Apply"));
+        cancelButton = makeButton(LanguageManager.get("pacss.cancel", "Cancel"));
 
         applyButton.addActionListener(e -> applySettings());
         cancelButton.addActionListener(e -> dispose());
@@ -58,21 +59,21 @@ public class PACSQuerySettingsDialog extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(new JLabel("Caller AE:"), gbc);
+        panel.add(new JLabel(LanguageManager.get("pacss.caller", "Caller AE:")), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
         callerAEField = new JTextField(prefs.get(PREF_PREFIX + "callerAE", "OculusJJ"));
         callerAEField.setColumns(20);
         panel.add(callerAEField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
-        panel.add(new JLabel("Called AE:"), gbc);
+        panel.add(new JLabel(LanguageManager.get("pacss.called", "Called AE:")), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
         calledAEField = new JTextField(prefs.get(PREF_PREFIX + "calledAE", "ANY-SCP"));
         calledAEField.setColumns(20);
         panel.add(calledAEField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
-        panel.add(new JLabel("Port:"), gbc);
+        panel.add(new JLabel(LanguageManager.get("pacss.port", "Port:")), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
         portSpinner = new JSpinner(new SpinnerNumberModel(
                 prefs.getInt(PREF_PREFIX + "port", 11112), 1, 65535, 1));
@@ -89,7 +90,7 @@ public class PACSQuerySettingsDialog extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(new JLabel("Modality:"), gbc);
+        panel.add(new JLabel(LanguageManager.get("pacss.modality", "Modality:")), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
         modalityCombo = new JComboBox<>(MODALITIES);
         String savedMod = prefs.get(PREF_PREFIX + "modality", "ALL");
@@ -99,7 +100,7 @@ public class PACSQuerySettingsDialog extends JDialog {
         panel.add(modalityCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
-        panel.add(new JLabel("Date Range:"), gbc);
+        panel.add(new JLabel(LanguageManager.get("pacss.daterange", "Date Range:")), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
         gbc.insets = new Insets(4, 4, 4, 16);
 
@@ -132,7 +133,7 @@ public class PACSQuerySettingsDialog extends JDialog {
         prefs.put(PREF_PREFIX + "calledAE", calledAEField.getText().trim());
         prefs.putInt(PREF_PREFIX + "port", ((Number) portSpinner.getValue()).intValue());
         prefs.put(PREF_PREFIX + "modality", MODALITIES[modalityCombo.getSelectedIndex()]);
-        JOptionPane.showMessageDialog(this, "PACS Query settings applied.", "Settings",
+        JOptionPane.showMessageDialog(this, LanguageManager.get("pacss.applied", "PACS Query settings applied."), LanguageManager.get("pacss.title", "PACS Query Settings"),
                 JOptionPane.INFORMATION_MESSAGE);
     }
 

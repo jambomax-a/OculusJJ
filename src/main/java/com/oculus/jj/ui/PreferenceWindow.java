@@ -3,6 +3,7 @@ package com.oculus.jj.ui;
 import javax.swing.*;
 import java.awt.*;
 import com.oculus.jj.config.AppPreferences;
+import com.oculus.jj.utils.LanguageManager;
 
 /**
  * PreferenceWindow - 環境設定ウィンドウ
@@ -11,7 +12,7 @@ import com.oculus.jj.config.AppPreferences;
 public class PreferenceWindow extends JDialog {
 
     public PreferenceWindow(Frame owner) {
-        super(owner, "OculusJJ Preferences", true);
+        super(owner, LanguageManager.get("prefwin.title", "OculusJJ Preferences"), true);
         initializeUI();
     }
 
@@ -32,7 +33,7 @@ public class PreferenceWindow extends JDialog {
 
         // Buttons
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton btnClose = new JButton("Close");
+        JButton btnClose = new JButton(LanguageManager.get("prefwin.close", "Close"));
         btnClose.addActionListener(e -> {
             AppPreferences.saveAll();
             dispose();
@@ -48,24 +49,24 @@ public class PreferenceWindow extends JDialog {
 
         // Resolution
         JPanel resPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        resPanel.add(new JLabel("3D Rendering Resolution (0.1 - 1.0): "));
+        resPanel.add(new JLabel(LanguageManager.get("prefwin.resolution", "3D Rendering Resolution (0.1 - 1.0): ")));
         JSpinner resSpinner = new JSpinner(new SpinnerNumberModel(AppPreferences.get3DResolution(), 0.1, 1.0, 0.1));
         resSpinner.addChangeListener(e -> AppPreferences.set3DResolution((double) resSpinner.getValue()));
         resPanel.add(resSpinner);
         pane.add(resPanel);
 
         // Shading
-        JCheckBox chkShading = new JCheckBox("Enable Shading by default", AppPreferences.is3DShadingEnabled());
+        JCheckBox chkShading = new JCheckBox(LanguageManager.get("prefwin.shading", "Enable Shading by default"), AppPreferences.is3DShadingEnabled());
         chkShading.addActionListener(e -> AppPreferences.set3DShadingEnabled(chkShading.isSelected()));
         pane.add(chkShading);
 
         // ROI Color
         JPanel colorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        colorPanel.add(new JLabel("Default ROI Color: "));
-        JButton btnColor = new JButton("Choose Color...");
+        colorPanel.add(new JLabel(LanguageManager.get("prefwin.roicolor", "Default ROI Color: ")));
+        JButton btnColor = new JButton(LanguageManager.get("prefwin.choosecolor", "Choose Color..."));
         btnColor.setBackground(AppPreferences.getROIColor());
         btnColor.addActionListener(e -> {
-            Color c = JColorChooser.showDialog(this, "Select ROI Color", AppPreferences.getROIColor());
+            Color c = JColorChooser.showDialog(this, LanguageManager.get("prefwin.selectroicolor", "Select ROI Color"), AppPreferences.getROIColor());
             if (c != null) {
                 AppPreferences.setROIColor(c);
                 btnColor.setBackground(c);
@@ -81,7 +82,7 @@ public class PreferenceWindow extends JDialog {
         JPanel pane = new JPanel(new FlowLayout(FlowLayout.LEFT));
         pane.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         
-        pane.add(new JLabel("Measurement Unit: "));
+        pane.add(new JLabel(LanguageManager.get("prefwin.measureunit", "Measurement Unit: ")));
         String[] units = {"mm", "cm"};
         JComboBox<String> comboUnits = new JComboBox<>(units);
         comboUnits.setSelectedItem(AppPreferences.getMeasureUnit());

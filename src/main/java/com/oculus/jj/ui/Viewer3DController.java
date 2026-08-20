@@ -1193,7 +1193,7 @@ public class Viewer3DController extends JFrame {
 
         JPanel pnlSlider = new JPanel(new BorderLayout());
         pnlSlider.setOpaque(false);
-        JLabel lblSliderName = new JLabel("LOD / Resolution", JLabel.CENTER);
+        JLabel lblSliderName = new JLabel(LanguageManager.get("vr.lod.resolution", "LOD / Resolution"), JLabel.CENTER);
         lblSliderName.setFont(new Font("SansSerif", Font.BOLD, 9));
         pnlSlider.add(lblSliderName, BorderLayout.NORTH);
 
@@ -1211,9 +1211,9 @@ public class Viewer3DController extends JFrame {
 
         JPanel pnlSliderLabels = new JPanel(new BorderLayout());
         pnlSliderLabels.setOpaque(false);
-        JLabel lblFine = new JLabel("Fine", JLabel.LEFT);
+        JLabel lblFine = new JLabel(LanguageManager.get("vr.fine", "Fine"), JLabel.LEFT);
         lblFine.setFont(new Font("SansSerif", Font.PLAIN, 8));
-        JLabel lblCoarse = new JLabel("Coarse", JLabel.RIGHT);
+        JLabel lblCoarse = new JLabel(LanguageManager.get("vr.coarse", "Coarse"), JLabel.RIGHT);
         lblCoarse.setFont(new Font("SansSerif", Font.PLAIN, 8));
         pnlSliderLabels.add(lblFine, BorderLayout.WEST);
         pnlSliderLabels.add(lblCoarse, BorderLayout.EAST);
@@ -1345,7 +1345,7 @@ public class Viewer3DController extends JFrame {
         btnEditShading.setFocusable(false);
         btnEditShading.addActionListener(e -> {
             JOptionPane.showMessageDialog(this, "Ambient: 0.20\nDiffuse: 0.90\nSpecular: 0.30\nShininess: 15.0",
-                    "Shading Parameters", JOptionPane.INFORMATION_MESSAGE);
+                    LanguageManager.get("vr.shading_params_title", "Shading Parameters"), JOptionPane.INFORMATION_MESSAGE);
         });
         contentShading.add(btnEditShading);
         contentShading.add(lblParams);
@@ -1508,7 +1508,7 @@ public class Viewer3DController extends JFrame {
         });
         contentTools.add(btnReset);
 
-        String[] extraTools = { "Movie Export", "Orientations" };
+        String[] extraTools = { LanguageManager.get("vr.extra.movie", "Movie Export"), LanguageManager.get("vr.extra.orient", "Orientations") };
         for (String label : extraTools) {
             JButton btn = new JButton(label);
             btn.setFont(new Font("SansSerif", Font.PLAIN, 10));
@@ -1566,7 +1566,7 @@ public class Viewer3DController extends JFrame {
 
         glViewer = createGLViewer(buildGLData(glConfigIndex));
 
-        this.loadingLabel = new JLabel("Preparing Volume Data (Converting to HU)...", JLabel.CENTER);
+        this.loadingLabel = new JLabel(LanguageManager.get("vr.preparing", "Preparing Volume Data (Converting to HU)..."), JLabel.CENTER);
         loadingLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
         loadingLabel.setForeground(Color.WHITE);
 
@@ -1706,35 +1706,35 @@ public class Viewer3DController extends JFrame {
 
     private void showClippingDialog() {
         if (clippingDialog == null) {
-            clippingDialog = new JDialog(this, "3D Clipping", false);
+            clippingDialog = new JDialog(this, LanguageManager.get("vr.clipping_title", "3D Clipping"), false);
             JPanel content = new JPanel();
             content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
             content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
             content.setBackground(new Color(240, 240, 240));
 
-            content.add(makeClipSlider("X-Min (%)", (int) (clipMinX * 100), v -> {
+            content.add(makeClipSlider(LanguageManager.get("vr.clip.xmin", "X-Min (%)"), (int) (clipMinX * 100), v -> {
                 clipMinX = v / 100f;
                 applyClipping();
             }));
-            content.add(makeClipSlider("X-Max (%)", (int) (clipMaxX * 100), v -> {
+            content.add(makeClipSlider(LanguageManager.get("vr.clip.xmax", "X-Max (%)"), (int) (clipMaxX * 100), v -> {
                 clipMaxX = v / 100f;
                 applyClipping();
             }));
             content.add(Box.createVerticalStrut(10));
-            content.add(makeClipSlider("Y-Min (%)", (int) (clipMinY * 100), v -> {
+            content.add(makeClipSlider(LanguageManager.get("vr.clip.ymin", "Y-Min (%)"), (int) (clipMinY * 100), v -> {
                 clipMinY = v / 100f;
                 applyClipping();
             }));
-            content.add(makeClipSlider("Y-Max (%)", (int) (clipMaxY * 100), v -> {
+            content.add(makeClipSlider(LanguageManager.get("vr.clip.ymax", "Y-Max (%)"), (int) (clipMaxY * 100), v -> {
                 clipMaxY = v / 100f;
                 applyClipping();
             }));
             content.add(Box.createVerticalStrut(10));
-            content.add(makeClipSlider("Z-Min (%)", (int) (clipMinZ * 100), v -> {
+            content.add(makeClipSlider(LanguageManager.get("vr.clip.zmin", "Z-Min (%)"), (int) (clipMinZ * 100), v -> {
                 clipMinZ = v / 100f;
                 applyClipping();
             }));
-            content.add(makeClipSlider("Z-Max (%)", (int) (clipMaxZ * 100), v -> {
+            content.add(makeClipSlider(LanguageManager.get("vr.clip.zmax", "Z-Max (%)"), (int) (clipMaxZ * 100), v -> {
                 clipMaxZ = v / 100f;
                 applyClipping();
             }));
@@ -1793,7 +1793,7 @@ public class Viewer3DController extends JFrame {
         if (currentTool == Tool3D.SCISSOR && !scissorPoints.isEmpty()) {
             int w = glViewer != null ? glViewer.getWidth() : 0;
             int h = glViewer != null ? glViewer.getHeight() : 0;
-            String text = "[Scissors] Delete: Clear Inside | Enter: Keep Inside (Clear Outside) | Esc: Cancel";
+            String text = LanguageManager.get("vr.scissors_hint", "[Scissors] Delete: Clear Inside | Enter: Keep Inside (Clear Outside) | Esc: Cancel");
             g2d.setFont(new Font("SansSerif", Font.BOLD, 12));
             FontMetrics fm = g2d.getFontMetrics();
             int tw = fm.stringWidth(text);
@@ -2667,19 +2667,19 @@ public class Viewer3DController extends JFrame {
     public static void openISO(ViewerController viewer) {
         // HOROS-20240407準拠: Surface Renderingの開始前に設定ダイアログを表示
         JPanel panel = new JPanel(new GridLayout(0, 2, 5, 5));
-        panel.add(new JLabel("Surface 1 Threshold (HU):"));
+        panel.add(new JLabel(LanguageManager.get("vr.iso.threshold", "Surface 1 Threshold (HU):")));
         JSpinner thresholdSpinner = new JSpinner(new SpinnerNumberModel(300, -1024, 3072, 50));
         panel.add(thresholdSpinner);
 
-        panel.add(new JLabel("Resolution (0.1-1.0):"));
+        panel.add(new JLabel(LanguageManager.get("vr.iso.resolution", "Resolution (0.1-1.0):")));
         JSpinner resSpinner = new JSpinner(new SpinnerNumberModel(0.5, 0.1, 1.0, 0.1));
         panel.add(resSpinner);
 
-        panel.add(new JLabel("Smoothing:"));
+        panel.add(new JLabel(LanguageManager.get("vr.iso.smoothing", "Smoothing:")));
         JCheckBox smoothCheck = new JCheckBox("", true);
         panel.add(smoothCheck);
 
-        int result = JOptionPane.showConfirmDialog(null, panel, "3D Surface Rendering Settings",
+        int result = JOptionPane.showConfirmDialog(null, panel, LanguageManager.get("vr.iso.title", "3D Surface Rendering Settings"),
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 
         if (result == JOptionPane.OK_OPTION) {
