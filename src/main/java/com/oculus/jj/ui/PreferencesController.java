@@ -134,9 +134,13 @@ public static synchronized PreferencesController getInstance() {
         JButton saveBtn = new JButton(LanguageManager.get("prefs.apply", "Apply"));
         saveBtn.addActionListener(e -> {
             String selectedLang = langCombo.getSelectedItem().toString();
-            AppPreferences.setAppLanguage(selectedLang.contains("ja") ? "ja" : "en");
+            String lang = selectedLang.contains("ja") ? "ja" : "en";
+            AppPreferences.setAppLanguage(lang);
+            // ConfigManager（config.properties）にも永続化し、次回起動時の言語設定と同期させる
+            com.oculus.jj.config.ConfigManager.setProperty("ui.language", lang);
+            com.oculus.jj.config.ConfigManager.saveConfig();
             AppPreferences.saveAll();
-            java.util.Locale locale = AppPreferences.getAppLanguage().equals("ja") ? new java.util.Locale("ja") : java.util.Locale.ENGLISH;
+            java.util.Locale locale = lang.equals("ja") ? new java.util.Locale("ja") : java.util.Locale.ENGLISH;
             com.oculus.jj.ui.MenuResourceLoader.setLocale(locale);
             com.oculus.jj.utils.LanguageManager.getInstance().loadLanguage(selectedLang.contains("ja") ? "ja" : "en");
         });

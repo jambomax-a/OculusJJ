@@ -214,7 +214,12 @@ public class AppPreferences {
     }
 
     public static String getAppLanguage() {
-        return prefs.get(KEY_APP_LANGUAGE, "en");
+        String lang = prefs.get(KEY_APP_LANGUAGE, "");
+        if (lang.isEmpty()) {
+            // 初回起動（未設定）: ConfigManager の既定値（config.properties / DEFAULT_LANGUAGE="ja"）に従う
+            lang = ConfigManager.getLanguage();
+        }
+        return lang.contains("ja") ? "ja" : "en";
     }
 
     public static void setAppLanguage(String lang) {
