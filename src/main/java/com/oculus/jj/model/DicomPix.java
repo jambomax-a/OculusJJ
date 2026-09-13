@@ -53,6 +53,13 @@ public class DicomPix {
     private int[] clutLUT = null;      // 256エントリのRGB LUT、null=無効
     private float clutOpacity = 1.0f;  // 0.0..1.0 の一様なアルファ
 
+    // HOROS-20240407準拠: DCMPix.m setConvolutionKernel: / applyConvolutionOnImage:
+    // 2D 畳み込みフィルタ（3x3 / 5x5 カーネル、edge-extend 境界処理、normalization で割る）
+    private float[] convKernel = null;   // size*size のカーネル、null=無効
+    private int convKernelSize = 0;      // カーネルサイズ（3 または 5）
+    private float convNormalization = 0.0f; // 0 = ノーマライズしない
+    private boolean convolutionOn = false;  // convolution フラグ
+
     private DicomImage imageObj;
 
     // 画像データ
@@ -1199,6 +1206,99 @@ public class DicomPix {
             rawShortData[i] = (short) diff;
         }
         // 再レンダリング（WL/WWはHOROSと同様に再計算しない）
+        if (isGrayscale && rawShortData != null) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
+        }
+    }
+
+    /**
+     * 2D 畳み込みカーネルを設定（HOROS: DCMPix.m setConvolutionKernel: : :）
+     * @param val    size*size のカーネル値。null でフィルタ無効（No Filter）
+     * @param size   カーネルサイズ（3 または 5）
+     * @param norm   ノーマライゼーション係数（0 = 割らない）
+     */
+    public void setConvolutionKernel(float[] val, int size, float norm) {
+        if (val != null) {
+            this.convKernel = new float[val.length];
+            System.arraycopy(val, 0, this.convKernel, 0, val.length);
+            this.convKernelSize = size;
+            this.convNormalization = norm;
+            this.convolutionOn = true;
+        } else {
+            this.convKernel = null;
+            this.convKernelSize = 0;
+            this.convNormalization = 0.0f;
+            this.convolutionOn = false;
+        }
+    }
+
+    public boolean hasConvolution() {
+        return convolutionOn;
+    }
+
+    public float[] getConvolutionKernel() {
+        return convKernel;
+    }
+
+    public int getConvolutionKernelSize() {
+        return convKernelSize;
+    }
+
+    public float getConvolutionNormalization() {
+        return convNormalization;
+    }
+
+    /**
+     * 2D 畳み込みを in-place で適用（HOROS: DCMPix.m applyConvolutionOnImage:）
+     * - 境界は edge-extend（外側ピクセルの複製、vImage kvImageEdgeExtend 相当）
+     * - normalization != 0 の場合はカーネル値を normalization で割る
+     * - 結果は 0〜65535 にクランプ
+     */
+    public void applyConvolution() {
+        if (!convolutionOn || convKernel == null || rawShortData == null || width <= 0 || height <= 0)
+            return;
+        int size = convKernelSize;
+        if (size <= 1 || convKernel.length < size * size)
+            return;
+        int half = size / 2;
+        int w = width, h = height;
+        short[] src = rawShortData;
+        short[] dst = new short[src.length];
+
+        // カーネルを有効値に変換（normalization で割る）
+        float[] k = new float[size * size];
+        for (int i = 0; i < k.length; i++) {
+            float v = convKernel[i];
+            if (convNormalization != 0.0f)
+                v = v / convNormalization;
+            k[i] = v;
+        }
+
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float sum = 0.0f;
+                int ki = 0;
+                for (int ky = -half; ky <= half; ky++) {
+                    int sy = y + ky;
+                    if (sy < 0) sy = 0;
+                    else if (sy >= h) sy = h - 1;
+                    for (int kx = -half; kx <= half; kx++) {
+                        int sx = x + kx;
+                        if (sx < 0) sx = 0;
+                        else if (sx >= w) sx = w - 1;
+                        sum += (src[sy * w + sx] & 0xFFFF) * k[ki++];
+                    }
+                }
+                int v = (int) Math.round(sum);
+                if (v < 0) v = 0;
+                if (v > 0xFFFF) v = 0xFFFF;
+                dst[y * w + x] = (short) v;
+            }
+        }
+        rawShortData = dst;
+
+        // 再レンダリング（CLUT/Opacity は維持）
         if (isGrayscale && rawShortData != null) {
             applyWLWWInMemory();
             thumbnailImage = null;

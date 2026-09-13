@@ -34,6 +34,9 @@ import javax.swing.ListSelectionModel;
 import javax.swing.JPopupMenu;
 import javax.swing.JFileChooser;
 import javax.swing.SwingUtilities;
+import javax.swing.JButton;
+import javax.swing.JRadioButton;
+import javax.swing.ButtonGroup;
 
 import com.oculus.jj.model.DicomDatabase;
 import com.oculus.jj.model.DicomPix;
@@ -179,6 +182,7 @@ public class BrowserController extends JFrame {
     // --- ビュータイプ追跡（HOROS-20240407準拠: macOS上部メニューバーのグレーアウトロジック） ---
     private MainMenuBar.ViewType currentViewType = MainMenuBar.ViewType.STANDARD_2D;
     private javax.swing.JMenu viewer3DMenu; // 3D Viewerメニューへの参照（updateForViewType用）
+    private javax.swing.JMenu convolutionMenu; // Convolution Filtersメニューへの参照（rebuild用）
 
     /**
      * HOROS-20240407準拠: ビュータイプに基づいてメニュー項目をグレーアウト/非表示にする
@@ -7492,6 +7496,13 @@ public class BrowserController extends JFrame {
         }
         viewer2DMenu.add(opacityMenu);
 
+        // Convolution Filters
+        // HOROS-20240407準拠: AppController.m (IBAction) ApplyConv: / AddConv: / UpdateConvolutionMenu:
+        convolutionMenu = new javax.swing.JMenu(
+                MenuResourceLoader.getString("menu_viewer_2d_convolution_filters"));
+        viewer2DMenu.add(convolutionMenu);
+        rebuildConvolutionMenu();
+
         // Workspace State
         // HOROS-20240407準拠: Save/Load Workspace State
         javax.swing.JMenu workspaceMenu = new javax.swing.JMenu(
@@ -9234,6 +9245,398 @@ public class BrowserController extends JFrame {
         int percent = (sender instanceof Integer) ? (Integer) sender : 100;
         pix.applyOpacity(percent / 100.0f);
         view.repaint();
+    }
+
+    // ============================================================
+    // Convolution Filters
+    // HOROS-20240407準拠: AppController.m (IBAction) ApplyConv: /
+    //   AddConv: / deleteConv: / UpdateConvolutionMenu:
+    //   ViewerController.m - (void) setConv:m:s:norm: / computeSum:
+    //   通常クリック=適用, Shift+クリック=削除, Option+クリック=編集
+    // ============================================================
+
+    private static java.io.File convolutionFilterFile() {
+        return new java.io.File(System.getProperty("user.home"),
+                ".oculusjj/convolution_filters.json");
+    }
+
+    /** 保存済みの畳み込みフィルタを読み込む (name -> {size, normalization, matrix}) */
+    @SuppressWarnings("unchecked")
+    private static java.util.Map<String, java.util.Map<String, Object>>
+            loadConvolutionFilters() {
+        final java.util.Map<String, java.util.Map<String, Object>> out =
+                new java.util.LinkedHashMap<>();
+        java.io.File f = convolutionFilterFile();
+        if (!f.exists()) return out;
+        try (java.io.InputStream in = new java.io.FileInputStream(f)) {
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(in);
+            java.util.Iterator<java.util.Map.Entry<String,
+                    com.fasterxml.jackson.databind.JsonNode>> it = root.fields();
+            while (it.hasNext()) {
+                java.util.Map.Entry<String,
+                        com.fasterxml.jackson.databind.JsonNode> e = it.next();
+                com.fasterxml.jackson.databind.JsonNode v = e.getValue();
+                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("size", v.path("size").asInt(5));
+                m.put("normalization", v.path("normalization").asInt(0));
+                java.util.List<Integer> matrix = new java.util.ArrayList<>();
+                for (com.fasterxml.jackson.databind.JsonNode x : v.path("matrix")) {
+                    matrix.add(x.asInt(0));
+                }
+                m.put("matrix", matrix);
+                out.put(e.getKey(), m);
+            }
+        } catch (Exception ex) {
+            // 破損ファイルは空として扱う
+        }
+        return out;
+    }
+
+    /** 畳み込みフィルタを保存 (HOROS: NSUserDefaults "Convolution" 相当) */
+    private static void saveConvolutionFilters(
+            java.util.Map<String, java.util.Map<String, Object>> filters) {
+        java.io.File f = convolutionFilterFile();
+        try {
+            if (f.getParentFile() != null && !f.getParentFile().exists()) {
+                f.getParentFile().mkdirs();
+            }
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.node.ObjectNode root =
+                    mapper.createObjectNode();
+            for (java.util.Map.Entry<String, java.util.Map<String, Object>> e
+                    : filters.entrySet()) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> m = e.getValue();
+                com.fasterxml.jackson.databind.node.ObjectNode n =
+                        mapper.createObjectNode();
+                n.put("size", (Integer) m.get("size"));
+                n.put("normalization", (Integer) m.get("normalization"));
+                com.fasterxml.jackson.databind.node.ArrayNode arr =
+                        mapper.createArrayNode();
+                for (Integer v : (java.util.List<Integer>) m.get("matrix")) {
+                    arr.add(v);
+                }
+                n.set("matrix", arr);
+                root.set(e.getKey(), n);
+            }
+            mapper.writerWithDefaultPrettyPrinter().writeValue(f, root);
+        } catch (Exception ex) {
+            // 保存失敗はダイアログで通知する
+            javax.swing.JOptionPane.showMessageDialog(null,
+                    LanguageManager.get("convolution.error.save",
+                            "Could not save convolution filters: ") + ex.getMessage(),
+                    LanguageManager.get("convolution.error.title", "Error"),
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Convolution Filtersメニューを再構築
+     * HOROS-20240407準拠: - (void) UpdateConvolutionMenu:
+     * "No Filter" → 保存済みフィルタ(名順) → "Add a Filter..."
+     */
+    void rebuildConvolutionMenu() {
+        if (convolutionMenu == null) return;
+        convolutionMenu.removeAll();
+
+        javax.swing.JMenuItem noFilter = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("convolution.none"));
+        noFilter.addActionListener(e -> applyConvolution(null));
+        convolutionMenu.add(noFilter);
+
+        java.util.Map<String, java.util.Map<String, Object>> filters =
+                loadConvolutionFilters();
+        java.util.List<String> names = new java.util.ArrayList<>(filters.keySet());
+        java.util.Collections.sort(names);
+        for (String name : names) {
+            final String n = name;
+            javax.swing.JMenuItem it = new javax.swing.JMenuItem(name);
+            it.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    int mods = e.getModifiersEx();
+                    if ((mods & java.awt.event.InputEvent.SHIFT_DOWN_MASK) != 0) {
+                        deleteConvolutionFilter(n);
+                    } else if ((mods
+                            & (java.awt.event.InputEvent.ALT_DOWN_MASK
+                               | java.awt.event.InputEvent.META_DOWN_MASK)) != 0) {
+                        showConvolutionDialog(n);
+                    } else {
+                        applyConvolution(n);
+                    }
+                }
+            });
+            convolutionMenu.add(it);
+        }
+
+        if (!names.isEmpty()) {
+            convolutionMenu.addSeparator();
+        }
+        javax.swing.JMenuItem add = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("convolution.add"));
+        add.addActionListener(e -> showConvolutionDialog());
+        convolutionMenu.add(add);
+    }
+
+    /**
+     * 畳み込みフィルタをアクティブビューに適用
+     * HOROS-20240407準拠: - (void) setConv:m:s:norm:
+     * （全フレームに適用してからリフレッシュ）
+     */
+    public void applyConvolution(String name) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) return;
+        List<DicomPix> list = view.getDcmPixList();
+        if (list == null || list.isEmpty()) return;
+        if (name == null) {
+            for (DicomPix pix : list) {
+                pix.setConvolutionKernel(null, 0, 0f);
+            }
+        } else {
+            java.util.Map<String, java.util.Map<String, Object>> filters =
+                    loadConvolutionFilters();
+            java.util.Map<String, Object> f = filters.get(name);
+            if (f == null) return;
+            int size = (Integer) f.get("size");
+            int norm = (Integer) f.get("normalization");
+            @SuppressWarnings("unchecked")
+            java.util.List<Integer> matrix =
+                    (java.util.List<Integer>) f.get("matrix");
+            float[] kernel = new float[size * size];
+            for (int i = 0; i < kernel.length && i < matrix.size(); i++) {
+                kernel[i] = matrix.get(i);
+            }
+            for (DicomPix pix : list) {
+                pix.setConvolutionKernel(kernel, size, norm);
+            }
+        }
+        view.repaint();
+    }
+
+    /** 畳み込みフィルタを削除 (Shift+クリック) */
+    private void deleteConvolutionFilter(String name) {
+        int confirm = javax.swing.JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("convolution.delete.message",
+                        "Delete convolution filter") + " \"" + name + "\"?",
+                LanguageManager.get("convolution.delete.title",
+                        "Delete Convolution Filter"),
+                javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.QUESTION_MESSAGE);
+        if (confirm != javax.swing.JOptionPane.OK_OPTION) return;
+        java.util.Map<String, java.util.Map<String, Object>> filters =
+                loadConvolutionFilters();
+        filters.remove(name);
+        saveConvolutionFilters(filters);
+        rebuildConvolutionMenu();
+    }
+
+    /** 新規フィルタ編集ダイアログ (HOROS: AddConv:) */
+    public void showConvolutionDialog() {
+        showConvolutionDialog(null);
+    }
+
+    /**
+     * 畳み込みフィルタ編集ダイアログ
+     * HOROS-20240407準拠: AppController.m (IBAction) AddConv: /
+     *   ViewerController.m - (void) changeMatrixSize: / computeSum:
+     * 5x5グリッド; 3x3選択時外周を無効化; 正規化は合計を自動計算
+     */
+    public void showConvolutionDialog(final String existingName) {
+        final String[] nameHolder = { existingName };
+        final JTextField nameField = new JTextField(
+                existingName != null ? existingName : "", 20);
+        final JTextField[][] cells = new JTextField[5][5];
+        for (int y = 0; y < 5; y++) {
+            for (int x = 0; x < 5; x++) {
+                cells[y][x] = new JTextField("0", 4);
+            }
+        }
+
+        // サイズ選択 (HOROS: changeMatrixSize: tag 3/5)
+        final JRadioButton size5 = new JRadioButton("5x5");
+        final JRadioButton size3 = new JRadioButton("3x3");
+        final ButtonGroup sizeGroup = new ButtonGroup();
+        sizeGroup.add(size5);
+        sizeGroup.add(size3);
+        size5.setSelected(true);
+
+        @SuppressWarnings("unused")
+        final Runnable refreshSize = () -> {
+            boolean three = size3.isSelected();
+            for (int y = 0; y < 5; y++) {
+                for (int x = 0; x < 5; x++) {
+                    boolean inner = (x >= 1 && x <= 3 && y >= 1 && y <= 3);
+                    cells[y][x].setEnabled(!three || inner);
+                    if (three && !inner) {
+                        cells[y][x].setText("");
+                    }
+                }
+            }
+        };
+        size5.addActionListener(e -> refreshSize.run());
+        size3.addActionListener(e -> refreshSize.run());
+
+        final JTextField normField = new JTextField("0", 8);
+        JButton sumButton = new JButton(
+                LanguageManager.get("convolution.sum", "Sum"));
+        sumButton.addActionListener(e -> {
+            int sum = 0;
+            boolean three = size3.isSelected();
+            for (int y = 0; y < 5; y++) {
+                for (int x = 0; x < 5; x++) {
+                    if (three && (x < 1 || x > 3 || y < 1 || y > 3)) continue;
+                    try {
+                        sum += Integer.parseInt(cells[y][x].getText().trim());
+                    } catch (NumberFormatException ex) {
+                        // 無効なセルは0扱い
+                    }
+                }
+            }
+            normField.setText(String.valueOf(sum));
+        });
+
+        // グリッドパネル (HOROS: 5x5 convMatrix)
+        javax.swing.JPanel gridPanel = new javax.swing.JPanel(
+                new java.awt.GridLayout(5, 1, 2, 2));
+        for (int y = 4; y >= 0; y--) {
+            javax.swing.JPanel row = new javax.swing.JPanel(
+                    new java.awt.GridLayout(1, 5, 2, 2));
+            for (int x = 0; x < 5; x++) {
+                row.add(cells[y][x]);
+            }
+            gridPanel.add(row);
+        }
+
+        javax.swing.JPanel mainPanel = new javax.swing.JPanel(new javax.swing.BoxLayout(
+                new javax.swing.JPanel(), javax.swing.BoxLayout.Y_AXIS));
+        mainPanel.setBorder(
+                javax.swing.BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        javax.swing.JPanel nameRow = new javax.swing.JPanel();
+        nameRow.add(new javax.swing.JLabel(
+                LanguageManager.get("convolution.name", "Name:")));
+        nameRow.add(nameField);
+
+        javax.swing.JPanel sizeRow = new javax.swing.JPanel();
+        sizeRow.add(new javax.swing.JLabel(
+                LanguageManager.get("convolution.size", "Size:")));
+        sizeRow.add(size5);
+        sizeRow.add(size3);
+
+        javax.swing.JPanel normRow = new javax.swing.JPanel();
+        normRow.add(new javax.swing.JLabel(
+                LanguageManager.get("convolution.normalization", "Normalization:")));
+        normRow.add(normField);
+        normRow.add(sumButton);
+
+        mainPanel.add(nameRow);
+        mainPanel.add(sizeRow);
+        mainPanel.add(new javax.swing.JSeparator());
+        mainPanel.add(gridPanel);
+        mainPanel.add(new javax.swing.JSeparator());
+        mainPanel.add(normRow);
+
+        final javax.swing.JDialog dialog = new javax.swing.JDialog(this,
+                LanguageManager.get("convolution.title", "Convolution Filter"),
+                true);
+        dialog.setLayout(new java.awt.BorderLayout(0, 6));
+        dialog.add(mainPanel, java.awt.BorderLayout.CENTER);
+
+        javax.swing.JButton saveButton = new JButton(
+                LanguageManager.get("convolution.save", "Save"));
+        javax.swing.JButton cancelButton = new JButton(
+                LanguageManager.get("convolution.cancel", "Cancel"));
+        javax.swing.JPanel buttonPanel = new javax.swing.JPanel();
+        buttonPanel.add(saveButton);
+        buttonPanel.add(cancelButton);
+        dialog.add(buttonPanel, java.awt.BorderLayout.SOUTH);
+        saveButton.addActionListener(e -> {
+            String name = nameField.getText().trim();
+            if (name.isEmpty()) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("convolution.error.name",
+                                "Please enter a filter name."),
+                        LanguageManager.get("convolution.error.title", "Error"),
+                        javax.swing.JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            int size = size3.isSelected() ? 3 : 5;
+            int count = size * size;
+            java.util.List<Integer> matrix = new java.util.ArrayList<>();
+            for (int y = 0; y < 5 && matrix.size() < count; y++) {
+                for (int x = 0; x < 5 && matrix.size() < count; x++) {
+                    if (size == 3 && (x < 1 || x > 3 || y < 1 || y > 3)) continue;
+                    try {
+                        matrix.add(Integer.parseInt(cells[y][x].getText().trim()));
+                    } catch (NumberFormatException ex) {
+                        javax.swing.JOptionPane.showMessageDialog(this,
+                                LanguageManager.get("convolution.error.value",
+                                        "Matrix values must be integers."),
+                                LanguageManager.get("convolution.error.title", "Error"),
+                                javax.swing.JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                }
+            }
+            int norm = 0;
+            try {
+                norm = Integer.parseInt(normField.getText().trim());
+            } catch (NumberFormatException ex) {
+                norm = 0;
+            }
+
+            java.util.Map<String, java.util.Map<String, Object>> filters =
+                    loadConvolutionFilters();
+            // 編集でない場合は同名を削除 (HOROS: 上書き保存)
+            if (existingName == null) {
+                filters.remove(name);
+            }
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("size", size);
+            m.put("normalization", norm);
+            m.put("matrix", matrix);
+            filters.put(name, m);
+            saveConvolutionFilters(filters);
+            rebuildConvolutionMenu();
+            // 適用 (ApplyConv: 相当 — 新規作成後に即適用)
+            applyConvolution(name);
+            dialog.dispose();
+        });
+        cancelButton.addActionListener(e -> dialog.dispose());
+
+        dialog.pack();
+        dialog.setResizable(false);
+        dialog.setLocationRelativeTo(this);
+
+        // 既存フィルタの内容を反映 (Option+クリックで編集)
+        if (existingName != null) {
+            java.util.Map<String, java.util.Map<String, Object>> filters =
+                    loadConvolutionFilters();
+            java.util.Map<String, Object> f = filters.get(existingName);
+            if (f != null) {
+                int size = (Integer) f.get("size");
+                normField.setText(String.valueOf((Integer) f.get("normalization")));
+                if (size == 3) {
+                    size3.setSelected(true);
+                }
+                refreshSize.run();
+                @SuppressWarnings("unchecked")
+                java.util.List<Integer> matrix =
+                        (java.util.List<Integer>) f.get("matrix");
+                int idx = 0;
+                for (int y = 0; y < 5 && idx < matrix.size(); y++) {
+                    for (int x = 0; x < 5 && idx < matrix.size(); x++) {
+                        if (size == 3 && (x < 1 || x > 3 || y < 1 || y > 3)) continue;
+                        cells[y][x].setText(String.valueOf(matrix.get(idx++)));
+                    }
+                }
+            }
+        }
+
+        dialog.setVisible(true);
     }
 
     /**

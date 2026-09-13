@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-08-19 (P5 GPU Volume Rendering 実装済みの反映) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-08-19 (2D畳み込みフィルタ実装済みの反映) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -221,6 +221,32 @@
 
 ---
 
+## [完了済みの変更] — 2D畳み込みフィルタ (Convolution Filters)
+
+### DicomPix.java （モデル層）
+- **役割:** 2D画像ピクセルに対する3x3/5x5カーネル畳み込みの適用
+- **実装内容:**
+  - フィールド: `convKernel` (float[], null=OFF) / `convKernelSize` (3または5) / `convNormalization` (0=正規化なし) / `convolutionOn`
+  - `setConvolutionKernel(float[] val, int size, float norm)` — nullで解除・非nullで有効化
+  - `hasConvolution()` / `getConvolutionKernel()` / `getConvolutionKernelSize()` / `getConvolutionNormalization()`
+  - `applyConvolution()` — エッジクランプ付きカーネル適用、結果を[0, 0xFFFF]にクランプ、WL/WW適用後にサムネイル破棄
+  - HOROS (DCMPix.m) と同様のセマンティクス: 正規化値は保存値そのもの (0=正規化なし)
+
+### BrowserController.java （UI層）
+- **役割:** メニュー表示・フィルタ管理（追加/削除/編集）・適用
+- **実装内容:**
+  - フィールド: `convolutionMenu` (JMenu)
+  - Viewer 2D メニューに畳み込みフィルタサブメニューを追加（`menu_viewer_2d_convolution_filters`）
+  - `convolutionFilterFile()` — `~/.oculusjj/convolution_filters.json`
+  - `loadConvolutionFilters()` / `saveConvolutionFilters(Map)` — JacksonでJSON永続化
+  - `rebuildConvolutionMenu()` — No Filter / 各フィルタ（Shift=削除、Alt+Option=編集）/ Add a Filter
+  - `applyConvolution(String name)` — 全フレームにカーネルを適用
+  - `deleteConvolutionFilter(String name)` — 確認ダイアログ付き削除
+  - `showConvolutionDialog()` / `showConvolutionDialog(String existingName)` — 5x5グリッドエディタ、3x3/5x5サイズ選択、正規化自動計算
+- **i18n:** `menu_viewer_2d_convolution_filters` + `convolution.*` キー17個を `messages_en.properties` / `messages_ja.properties` 両方に追加
+
+---
+
 ## [未実装項目一覧] — 優先度順
 
 ### 🔴 P0: Browser Toolbar レンダリング不具合（修正済み）
@@ -243,7 +269,7 @@
 |---------|-----------|----------|--------|
 | 画像操作 | ~~Brush ROI Morphological ops (dilate/erode)~~ ✅実装済（BrushPalette + `applyBrushMorph`） | — | 中 |
 | 画像操作 | ~~Arithmetic Subtraction~~ ✅実装済（`DicomPix.subtract` / `DCMView.subtract` / `showSubtractionDialog`、absolute対応） | `imageArithmeticSubtraction:absolute:` (DCMPix.m:9319) / `subtract:` (DCMView.m:6321) | 低 |
-| 画像操作 | convolution, resample | — | 低 |
+| 画像操作 | ~~convolution~~ ✅実装済（`DicomPix.applyConvolution` / `showConvolutionDialog`、5x5/3x3カーネル、正規化自動計算、Shift+クリック削除、Alt+Option+クリック編集、`~/.oculusjj/convolution_filters.json`に永続化） / resample | — | 低 |
 | 画像操作 | ~~Shutter tool~~ ✅実装済み / Full-screen mode | — | 中 |
 | Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
 | Key Image | ~~captureAndSetKeyImage → DICOM SC出力~~ ✅実装済（描画キャプチャ + `exportKeyImagesAsDICOM`） | `captureAndSetKeyImage:` / `exportROIAndKeyImagesAsDICOMSeries:` (BrowserController.m:17815, DicomImage.m:1266, DCMView.m:11115) | 中 |
