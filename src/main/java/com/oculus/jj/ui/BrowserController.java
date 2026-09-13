@@ -7002,8 +7002,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 386行目
         javax.swing.JMenuItem printItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("menu_file_print"));
         printItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P, 0));
-        printItem.addActionListener(e -> {
-        });
+        printItem.addActionListener(e -> showPrintDialog());
         fileMenu.add(printItem);
 
         // DICOM Print...
@@ -7012,8 +7011,7 @@ public class BrowserController extends JFrame {
                 MenuResourceLoader.getString("menu_file_dicom_print"));
         dicomPrintItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK));
-        dicomPrintItem.addActionListener(e -> {
-        });
+        dicomPrintItem.addActionListener(e -> printDICOM(dicomPrintItem));
         fileMenu.add(dicomPrintItem);
 
         menuBar.add(fileMenu);
@@ -8705,12 +8703,226 @@ public class BrowserController extends JFrame {
      */
 
     /**
-     * DICOMをプリント (HOROS: printDICOM:)
+     * DICOMをプリント (HOROS: printDICOM:).
+     * HOROS の print:（ページ設定ダイアログ）と同様に、選択モードと From/To の
+     * スライダーとテキストを双方向同期させ、選択スライスをページ単位で出力する。
      */
     public void printDICOM(Object sender) {
-        JOptionPane.showMessageDialog(this,
-                LanguageManager.get("browser.toolbar.printNotImpl", "Print to DICOM Printer - not yet implemented"),
-                "Print", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+        showPrintDialog();
+    }
+
+    /**
+     * HOROS print: に準拠したプリントページ設定ダイアログ。
+     * - tag 0 = 現在スライスのみ: from=curImage, to=from+1
+     * - tag 1 = 全スライス: from=0, to=count
+     * - tag 2 = From-To 範囲（反転対応）: HOROS ViewerController.m:18029-18045
+     * - スライダーとテキストの双方向同期: HOROS printSlider: (18469-18484) / setPagesToPrint:
+     * 出力は Swing PrinterJob（プリンタまたはOSの「PDFとして保存」）でページ単位の画像をレンダリングする。
+     */
+    public void showPrintDialog() {
+        DCMView targetView = getActiveDCMViewForEdit();
+        if (targetView == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.print.noActiveView", "No active image view for printing"),
+                    "Print", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        java.util.List<com.oculus.jj.model.DicomPix> pixList = targetView.getDcmPixList();
+        int sliceCount = pixList.size();
+        if (sliceCount == 0) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.print.noImage", "No image to print"),
+                    "Print", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int curImage = targetView.getCurImage();
+
+        java.awt.Frame owner = (java.awt.Frame) javax.swing.SwingUtilities.getWindowAncestor(this);
+        javax.swing.JDialog dialog = new javax.swing.JDialog(owner,
+                LanguageManager.get("browser.print.title", "Print"), true);
+
+        // 選択モード（HOROS printSelection tag 0/1/2）
+        javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
+        javax.swing.JRadioButton currentRB = new javax.swing.JRadioButton(
+                LanguageManager.get("browser.print.current", "Current Image"));
+        javax.swing.JRadioButton allRB = new javax.swing.JRadioButton(
+                LanguageManager.get("browser.print.all", "All Slices"));
+        javax.swing.JRadioButton rangeRB = new javax.swing.JRadioButton(
+                LanguageManager.get("browser.print.range", "From - To Range"));
+        currentRB.setSelected(true);
+        group.add(currentRB); group.add(allRB); group.add(rangeRB);
+
+        final int lo = 1, hi = sliceCount;
+        // From/To スライダーと数値フィールド（双方向同期）
+        final javax.swing.JSlider fromSlider = new javax.swing.JSlider(lo, hi, Math.max(lo, curImage + 1));
+        final javax.swing.JSlider toSlider = new javax.swing.JSlider(lo, hi, hi);
+        fromSlider.setPaintTicks(sliceCount <= 100);
+        toSlider.setPaintTicks(sliceCount <= 100);
+        final javax.swing.JTextField fromText = new javax.swing.JTextField(Integer.toString(fromSlider.getValue()), 5);
+        final javax.swing.JTextField toText = new javax.swing.JTextField(Integer.toString(toSlider.getValue()), 5);
+        final javax.swing.JSpinner intervalSpinner =
+                new javax.swing.JSpinner(new javax.swing.SpinnerNumberModel(1, 1, 9999, 1));
+
+        // スライダー -> テキスト
+        final boolean[] syncing = { false };
+        javax.swing.event.ChangeListener sliderToText = (javax.swing.event.ChangeEvent ev) -> {
+            if (syncing[0]) return;
+            syncing[0] = true;
+            fromText.setText(Integer.toString(fromSlider.getValue()));
+            toText.setText(Integer.toString(toSlider.getValue()));
+            syncing[0] = false;
+        };
+        fromSlider.addChangeListener(sliderToText);
+        toSlider.addChangeListener(sliderToText);
+        // テキスト -> スライダー
+        javax.swing.event.DocumentListener textToSlider = new javax.swing.event.DocumentListener() {
+            private void apply(javax.swing.JTextField tf, javax.swing.JSlider sl) {
+                if (syncing[0]) return;
+                String s = tf.getText() == null ? "" : tf.getText().trim();
+                if (s.isEmpty()) return;
+                int v;
+                try { v = Integer.parseInt(s); } catch (NumberFormatException ex) { return; }
+                if (v < lo) v = lo;
+                if (v > hi) v = hi;
+                syncing[0] = true;
+                sl.setValue(v);
+                tf.setText(Integer.toString(v));
+                syncing[0] = false;
+            }
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { apply(fromText, fromSlider); apply(toText, toSlider); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { apply(fromText, fromSlider); apply(toText, toSlider); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { apply(fromText, fromSlider); apply(toText, toSlider); }
+        };
+        fromText.getDocument().addDocumentListener(textToSlider);
+        toText.getDocument().addDocumentListener(textToSlider);
+
+        // 範囲パネル（From / To / Interval）
+        javax.swing.JPanel rangePanel = new javax.swing.JPanel(new java.awt.GridLayout(0, 2, 8, 4));
+        rangePanel.add(new javax.swing.JLabel(LanguageManager.get("browser.print.from", "From:")));
+        javax.swing.JPanel fromRow = new javax.swing.JPanel(new java.awt.BorderLayout(4, 0));
+        fromRow.add(fromSlider, java.awt.BorderLayout.CENTER);
+        fromRow.add(fromText, java.awt.BorderLayout.EAST);
+        rangePanel.add(fromRow);
+        rangePanel.add(new javax.swing.JLabel(LanguageManager.get("browser.print.to", "To:")));
+        javax.swing.JPanel toRow = new javax.swing.JPanel(new java.awt.BorderLayout(4, 0));
+        toRow.add(toSlider, java.awt.BorderLayout.CENTER);
+        toRow.add(toText, java.awt.BorderLayout.EAST);
+        rangePanel.add(toRow);
+        rangePanel.add(new javax.swing.JLabel(LanguageManager.get("browser.print.interval", "Interval:")));
+        rangePanel.add(intervalSpinner);
+
+        // モード切替で From/To/Interval を有効/無効
+        java.awt.event.ActionListener modeListener = e -> {
+            boolean range = rangeRB.isSelected();
+            fromSlider.setEnabled(range); toSlider.setEnabled(range);
+            fromText.setEnabled(range); toText.setEnabled(range);
+            intervalSpinner.setEnabled(range);
+        };
+        currentRB.addActionListener(modeListener);
+        allRB.addActionListener(modeListener);
+        rangeRB.addActionListener(modeListener);
+        modeListener.actionPerformed(null);
+
+        javax.swing.JPanel radios = new javax.swing.JPanel();
+        radios.add(currentRB); radios.add(allRB); radios.add(rangeRB);
+
+        javax.swing.JPanel content = new javax.swing.JPanel(new java.awt.BorderLayout(0, 8));
+        content.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        content.add(radios, java.awt.BorderLayout.NORTH);
+        content.add(rangePanel, java.awt.BorderLayout.CENTER);
+        content.setPreferredSize(new java.awt.Dimension(440, 190));
+
+        javax.swing.JButton printBtn = new javax.swing.JButton(LanguageManager.get("browser.print.print", "Print..."));
+        javax.swing.JButton cancelBtn = new javax.swing.JButton(LanguageManager.get("browser.print.cancel", "Cancel"));
+        printBtn.addActionListener(e -> {
+            // 選択スライスの0-basedインデックス列を計算（HOROS setPagesToPrint: 準拠）
+            int from0, to0, interval = 1;
+            if (currentRB.isSelected()) {
+                from0 = Math.min(curImage, sliceCount - 1); to0 = from0 + 1;
+            } else if (allRB.isSelected()) {
+                from0 = 0; to0 = sliceCount;
+            } else {
+                int f, t, iv;
+                try { f = Integer.parseInt(fromText.getText().trim()); } catch (Exception ex) { f = lo; }
+                try { t = Integer.parseInt(toText.getText().trim()); } catch (Exception ex) { t = hi; }
+                try { iv = Integer.parseInt(((javax.swing.SpinnerNumberModel) intervalSpinner.getValue()).toString()); } catch (Exception ex) { iv = 1; }
+                if (f < lo) f = lo; if (f > hi) f = hi;
+                if (t < lo) t = lo; if (t > hi) t = hi;
+                if (iv < 1) iv = 1;
+                interval = iv;
+                if (f <= t) { from0 = f - 1; to0 = t; }
+                else { from0 = t - 1; to0 = f; }
+                if (to0 == from0) to0 = from0 + 1;
+            }
+            java.util.ArrayList<Integer> indices = new java.util.ArrayList<>();
+            for (int i = from0; i < to0; i += interval) {
+                if (i >= 0 && i < sliceCount) indices.add(i);
+            }
+            if (indices.isEmpty()) indices.add(Math.min(curImage, sliceCount - 1));
+
+            // 各スライスを描画（DicomPix#getBufferedImage は必要に応じて読込）
+            final java.awt.image.BufferedImage[] pages = new java.awt.image.BufferedImage[indices.size()];
+            boolean okAll = true;
+            for (int k = 0; k < indices.size(); k++) {
+                try { pages[k] = pixList.get(indices.get(k)).getBufferedImage(); }
+                catch (Exception ex) { pages[k] = null; okAll = false; }
+            }
+            int valid = 0;
+            for (java.awt.image.BufferedImage b : pages) if (b != null) valid++;
+            if (valid == 0) {
+                JOptionPane.showMessageDialog(dialog,
+                        LanguageManager.get("browser.print.renderFailed", "Failed to render the selected slices"),
+                        "Print", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            java.awt.print.PrinterJob pj = java.awt.print.PrinterJob.getPrinterJob();
+            pj.setJobName("OculusJJ");
+            pj.setPrintable((java.awt.Graphics g, java.awt.print.PageFormat format, int pageIndex) -> {
+                if (pageIndex < 0 || pageIndex >= pages.length) return java.awt.print.Printable.NO_SUCH_PAGE;
+                java.awt.image.BufferedImage img = pages[pageIndex];
+                if (img == null) return java.awt.print.Printable.NO_SUCH_PAGE;
+                final double pageW = format.getImageableWidth();
+                final double pageH = format.getImageableHeight();
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g;
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                        java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                double scale = Math.min(pageW / img.getWidth(),
+                        pageH / img.getHeight());
+                if (scale <= 0 || Double.isInfinite(scale)) scale = 1.0;
+                int w = Math.max(1, (int) (img.getWidth() * scale));
+                int h = Math.max(1, (int) (img.getHeight() * scale));
+                int x = (int) (pageW - w) / 2;
+                int y = (int) (pageH - h) / 2;
+                g2.drawImage(img, x, y, w, h, null);
+                return java.awt.print.Printable.PAGE_EXISTS;
+            });
+            boolean showDialog = pj.printDialog();
+            if (showDialog) {
+                try { pj.print(); }
+                catch (Exception ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(dialog,
+                            LanguageManager.get("browser.print.jobFailed", "Print job failed: ") + ex.getMessage(),
+                            "Print", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            }
+            dialog.dispose();
+        });
+        cancelBtn.addActionListener(e -> dialog.dispose());
+
+        javax.swing.JPanel south = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 8, 8));
+        south.add(printBtn); south.add(cancelBtn);
+
+        javax.swing.JPanel root = new javax.swing.JPanel(new java.awt.BorderLayout());
+        root.add(content, java.awt.BorderLayout.CENTER);
+        root.add(south, java.awt.BorderLayout.SOUTH);
+        dialog.setContentPane(root);
+        dialog.getRootPane().setDefaultButton(printBtn);
+        dialog.pack();
+        dialog.setLocationRelativeTo(owner);
+        dialog.setVisible(true);
     }
 
     /**
