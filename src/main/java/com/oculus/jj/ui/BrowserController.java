@@ -8735,25 +8735,85 @@ public class BrowserController extends JFrame {
     }
 
     /**
-     * 複数シリーズの減算表示 (HOROS: SubtractionToolbarItemIdentifier)
-     * 選択された2つのシリーズの差分イメージを表示する。
+     * 算術減算 (HOROS: SubtractionToolbarItemIdentifier / DCMView.m -subtract: 6321行目)
+     * アクティブなビュー（基準/Reference）から、他のビューのピクセル値を差し引く。
+     * absolute=true の場合 |a-b| を適用する。
      */
     public void showSubtractionDialog() {
-        java.util.List<Object> selected = getSelectedDatabaseObjects();
-        if (selected.size() < 2) {
+        DCMView targetView = getActiveDCMViewForEdit();
+        if (targetView == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.subtraction.noActiveView",
+                            "No active image view for subtraction"),
+                    "Subtraction", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        if (viewers.size() < 2) {
             JOptionPane.showMessageDialog(this,
                     LanguageManager.get("browser.subtraction.needTwoSeries",
                             "Please select at least 2 series for subtraction"),
                     "Subtraction", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        String s1 = (String) selected.get(0);
-        String s2 = (String) selected.get(1);
-        JOptionPane.showMessageDialog(this,
-                String.format(LanguageManager.get("browser.subtraction.info",
-                        "Subtraction display:\nReference: %s\nCurrent: %s"),
-                        s1, s2),
-                "Subtraction", JOptionPane.INFORMATION_MESSAGE);
+        // 候補リストを構築（ソース候補 = アクティブビュー以外のビュー）
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        java.util.List<DCMView> sources = new java.util.ArrayList<>();
+        for (ViewerController vc : viewers) {
+            DCMView v = vc.getImageView();
+            if (v == null || v == targetView)
+                continue;
+            String lbl = "";
+            DicomPix p = v.getCurDCM();
+            if (p != null && p.getSeriesDescription() != null)
+                lbl = p.getSeriesDescription();
+            labels.add((lbl == null || lbl.isEmpty()) ? ("View " + (sources.size() + 1)) : lbl);
+            sources.add(v);
+        }
+        if (sources.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.subtraction.needTwoSeries",
+                            "Please select at least 2 series for subtraction"),
+                    "Subtraction", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        final DCMView tView = targetView;
+        final java.util.List<DCMView> fSources = sources;
+        javax.swing.JComboBox<String> combo = new javax.swing.JComboBox<>(labels.toArray(new String[0]));
+        javax.swing.JCheckBox absCheck = new javax.swing.JCheckBox(
+                LanguageManager.get("browser.subtraction.absolute", "Absolute value"));
+        absCheck.setSelected(false);
+        // パネル構築: NORTH=referenceラベル, CENTER=sourceコンボ, SOUTH=absoluteチェック
+        String refName = "";
+        DicomPix tp = tView.getCurDCM();
+        if (tp != null && tp.getSeriesDescription() != null)
+            refName = tp.getSeriesDescription();
+        javax.swing.JPanel centerPanel = new javax.swing.JPanel();
+        centerPanel.setLayout(new javax.swing.BoxLayout(centerPanel,
+                javax.swing.BoxLayout.LINE_AXIS));
+        centerPanel.add(new javax.swing.JLabel(
+                LanguageManager.get("browser.subtraction.source", "Source to subtract:") + "  "));
+        centerPanel.add(combo);
+        javax.swing.JPanel southPanel = new javax.swing.JPanel();
+        southPanel.add(absCheck);
+        javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout(0, 6));
+        panel.add(new javax.swing.JLabel(
+                String.format(LanguageManager.get("browser.subtraction.reference",
+                        "Reference (target): %s"), refName == null ? "" : refName)),
+                java.awt.BorderLayout.NORTH);
+        panel.add(centerPanel, java.awt.BorderLayout.CENTER);
+        panel.add(southPanel, java.awt.BorderLayout.SOUTH);
+        panel.setPreferredSize(new java.awt.Dimension(420, 120));
+        int result = JOptionPane.showConfirmDialog(this, panel,
+                LanguageManager.get("browser.subtraction.title", "Arithmetic Subtraction"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result == JOptionPane.OK_OPTION) {
+            int idx = combo.getSelectedIndex();
+            if (idx >= 0 && idx < fSources.size()) {
+                boolean absolute = absCheck.isSelected();
+                tView.subtract(fSources.get(idx), absolute);
+            }
+        }
     }
 
     /**

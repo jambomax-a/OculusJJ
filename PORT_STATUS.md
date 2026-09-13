@@ -235,14 +235,15 @@
 ### 🟠 P2: ツールバーにまだないHOROSアイテム
 | 項目 | 内容 |
 |------|------|
-| Subtraction（減算） | ✅ 実装済（`showSubtractionDialog()`、複数series選択時に対応） |
+| Subtraction（減算） | ✅ 実装済（`showSubtractionDialog()`、基準/ソース選択 + absolute対応） |
 | Status Display | ✅ 実装済（`showStatusDisplay()`、選択アイテムのステータス一覧） |
 
 ### 🟠 P3: 画像処理・分析機能ギャップ
 | カテゴリ | 未実装項目 | HOROS参照 | 重要性 |
 |---------|-----------|----------|--------|
 | 画像操作 | ~~Brush ROI Morphological ops (dilate/erode)~~ ✅実装済（BrushPalette + `applyBrushMorph`） | — | 中 |
-| 画像操作 | Subtraction operations, convolution, resample | — | 低 |
+| 画像操作 | ~~Arithmetic Subtraction~~ ✅実装済（`DicomPix.subtract` / `DCMView.subtract` / `showSubtractionDialog`、absolute対応） | `imageArithmeticSubtraction:absolute:` (DCMPix.m:9319) / `subtract:` (DCMView.m:6321) | 低 |
+| 画像操作 | convolution, resample | — | 低 |
 | 画像操作 | ~~Shutter tool~~ ✅実装済み / Full-screen mode | — | 中 |
 | Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
 | Key Image | ~~captureAndSetKeyImage → DICOM SC出力~~ ✅実装済（描画キャプチャ + `exportKeyImagesAsDICOM`） | `captureAndSetKeyImage:` / `exportROIAndKeyImagesAsDICOMSeries:` (BrowserController.m:17815, DicomImage.m:1266, DCMView.m:11115) | 中 |

@@ -1178,6 +1178,33 @@ public class DicomPix {
         return clutOpacity;
     }
 
+    /**
+     * 算術減算 (HOROS: DCMPix.m -imageArithmeticSubtraction:absolute: / arithmeticSubtractImages:)
+     * 別のDicomPixのピクセル値を、現在のピクセル値からin-placeで差し引く。
+     * - HOROSは生データをmemcpyで上書き（幅/高さは変更しない）
+     * - absolute=true の場合 |a-b|
+     * - 無符号(uint16)扱いで差分を計算し、範囲外の値は0〜65535にクランプする。
+     */
+    public void subtract(DicomPix other, boolean absolute) {
+        if (other == null || other.rawShortData == null || rawShortData == null)
+            return;
+        int n = Math.min(rawShortData.length, other.rawShortData.length);
+        for (int i = 0; i < n; i++) {
+            int a = rawShortData[i] & 0xFFFF;
+            int b = other.rawShortData[i] & 0xFFFF;
+            int diff = absolute ? Math.abs(a - b) : (a - b);
+            // 範囲外クランプ（負の差分は0、範囲外は65535）
+            if (diff < 0) diff = 0;
+            if (diff > 0xFFFF) diff = 0xFFFF;
+            rawShortData[i] = (short) diff;
+        }
+        // 再レンダリング（WL/WWはHOROSと同様に再計算しない）
+        if (isGrayscale && rawShortData != null) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
+        }
+    }
+
     /** CLUTとOpacityをリセット（デフォルト表示に戻す） */
     public void resetCLUTOpacity() {
         this.clutLUT = null;

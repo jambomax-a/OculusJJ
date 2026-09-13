@@ -1666,6 +1666,22 @@ public class DCMView extends JPanel {
         return this.curDCM;
     }
 
+    /**
+     * 算術減算 - 別ビューの現在のピクセル値を差し引く。
+     * HOROS-20240407準拠: DCMView.m -subtract: (6321)
+     *   - (void)subtract:(DCMView*)bV { [self subtract:bV absolute:NO]; }
+     *   - (void)subtract:(DCMView*)bV absolute:(BOOL)abs
+     *       { [self.curDCM imageArithmeticSubtraction:bV.curDCM absolute:abs]; }
+     */
+    public void subtract(DCMView bView, boolean absolute) {
+        if (bView == null || bView == this) return;
+        DicomPix self = getCurDCM();
+        DicomPix other = bView.getCurDCM();
+        if (self == null || other == null) return;
+        self.subtract(other, absolute);
+        repaint();
+    }
+
     public com.oculus.jj.model.ROI getNewRoi() {
         return this.newRoi;
     }
