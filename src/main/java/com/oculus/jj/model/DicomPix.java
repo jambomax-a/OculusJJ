@@ -1698,6 +1698,16 @@ public class DicomPix {
         return height;
     }
 
+    /** 幅を設定（リサンプリング等の内部使用: setShortImageData が data.length から幅/高さを推定するため、非正方形画像はこの後に呼ぶ） */
+    public void setWidth(int w) {
+        this.width = w;
+    }
+
+    /** 高さを設定（リサンプリング等の内部使用） */
+    public void setHeight(int h) {
+        this.height = h;
+    }
+
     // HOROS-20240407準拠: DCMPix.h 263行目 - pixelSpacingX, pixelSpacingY
     public double getPixelSpacingX() {
         return pixelSpacingX;

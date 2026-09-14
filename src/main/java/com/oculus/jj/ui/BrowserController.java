@@ -7503,6 +7503,12 @@ public class BrowserController extends JFrame {
         viewer2DMenu.add(convolutionMenu);
         rebuildConvolutionMenu();
 
+        // Resample (HOROS-20240407準拠: ViewerController.m resampleDataFromPixArray: - blending sheet tag 11)
+        javax.swing.JMenuItem resampleItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("menu_viewer_2d_resample"));
+        resampleItem.addActionListener(e -> showResampleDialog());
+        viewer2DMenu.add(resampleItem);
+
         // Workspace State
         // HOROS-20240407準拠: Save/Load Workspace State
         javax.swing.JMenu workspaceMenu = new javax.swing.JMenu(
@@ -9037,6 +9043,147 @@ public class BrowserController extends JFrame {
                 tView.subtract(fSources.get(idx), absolute);
             }
         }
+    }
+
+    // --- Resample (HOROS: ViewerController.m resampleDataFromPixArray, blending sheet tag 11) ---
+
+    /**
+     * リサンプリング (HOROS準拠: ViewerController.m 9560-9920)。
+     *
+     * <p>HOROSのdrag-blend操作でのデフォルトfactorは2.0。明示的なX/Y/Z factorを指定し、
+     * NEW = OLD / factor、pixelSpacing ×= factor（空間解像度UP方向）。
+     * 双線形補間で各スライスをリサイズし、新pixリストを生成して置換。
+     * Z factorはスライス数に反映（等間隔サンプリング）。
+     */
+    void showResampleDialog() {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("resample.error.noView",
+                            "No active 2D viewer with image data."));
+            return;
+        }
+
+        java.awt.FlowLayout layout = new java.awt.FlowLayout(java.awt.FlowLayout.LEFT);
+        javax.swing.JPanel panel = new javax.swing.JPanel(layout);
+
+        javax.swing.JLabel label = new javax.swing.JLabel(
+                LanguageManager.get("resample.help",
+                        "Resample by factor (NEW = OLD / factor).\n"
+                        + "Default 2.0 (HOROS drag-blend default): pixels halved, spacing doubled.\n"
+                        + "Higher factor = coarser pixels, larger field-of-view per pixel."));
+        panel.add(label);
+
+        javax.swing.JTextField xFactor = new javax.swing.JTextField("2.0", 5);
+        javax.swing.JTextField yFactor = new javax.swing.JTextField("2.0", 5);
+        javax.swing.JTextField zFactor = new javax.swing.JTextField("1.0", 5);
+        panel.add(new javax.swing.JLabel(
+                LanguageManager.get("resample.factor", "X / Y / Z factor:")));
+        panel.add(xFactor);
+        panel.add(yFactor);
+        panel.add(zFactor);
+
+        int result = JOptionPane.showConfirmDialog(this, panel,
+                LanguageManager.get("resample.title", "Resample"),
+                JOptionPane.OK_CANCEL_OPTION);
+        if (result != JOptionPane.OK_OPTION) return;
+
+        double fx, fy, fz;
+        try {
+            fx = Double.parseDouble(xFactor.getText().trim());
+            fy = Double.parseDouble(yFactor.getText().trim());
+            fz = Double.parseDouble(zFactor.getText().trim());
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("resample.error.badFactor",
+                            "Invalid factor (must be a positive number)."));
+            return;
+        }
+        if (fx <= 0 || fy <= 0 || fz <= 0) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("resample.error.badFactor",
+                            "Factor must be > 0."));
+            return;
+        }
+
+        List<DicomPix> pixList = view.getDcmPixList();
+        List<Object> files = view.getDcmFilesList();
+        if (pixList == null || pixList.isEmpty() || files == null) return;
+
+        int nOld = pixList.size();
+        int nNew = Math.max(1, (int) Math.round(nOld / fz));
+
+        List<DicomPix> newPixList = new java.util.ArrayList<>();
+        List<Object> newFileList = new java.util.ArrayList<>();
+
+        try {
+            for (int nz = 0; nz < nNew; nz++) {
+                int srcIdx;
+                if (nNew == 1) srcIdx = 0;
+                else srcIdx = Math.min(nOld - 1, (int) Math.round((double) nz * (nOld - 1) / (nNew - 1)));
+                DicomPix src = pixList.get(srcIdx);
+                short[] srcData = src.getShortData();
+                if (srcData == null) continue;
+
+                int sw = src.getWidth();
+                int sh = src.getHeight();
+                int nw = Math.max(1, (int) Math.round(sw / fx));
+                int nh = Math.max(1, (int) Math.round(sh / fy));
+
+                short[] newData = bilinearResize(srcData, sw, sh, nw, nh);
+
+                DicomPix np = new DicomPix(src.getImageObj());
+                np.setShortImageData(newData);
+                np.setWidth(nw);
+                np.setHeight(nh);
+                np.setPixelSpacingX(src.getPixelSpacingX() * (float) fx);
+                np.setPixelSpacingY(src.getPixelSpacingY() * (float) fy);
+                double[] orient = src.getOrientation();
+                if (orient != null && orient.length >= 9) np.setOrientation(orient);
+                np.setOrigin(src.getOriginX(), src.getOriginY(), src.getOriginZ());
+                newPixList.add(np);
+                newFileList.add(files.get(srcIdx));
+            }
+        } catch (RuntimeException ex) {
+            java.util.logging.Logger.getLogger(getClass().getName()).warning("showResampleDialog: " + ex);
+            return;
+        }
+
+        if (newPixList.isEmpty()) return;
+
+        char listType = view.listType;
+        view.setPixels(newPixList, newFileList, view.getCurRoiList(),
+                (short) 0, listType, true);
+        view.repaint();
+    }
+
+    /**
+     * 双線形補間で2D short[]画像をリサイズ。
+     */
+    static short[] bilinearResize(short[] src, int sw, int sh, int nw, int nh) {
+        short[] out = new short[nw * nh];
+        for (int ny = 0; ny < nh; ny++) {
+            double sy = (ny + 0.5) * (double) sh / nh - 0.5;
+            double y0d = Math.floor(sy);
+            double fy2 = sy - y0d;
+            int y0 = (int) y0d;
+            int y1 = y0 + 1;
+            for (int nx = 0; nx < nw; nx++) {
+                double sx = (nx + 0.5) * (double) sw / nw - 0.5;
+                double x0d = Math.floor(sx);
+                double fx2 = sx - x0d;
+                int x0 = (int) x0d;
+                int x1 = x0 + 1;
+                x0 = Math.max(0, Math.min(sw - 1, x0));
+                x1 = Math.max(0, Math.min(sw - 1, x1));
+                y0 = Math.max(0, Math.min(sh - 1, y0));
+                y1 = Math.max(0, Math.min(sh - 1, y1));
+                double v = (1 - fy2) * ((1 - fx2) * src[y0 * sw + x0] + fx2 * src[y0 * sw + x1])
+                         + fy2 * ((1 - fx2) * src[y1 * sw + x0] + fx2 * src[y1 * sw + x1]);
+                out[ny * nw + nx] = (short) Math.round(v);
+            }
+        }
+        return out;
     }
 
     /**

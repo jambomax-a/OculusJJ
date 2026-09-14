@@ -269,7 +269,8 @@
 |---------|-----------|----------|--------|
 | 画像操作 | ~~Brush ROI Morphological ops (dilate/erode)~~ ✅実装済（BrushPalette + `applyBrushMorph`） | — | 中 |
 | 画像操作 | ~~Arithmetic Subtraction~~ ✅実装済（`DicomPix.subtract` / `DCMView.subtract` / `showSubtractionDialog`、absolute対応） | `imageArithmeticSubtraction:absolute:` (DCMPix.m:9319) / `subtract:` (DCMView.m:6321) | 低 |
-| 画像操作 | ~~convolution~~ ✅実装済（`DicomPix.applyConvolution` / `showConvolutionDialog`、5x5/3x3カーネル、正規化自動計算、Shift+クリック削除、Alt+Option+クリック編集、`~/.oculusjj/convolution_filters.json`に永続化） / resample | — | 低 |
+| 画像操作 | ~~convolution~~ ✅実装済（`DicomPix.applyConvolution` / `showConvolutionDialog`、5x5/3x3カーネル、正規化自動計算、Shift+クリック削除、Alt+Option+クリック編集、`~/.oculusjj/convolution_filters.json`に永続化） | — | 低 |
+| 画像操作 | ~~resample~~ ✅実装済（2Dビューメニュー、双線形リサイズ、X/Y/Z係数 `showResampleDialog` / `bilinearResize`） | `resampleDataFromPixArray:` (ViewerController.m:9560) | 低 |
 | 画像操作 | ~~Shutter tool~~ ✅実装済み / Full-screen mode | — | 中 |
 | Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
 | Key Image | ~~captureAndSetKeyImage → DICOM SC出力~~ ✅実装済（描画キャプチャ + `exportKeyImagesAsDICOM`） | `captureAndSetKeyImage:` / `exportROIAndKeyImagesAsDICOMSeries:` (BrowserController.m:17815, DicomImage.m:1266, DCMView.m:11115) | 中 |
