@@ -275,7 +275,7 @@
 | Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
 | Key Image | ~~captureAndSetKeyImage → DICOM SC出力~~ ✅実装済（描画キャプチャ + `exportKeyImagesAsDICOM`） | `captureAndSetKeyImage:` / `exportROIAndKeyImagesAsDICOMSeries:` (BrowserController.m:17815, DicomImage.m:1266, DCMView.m:11115) | 中 |
 | Report | ~~PDF生成・DICOM SR変換~~ ✅HTMLレポート生成実装済（`generateReport`） | — | 中 |
-| Print | ~~Print slider~~ ✅実装済（`showPrintDialog()`、現在/全スライス/範囲+間隔、AWT PrinterJobでOSプリント） / 12-bit display | `imageArithmeticSubtraction` 系 (AppController.m) | 低 |
+| Print | ~~Print slider~~ ✅実装済（`showPrintDialog()`、現在/全スライス/範囲+間隔、AWT PrinterJobでOSプリント） / ~~12-bit display~~ ✅実装済（dormantフラグ+メニュートグル、HOROS準拠：canDisplay12Bit=NOデフォルト） | `imageArithmeticSubtraction` 系 (AppController.m) | 低 |
 
 ### ✅ P3.5: 2D Viewer メニュー（完了）
 | # | 項目 | HOROS実装箇所 | 概要 |

@@ -150,6 +150,27 @@ public class DicomPix {
         return pi != null && (pi.toUpperCase().contains("RGB") || pi.toUpperCase().contains("YBR"));
     }
 
+    /**
+     * 12bit LUT 表示フラグ
+     * HOROS-20240407準拠: DCMPix.m:1376 (@synthesize isLUT12Bit;)
+     *
+     * 備考: HOROS 標準ビルドでは AppController.m:129 の canDisplay12Bit が NO
+     * がデフォルトであり、12bit LUT によるピクセル充填は DCMPix.m:10060-10067
+     * の #ifdef OSIRIX_VIEWER ブロック内でのみ有効になる。したがって標準
+     * HOROS では本フラグは「潜在（dormant）フラグ」として扱われ、メニュー
+     * 上のトグル（ViewerController.m:22770-22775 enable12Bit:）で state
+     * を保持するためのみ使用される。
+     */
+    private boolean isLUT12Bit = false;
+
+    public void setIsLUT12Bit(boolean boo) {
+        this.isLUT12Bit = boo;
+    }
+
+    public boolean isLUT12Bit() {
+        return isLUT12Bit;
+    }
+
     /** raw short data を直接設定（内部使用） */
     public void setShortImageData(short[] data) {
         this.rawShortData = data;

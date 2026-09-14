@@ -67,6 +67,32 @@ public class DCMView extends JPanel {
         return scaleValue;
     }
 
+    /**
+     * 全ピクセルに 12bit LUT 表示フラグを設定
+     * HOROS-20240407準拠: DCMView.m:13854-13858
+     *   - (void)setIsLUT12Bit:(BOOL)boo
+     *     pix の list をループし各 pix.isLUT12Bit = boo を設定
+     */
+    public void setIsLUT12Bit(boolean boo) {
+        if (dcmPixList == null) return;
+        for (DicomPix pix : dcmPixList) {
+            pix.setIsLUT12Bit(boo);
+        }
+    }
+
+    /**
+     * 全ピクセルの 12bit LUT 表示状態を AND 集約して返す
+     * HOROS-20240407準拠: DCMView.m:13859-13869
+     *   - (BOOL)isLUT12Bit （list の全 pix が true の場合のみ true）
+     */
+    public boolean isLUT12Bit() {
+        if (dcmPixList == null || dcmPixList.isEmpty()) return false;
+        for (DicomPix pix : dcmPixList) {
+            if (!pix.isLUT12Bit()) return false;
+        }
+        return true;
+    }
+
     // HOROS-20240407準拠: DCMView.h 147行目 - BOOL volumicSeries;
     protected boolean volumicSeries = false;
 

@@ -7509,6 +7509,20 @@ public class BrowserController extends JFrame {
         resampleItem.addActionListener(e -> showResampleDialog());
         viewer2DMenu.add(resampleItem);
 
+        // 12-bit Display (HOROS-20240407準拠: ViewerController.m:22770-22775 enable12Bit:)
+        // [imageView setIsLUT12Bit:(tag==0)]; [imageView updateImage];
+        // 備考: HOROS 標準ビルドでは canDisplay12Bit=NO（AppController.m:129）のため、
+        // 本フラグは state 保持のみ（dormant）。DCMPix.m:10060-10067 参照。
+        javax.swing.JCheckBoxMenuItem item12Bit = new javax.swing.JCheckBoxMenuItem(
+                MenuResourceLoader.getString("menu_viewer_2d_12bit"));
+        item12Bit.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view == null) return;
+            view.setIsLUT12Bit(item12Bit.isSelected());
+            view.repaint();
+        });
+        viewer2DMenu.add(item12Bit);
+
         // Workspace State
         // HOROS-20240407準拠: Save/Load Workspace State
         javax.swing.JMenu workspaceMenu = new javax.swing.JMenu(
