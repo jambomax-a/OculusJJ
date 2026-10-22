@@ -83,3 +83,7 @@ weasis-native/
 # Local database
 Database/
 *.noindex/
+
+
+# Python virtual environment
+.venv/
