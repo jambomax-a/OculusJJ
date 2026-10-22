@@ -7,6 +7,7 @@ import java.awt.geom.Point2D;
 import java.util.List;
 import java.util.ArrayList;
 import com.oculus.jj.model.DicomPix;
+import com.oculus.jj.model.SegmentationEngine;
 import org.lwjgl.opengl.awt.AWTGLCanvas;
 import org.lwjgl.opengl.awt.GLData;
 import com.oculus.jj.utils.LanguageManager;
@@ -1481,6 +1482,14 @@ public class Viewer3DController extends JFrame {
             // fusion mode - GLViewer3D.setFusionMode() not yet implemented
         });
         contentTools.add(btnFusion);
+
+        // HOROS-20240407準拠: "Grow Region (2D/3D Segmentation)..." (MainMenu.xib:1806)
+        JButton btnAnalysis = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.analysis", "Analysis"));
+        btnAnalysis.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        btnAnalysis.setMargin(new Insets(2, 4, 2, 4));
+        btnAnalysis.setFocusable(false);
+        btnAnalysis.addActionListener(e -> showAnalysisDialog());
+        contentTools.add(btnAnalysis);
 
         // HOROS-20240407準拠: ROI Manager (ROIManager.pdf)
         JButton btnROIManager = new JButton(com.oculus.jj.utils.LanguageManager.get("vr.roiManager"));
@@ -3124,6 +3133,319 @@ public class Viewer3DController extends JFrame {
         }
         if (cpuRenderer != null) {
             cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
+        }
+        repaint();
+    }
+
+    // ==================================================================
+    // HOROS-20240407 準拠: Grow Region (2D/3D Segmentation) + Set Pixel Values
+    //   参照: ITKSegmentation3D.mm / ITKSegmentation3DController.m /
+    //         MainMenu.xib "Grow Region..." / "Set Pixel Values to..."
+    // ==================================================================
+    private boolean[] segMask = null;      // 直近の成長マスク（3D, dimZ*dimY*dimX）
+    private int segSeedX = -1, segSeedY = -1, segSeedZ = -1;
+
+    private void showAnalysisDialog() {
+        if (volume == null || dimX <= 0) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("analysis.error.noData", "No 3D volume loaded."),
+                    LanguageManager.get("analysis.title", "Grow Region (2D/3D Segmentation)..."),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        final JDialog dlg = new JDialog(this,
+                LanguageManager.get("analysis.title", "Grow Region (2D/3D Segmentation)..."), true);
+        dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+        // --- アルゴリズム選択 (HOROS ITKSegmentation3DController.m 相当) ---
+        final JRadioButton rbInterval = new JRadioButton(
+                LanguageManager.get("analysis.algo.interval", "Threshold (interval)"));
+        final JRadioButton rbNeighborhood = new JRadioButton(
+                LanguageManager.get("analysis.algo.neighborhood", "Neighborhood (radius)"));
+        final JRadioButton rbConfidence = new JRadioButton(
+                LanguageManager.get("analysis.algo.confidence", "Confidence (multiplier)"));
+        ButtonGroup algos = new ButtonGroup();
+        algos.add(rbInterval);
+        algos.add(rbNeighborhood);
+        algos.add(rbConfidence);
+        rbInterval.setSelected(true);
+
+        // --- パラメータ ---
+        final JTextField tfLower = new JTextField("-200", 8);
+        final JTextField tfUpper = new JTextField("2500", 8);
+        final JTextField tfRadius = new JTextField("8", 8);
+        final JTextField tfMult = new JTextField("0.25", 8);
+        final JTextField tfSx = new JTextField(
+                segSeedX >= 0 ? String.valueOf(segSeedX) : String.valueOf(dimX / 2), 8);
+        final JTextField tfSy = new JTextField(
+                segSeedY >= 0 ? String.valueOf(segSeedY) : String.valueOf(dimY / 2), 8);
+        final JTextField tfSz = new JTextField(
+                segSeedZ >= 0 ? String.valueOf(segSeedZ) : String.valueOf(dimZ / 2), 8);
+
+        // --- 値上書き (HOROS "Set Pixel Values to..." 相当) ---
+        final JCheckBox ckInside = new JCheckBox(
+                LanguageManager.get("analysis.inside", "Set inside to HU"));
+        final JCheckBox ckOutside = new JCheckBox(
+                LanguageManager.get("analysis.outside", "Set outside to HU"));
+        final JTextField tfInside = new JTextField("1000", 8);
+        final JTextField tfOutside = new JTextField("-1024", 8);
+
+        // --- 平滑化 (HOROS itkCurvatureFlowImageFilter 相当) ---
+        final JTextField tfSmooth = new JTextField("0", 4);
+
+        final JLabel status = new JLabel(
+                LanguageManager.get("analysis.status.ready", "Ready"), JLabel.LEFT);
+        status.setForeground(new java.awt.Color(0x33, 0x66, 0x99));
+
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.insets = new java.awt.Insets(2, 2, 2, 2);
+        gc.anchor = java.awt.GridBagConstraints.WEST;
+        gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        JPanel form = new JPanel(new java.awt.GridBagLayout());
+        int row = 0;
+
+        gc.gridx = 0; gc.gridy = row; gc.gridwidth = 4; gc.weightx = 0; gc.fill =
+                java.awt.GridBagConstraints.NONE;
+        form.add(rbInterval, gc);
+        form.add(rbNeighborhood, gc);
+        form.add(rbConfidence, gc);
+        row++;
+
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.lower", "Lower HU"), tfLower);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.upper", "Upper HU"), tfUpper);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.radius", "Radius (voxels)"), tfRadius);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.multiplier", "Multiplier"), tfMult);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.seed", "Seed (X Y Z)"), null);
+        gc.gridx = 1; gc.gridy = row - 1; gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        form.add(tfSx, gc);
+        gc.gridx = 2; gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        form.add(tfSy, gc);
+        gc.gridx = 3; gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        form.add(tfSz, gc);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.inside", "Set inside to HU"), tfInside);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.outside", "Set outside to HU"), tfOutside);
+        addFormRow(form, gc, row++,
+                LanguageManager.get("analysis.smooth", "Smooth iterations"), tfSmooth);
+
+        // --- ボタン群 ---
+        final JButton btnPick = new JButton(
+                LanguageManager.get("analysis.pick", "Pick seed on 3D view..."));
+        final JButton btnRun = new JButton(
+                LanguageManager.get("analysis.run", "Grow Region"));
+        final JButton btnClear = new JButton(
+                LanguageManager.get("analysis.clear", "Clear 2D overlay"));
+        final JButton btnClose = new JButton(LanguageManager.get("button.close", "Close"));
+
+        JPanel btns = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 4));
+        btns.add(btnPick);
+        btns.add(btnRun);
+        btns.add(btnClear);
+        btns.add(btnClose);
+
+        ckInside.setSelected(true);
+        ckOutside.setSelected(false);
+
+        btnPick.addActionListener(e -> {
+            if (glViewer == null) {
+                return;
+            }
+            final java.awt.event.MouseAdapter pick = new java.awt.event.MouseAdapter() {
+                @Override
+                public void mousePressed(java.awt.event.MouseEvent ev) {
+                    com.oculus.jj.model.ROI.Point3D pt = getVoxelUnderMouse(ev.getX(), ev.getY());
+                    if (pt == null) {
+                        pt = getVoxelAtDepth(ev.getX(), ev.getY(), 0.0);
+                    }
+                    glViewer.removeMouseListener(this);
+                    if (pt != null) {
+                        segSeedX = (int) pt.x;
+                        segSeedY = (int) pt.y;
+                        segSeedZ = (int) pt.z;
+                        tfSx.setText(String.valueOf(segSeedX));
+                        tfSy.setText(String.valueOf(segSeedY));
+                        tfSz.setText(String.valueOf(segSeedZ));
+                        status.setText(String.format(
+                                LanguageManager.get("analysis.seed.picked",
+                                        "Seed picked: (%d, %d, %d)"),
+                                segSeedX, segSeedY, segSeedZ));
+                    }
+                    dlg.setVisible(true);
+                }
+            };
+            glViewer.addMouseListener(pick);
+            dlg.setVisible(false);
+            status.setText(LanguageManager.get("analysis.pick.hint",
+                    "Click on the 3D view to select the seed voxel..."));
+        });
+
+        btnRun.addActionListener(e -> {
+            try {
+                int algo = rbInterval.isSelected() ? SegmentationEngine.ALGO_INTERVAL
+                        : rbNeighborhood.isSelected() ? SegmentationEngine.ALGO_NEIGHBORHOOD
+                                : SegmentationEngine.ALGO_CONFIDENCE;
+                double lower = parseD(tfLower.getText(), 0.0);
+                double upper = parseD(tfUpper.getText(), 2500.0);
+                int radius = Math.max(1, parseI(tfRadius.getText(), 8));
+                double mult = parseD(tfMult.getText(), 0.25);
+
+                int sx = parseI(tfSx.getText(), dimX / 2);
+                int sy = parseI(tfSy.getText(), dimY / 2);
+                int sz = parseI(tfSz.getText(), dimZ / 2);
+
+                status.setText(LanguageManager.get("analysis.running", "Growing region..."));
+                dlg.pack();
+
+                SegmentationEngine.Result r = SegmentationEngine.grow(volume, dimX, dimY, dimZ,
+                        sx, sy, sz, algo, lower, upper, radius, mult);
+                if (r.count == 0) {
+                    status.setText(LanguageManager.get("analysis.status.empty",
+                            "Region empty - adjust threshold/seed."));
+                    return;
+                }
+                segMask = r.mask;
+
+                boolean changed = false;
+                if (ckInside.isSelected()) {
+                    int c = SegmentationEngine.setInside(volume, segMask,
+                            (short) parseI(tfInside.getText(), 1000));
+                    changed = c > 0 || changed;
+                }
+                if (ckOutside.isSelected()) {
+                    int c = SegmentationEngine.setOutside(volume, segMask,
+                            (short) parseI(tfOutside.getText(), -1024));
+                    changed = c > 0 || changed;
+                }
+                int smoothIt = parseI(tfSmooth.getText(), 0);
+                if (smoothIt > 0) {
+                    SegmentationEngine.smooth(volume, dimX, dimY, dimZ, smoothIt);
+                    changed = true;
+                }
+
+                // 3D→2D 同期
+                if (changed) {
+                    syncVolumeTo2DAnd3D();
+                }
+                // 2Dオーバーレイ表示
+                applySegOverlay2D(true);
+
+                status.setText(String.format(
+                        LanguageManager.get("analysis.status.done",
+                                "Grew %d voxels (seed %d,%d,%d)."),
+                        r.count, sx, sy, sz));
+                dlg.pack();
+            } catch (NumberFormatException nfe) {
+                status.setText(LanguageManager.get("analysis.status.badNumber",
+                        "Invalid number in a field."));
+                dlg.pack();
+            } catch (Throwable t) {
+                status.setText("Error: " + t.getMessage());
+                dlg.pack();
+            }
+        });
+
+        btnClear.addActionListener(e -> {
+            segMask = null;
+            applySegOverlay2D(false);
+            status.setText(LanguageManager.get("analysis.status.cleared", "Overlay cleared."));
+            dlg.pack();
+        });
+        btnClose.addActionListener(e -> dlg.dispose());
+
+        JPanel content = new JPanel(new java.awt.BorderLayout(4, 4));
+        content.add(form, java.awt.BorderLayout.CENTER);
+        content.add(status, java.awt.BorderLayout.SOUTH);
+        content.add(btns, java.awt.BorderLayout.EAST);
+        dlg.add(content);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void addFormRow(JPanel panel, java.awt.GridBagConstraints gc, int row,
+            String label, JTextField field) {
+        gc.gridx = 0;
+        gc.gridy = row;
+        gc.gridwidth = 1;
+        gc.fill = java.awt.GridBagConstraints.NONE;
+        panel.add(new JLabel(label), gc);
+        if (field != null) {
+            gc.gridx = 1;
+            gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+            panel.add(field, gc);
+        }
+    }
+
+    private static double parseD(String s, double def) {
+        try {
+            return Double.parseDouble(s.trim());
+        } catch (Throwable t) {
+            return def;
+        }
+    }
+
+    private static int parseI(String s, int def) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (Throwable t) {
+            return def;
+        }
+    }
+
+    /** 2Dスライス群に成長マスクの半透明オーバーレイを適用/解除。 */
+    private void applySegOverlay2D(boolean on) {
+        if (pixList == null || viewer2D == null || viewer2D.getImageView() == null) {
+            return;
+        }
+        int plane = dimX * dimY;
+        for (int z = 0; z < pixList.size(); z++) {
+            DicomPix pix = pixList.get(z);
+            if (pix == null) {
+                continue;
+            }
+            if (on && segMask != null) {
+                boolean[] slice = new boolean[plane];
+                int base = z * plane;
+                for (int i = 0; i < plane && base + i < segMask.length; i++) {
+                    slice[i] = segMask[base + i];
+                }
+                pix.setSegOverlay(slice, dimX, dimY, new java.awt.Color(255, 80, 80), 0.45f);
+            } else {
+                pix.clearSegOverlay();
+            }
+        }
+        viewer2D.getImageView().repaint();
+    }
+
+    /** ボリューム変更後の 2D/3D 描画再同期（既存 update2DData + GL再転送）。 */
+    private void syncVolumeTo2DAnd3D() {
+        if (volume == null) {
+            return;
+        }
+        int plane = dimX * dimY;
+        for (int z = 0; z < dimZ; z++) {
+            for (int y = 0; y < dimY; y++) {
+                for (int x = 0; x < dimX; x++) {
+                    update2DData(z, y, x, volume[z * plane + y * dimX + x]);
+                }
+            }
+        }
+        if (glViewer != null) {
+            glViewer.setVolumeData(volume, null, dimX, dimY, dimZ);
+            glViewer.triggerVolumeReupload();
+        }
+        if (cpuRenderer != null) {
+            cpuRenderer.setVolumeData(volume, dimX, dimY, dimZ);
+        }
+        if (viewer2D != null && viewer2D.getImageView() != null) {
+            viewer2D.getImageView().repaint();
         }
         repaint();
     }

@@ -182,6 +182,12 @@ public class DicomPix {
         }
     }
     // ── Fusion Overlay Fields (PET/CT融合用) ──
+    // HOROS-20240407準拠: Grow Region (2D/3D Segmentation) の2Dスライス連動オーバーレイ
+    private transient boolean[] segMaskSlice = null;    // 本スライスのマスク（幅×高さ）
+    private transient BufferedImage segCached = null;   // 描画済み半透明マスク画像（キャッシュ）
+    private transient java.awt.Color segColor = new java.awt.Color(255, 80, 80);
+    private transient float segAlpha = 0.4f;
+
     private DicomPix fusionOverlayPix = null;       // 重ね合わせる前景画像（PET/SPECT）
     private double fusionWeight = 0.5;              // ブレンド重み 0.0~1.0
     private FusionImageProcessor.FusionMode fusionMode = FusionImageProcessor.FusionMode.COLOR;
@@ -2175,4 +2181,73 @@ public class DicomPix {
 
     /** 融合状態を取得 */
     public boolean hasFusion() { return fusionOverlayPix != null; }
+
+    // ── Segmentation Overlay API (HOROS Grow Region 2D連動表示) ──
+
+    /**
+     * 本スライスのセグメンテーションマスクオーバーレイを設定。
+     *
+     * @param mask   本スライスのマスク（幅×高さ、null で解除）
+     * @param width  スライス幅
+     * @param height スライス高さ
+     * @param color  強調色
+     * @param alpha  不透明度 0.0..1.0
+     */
+    public void setSegOverlay(boolean[] mask, int width, int height, java.awt.Color color, float alpha) {
+        if (mask == null || width <= 0 || height <= 0 || mask.length < width * height) {
+            clearSegOverlay();
+            return;
+        }
+        this.segMaskSlice = mask;
+        if (color != null) {
+            this.segColor = color;
+        }
+        this.segAlpha = Math.max(0f, Math.min(1f, alpha));
+        this.segCached = null;
+    }
+
+    /** セグメンテーションオーバーレイを解除。 */
+    public void clearSegOverlay() {
+        this.segMaskSlice = null;
+        this.segCached = null;
+    }
+
+    /** セグメンテーションオーバーレイの有効状態を取得。 */
+    public boolean hasSegOverlay() {
+        return segMaskSlice != null;
+    }
+
+    /**
+     * 描画用半透明マスク画像を取得（初回は生成、以降キャッシュ）。
+     */
+    public BufferedImage getSegOverlayImage() {
+        if (segMaskSlice == null) {
+            return null;
+        }
+        int w = 0, h = 0;
+        BufferedImage base = getBufferedImageNoLoad();
+        if (base != null) {
+            w = base.getWidth();
+            h = base.getHeight();
+        } else {
+            int len = segMaskSlice.length;
+            w = (int) Math.round(Math.sqrt(len));
+            h = len / Math.max(1, w);
+        }
+        if (w <= 0 || h <= 0) {
+            return null;
+        }
+        if (segCached != null && segCached.getWidth() == w && segCached.getHeight() == h) {
+            return segCached;
+        }
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        int[] px = ((java.awt.image.DataBufferInt) img.getRaster().getDataBuffer()).getData();
+        int a = Math.round(segAlpha * 255);
+        int rgb = (segColor.getRed() << 16) | (segColor.getGreen() << 8) | segColor.getBlue();
+        for (int i = 0; i < w * h && i < segMaskSlice.length; i++) {
+            px[i] = segMaskSlice[i] ? (a << 24) | rgb : 0;
+        }
+        segCached = img;
+        return img;
+    }
 }

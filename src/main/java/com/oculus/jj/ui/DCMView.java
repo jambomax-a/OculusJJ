@@ -2240,6 +2240,16 @@ public class DCMView extends JPanel {
                     // 画像を描画 (反転対応版)
                     g2d.drawImage(image, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2, null);
 
+                    // --- セグメンテーションオーバーレイ (HOROS Grow Region 2D連動表示) ---
+                    if (curDCM.hasSegOverlay()) {
+                        java.awt.image.BufferedImage segImg = curDCM.getSegOverlayImage();
+                        if (segImg != null) {
+                            // メイン画像と同じ座標変換（反転対応）で描画
+                            g2d.drawImage(segImg, dx1, dy1, dx2, dy2,
+                                    0, 0, segImg.getWidth(), segImg.getHeight(), null);
+                        }
+                    }
+
                     // --- ROIの表示 ---
                     // HOROS-20240407準拠: 座標変換を考慮してROIを描画
                     // ROIを描画する前に、画像スケールとオフセットを考慮したGraphics2D状態を作成
