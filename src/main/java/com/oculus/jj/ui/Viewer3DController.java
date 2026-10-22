@@ -452,6 +452,18 @@ public class Viewer3DController extends JFrame {
                     glViewer.setVolumeData(volume, grad, dimX, dimY, dimZ);
                     // System.out.println("DEBUG: glViewer.setVolumeData finished.");
 
+                    // P5 VRAM最適化 (HOROS準拠): VRAMサイズ検出 + 低VRAM/超過時の1回警告
+                    // 参照: HOROS VTKView.mm:182 / DefaultsOsiriX.m:206 (検出), VRView.mm:1020,6310 (警告)
+                    try {
+                        long volBytes = (volume == null) ? 0L : (long) volume.length * 2L;
+                        if (grad != null) {
+                            volBytes += grad.length;
+                        }
+                        com.oculus.jj.util.GpuVramInfo.warnIfNecessary(
+                                com.oculus.jj.util.GpuVramInfo.detect(), volBytes, this);
+                    } catch (Throwable ignored) {
+                    }
+
                     Thread.sleep(400); // EDTに "Uploading Volume..." 表示を描画させる時間を確保
 
                     SwingUtilities

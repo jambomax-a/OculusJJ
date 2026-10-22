@@ -16,7 +16,7 @@
 | **P2: メニューアクション配線** | ✅ **完了** | File/View/Tools/Analysis全アクション接続済み。Navigator Panel（スライストリップ）/ 3D Position Panel も実装済 |
 | **P3: ツールバー** | ✅ **完了** | Search/ModalityFilter/TimeInterval/Subtraction/Status Display 全実装 |
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
-| **P5: GPU/Optimization** | ✅ **GPU Volume Rendering 実装済** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。残: VRAM最適化 / AI連携 |
+| **P5: GPU/Optimization** | ✅ **完了** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。VRAM最適化（Mipmap＋VRAM検出・HOROS準拠警告）実装済。残: AI連携（独自拡張） |
 
 ### 進捗率：約94%（113 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋2Dメニュー全項目(SUV/校正/融合/伝播)＋ツールバー Annotations Panel＋Key Image → DICOM SC出力 完了）
 
@@ -319,7 +319,7 @@
 | CPUレイキャストフォールバック | ✅ 実装済 | `CPURaycastRenderer.java`（GPUコンテキスト失敗時） |
 | ステレオ表示 | ✅ 実装済 | 単眼L/R / バッファーステレオ |
 | WW/WL・クリッピング・方位ボックス | ✅ 実装済 | Orientation Cube (A/P/S/I/R/L) |
-| VRAM最適化（OpenGL textures to VRAM） | 📋 計画 | ボリュームデータ永駐テクスチャ化・Mipmap等 |
+| VRAM最適化（OpenGL textures to VRAM） | ✅ 実装済 | ボリューム/勾配テクスチャは VRAM に永駐し再利用（`volumeNeedsReupload` dirty-flag で再転送のみ）。POT ボリュームには Mipmap 生成 + trilinear（`GL_LINEAR_MIPMAP_LINEAR`、失敗時 LINEAR フォールバック）。HOROS準拠 VRAM 検出（`GpuVramInfo.java`: Linux /sys/class/drm、Windows wmic/PowerShell、macOS system_profiler）+ 低VRAM(<1GB)警告 / ボリューム超過警告（HOROS `VRView.mm:1020,6310` 相当、1回のみ・i18n `vr3d.vram.*`） |
 | AI画像分析連携 | 📋 計画 | 未着手 |
 
 ---
@@ -353,6 +353,8 @@
 ---
 
 ## 最終更新日
+
+**2026-10-22** — P5 VRAM最適化 実装済: (1) ボリューム/勾配テクスチャの VRAM 永駐＋dirty-flag による選択的再転送（既存）の確認、(2) POT ボリュームに Mipmap 生成 + trilinear サプリング（`GLViewer3D.uploadVolume()`、失敗時 LINEAR フォールバック）、(3) HOROS準拠 VRAM 検出・警告（新 `util/GpuVramInfo.java`: Linux /sys/class/drm・Windows wmic/PowerShell・macOS system_profiler で VRAM/レンダラー名を検出、<1GB 時とボリューム超過時に HOROS `VRView.mm:1020,6310` 相当の警告を 1 回のみ表示。`Viewer3DController.activateGPUMode()` 配線、i18n `vr3d.vram.*` 両ファイル追加）
 
 **2026-08-22** — P3 Key Image: `captureAndSetKeyImage` をHOROS準拠（描画ビュー+アノテーションの8bit RGBキャプチャ → 本物の DICOM SC オブジェクト: SOP `1.2.840.10008.5.1.4.1.1.7` / Modality=SC）に書き換え + 2Dメニュー「キー画像をDICOM SCシリーズとして書き出す」（`exportKeyImagesAsDICOM`、HOROS `exportROIAndKeyImagesAsDICOMSeries:` 相当、全表示ビューアのキー画像一括出力）。i18n `key.image.*` / `export.sc.*` 追加（進捗率 約93% → 約94%）
 

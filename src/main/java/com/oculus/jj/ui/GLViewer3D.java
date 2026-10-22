@@ -804,6 +804,32 @@ public class GLViewer3D extends AWTGLCanvas {
                     bb);
             MemoryUtil.memFree(bb);
         }
+
+        // P5 VRAM最適化: テクスチャは VRAM に永駐し再利用する（毎フレームの再転送はしない）。
+        // POT (2の乗数) ボリュームのみ Mipmap を生成し、トリリニアサンプリング + ズーム時のフリッカ抑制を行う。
+        // 失敗時は従来通り LINEAR にフォールバック。
+        if (isPowerOfTwo(dimX) && isPowerOfTwo(dimY) && isPowerOfTwo(tz)) {
+            try {
+                GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR_MIPMAP_LINEAR);
+                GL33.glGenerateMipmap(GL33.GL_TEXTURE_3D);
+                if (gradientTexture > 0) {
+                    GL33.glBindTexture(GL33.GL_TEXTURE_3D, gradientTexture);
+                    GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR_MIPMAP_LINEAR);
+                    GL33.glGenerateMipmap(GL33.GL_TEXTURE_3D);
+                }
+            } catch (Throwable t) {
+                GL33.glBindTexture(GL33.GL_TEXTURE_3D, volumeTexture);
+                GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
+                if (gradientTexture > 0) {
+                    GL33.glBindTexture(GL33.GL_TEXTURE_3D, gradientTexture);
+                    GL33.glTexParameteri(GL33.GL_TEXTURE_3D, GL33.GL_TEXTURE_MIN_FILTER, GL33.GL_LINEAR);
+                }
+            }
+        }
+    }
+
+    private static boolean isPowerOfTwo(int n) {
+        return n > 0 && (n & (n - 1)) == 0;
     }
 
     private void set3DParams() {
