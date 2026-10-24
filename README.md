@@ -162,9 +162,7 @@ cd OculusJJ
 ## 関連プロジェクト・ドキュメント
 
 - **開発ドキュメント**: アーキテクチャや移植ステータスの詳細は [PORT_STATUS.md](PORT_STATUS.md) および `docs/` ディレクトリを参照してください。
-- **関連システム**:
-  - **Vet-System**: 獣医向け受付・電子カルテシステム
-  - **JJDICOMViewer-Lite**: CD/DVD同梱用の簡易DICOMビューワー
+
 
 ## クレジット・謝辞（Horos / OsiriX およびライセンス表記）
 

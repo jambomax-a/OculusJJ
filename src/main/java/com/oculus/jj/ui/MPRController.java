@@ -301,12 +301,12 @@ public class MPRController extends JFrame {
         initializeUI();
 
         // 別スレッドで重いデータを読み込む
-        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.title.loading", "J-Horos MPR (Loading Volume...)"));
+        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.title.loading", "OculusJJ MPR (Loading Volume...)"));
         new Thread(() -> {
             try {
                 initializeData();
                 SwingUtilities.invokeLater(() -> {
-                    setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.title", "J-Horos MPR (v2025.02.09-STABLE)"));
+                    setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.title", "OculusJJ MPR"));
                     updateAllViews(true);
                 });
             } catch (Exception e) {
@@ -480,7 +480,7 @@ public class MPRController extends JFrame {
     private JToolBar mprSpecificToolbar;
 
     private void initializeUI() {
-        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.title", "J-Horos MPR (v2025.02.09-STABLE)"));
+        setTitle(com.oculus.jj.utils.LanguageManager.get("mpr.title", "OculusJJ MPR"));
 
         // 外部設定からウィンドウサイズを取得（デフォルト値を使用）
         int width = com.oculus.jj.config.ConfigManager.getInt("window.width", com.oculus.jj.config.ConfigManager.DEFAULT_WINDOW_SIZE_WIDTH);

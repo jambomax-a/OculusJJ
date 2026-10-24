@@ -8172,7 +8172,7 @@ public class BrowserController extends JFrame {
 
         javax.swing.JMenuItem aboutItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file_about"));
         aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "OculusJJ - Advanced DICOM Viewer\nVersion 1.0\nBased on Horos-20240407 Architecture"));
+                "OculusJJ - Advanced DICOM Viewer\nVersion 1.0\nOpen-source medical imaging for veterinary practice."));
         helpMenu.add(aboutItem);
 
         menuBar.add(helpMenu);
@@ -9084,7 +9084,7 @@ public class BrowserController extends JFrame {
         javax.swing.JLabel label = new javax.swing.JLabel(
                 LanguageManager.get("resample.help",
                         "Resample by factor (NEW = OLD / factor).\n"
-                        + "Default 2.0 (HOROS drag-blend default): pixels halved, spacing doubled.\n"
+                        + "Default 2.0: pixels halved, spacing doubled.\n"
                         + "Higher factor = coarser pixels, larger field-of-view per pixel."));
         panel.add(label);
 

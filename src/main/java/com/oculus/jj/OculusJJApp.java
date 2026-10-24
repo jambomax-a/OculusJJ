@@ -369,9 +369,7 @@ public class OculusJJApp {
     public static void checkForUpdates(java.awt.Frame owner) {
         javax.swing.JOptionPane.showMessageDialog(
                 owner,
-                "Checking for updates at https://horosproject.org/latest.json\\n\\n" +
-                        "Currently running version 1.0.0\\n" +
-                        "Latest stable release: 2024-0407 (current)",
+                "Automatic update checks are not configured for OculusJJ yet.",
                 "Check for Updates",
                 javax.swing.JOptionPane.INFORMATION_MESSAGE);
     }
@@ -379,7 +377,7 @@ public class OculusJJApp {
     // === Help / Support Links ===
     public static void openHorosWebPage() {
         try {
-            java.awt.Desktop.getDesktop().browse(new java.net.URI("https://horosproject.org"));
+            java.awt.Desktop.getDesktop().browse(new java.net.URI("https://github.com/oculusjj/OculusJJ"));
         } catch (Exception ex) {
         }
     }
@@ -400,7 +398,7 @@ public class OculusJJApp {
 
     public static void openCommunityPage() {
         try {
-            java.awt.Desktop.getDesktop().browse(new java.net.URI("https://horosproject.org/community"));
+            java.awt.Desktop.getDesktop().browse(new java.net.URI("https://github.com/oculusjj/OculusJJ/discussions"));
         } catch (Exception ex) {
         }
     }

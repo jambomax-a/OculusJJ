@@ -36,8 +36,8 @@ public class AboutDialog extends JDialog {
         main.add(Box.createVerticalStrut(15));
 
         // Description
-        String desc = "A veterinary DICOM viewer based on HOROS-20240407<br>" +
-                      "Ported to Java Swing";
+        String desc = "An open-source veterinary DICOM viewer<br>" +
+                      "Built with Java Swing";
         JLabel descLabel = new JLabel("<html><center>" + desc + "</center></html>", SwingConstants.CENTER);
         descLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         main.add(descLabel);
@@ -47,7 +47,6 @@ public class AboutDialog extends JDialog {
         String mission = "<html><center>" +
             "Open source medical imaging for veterinary practice.<br>" +
             "Licensed under LGPL-3.0<br><br>" +
-            "Based on HOROS (www.horosproject.org)<br>" +
             "Built with Java 21, Swing, OpenCV, dcm4che" +
             "</center></html>";
         JLabel missionLabel = new JLabel(mission, SwingConstants.CENTER);

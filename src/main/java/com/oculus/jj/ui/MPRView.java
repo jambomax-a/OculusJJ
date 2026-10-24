@@ -1499,7 +1499,7 @@ public class MPRView extends JPanel {
                 String dtInfo = controller.getStudyDate();
                 g2.drawString(dtInfo, w - g2.getFontMetrics().stringWidth(dtInfo) - 15, ly);
                 ly += 16;
-                String madeIn = "Made In Horos";
+                String madeIn = "Made in OculusJJ";
                 g2.drawString(madeIn, w - g2.getFontMetrics().stringWidth(madeIn) - 15, ly);
             }
 
