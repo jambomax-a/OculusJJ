@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-08-19 (2D畳み込みフィルタ実装済みの反映) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-10-27 (P-C減算 / P-B ROI群 / P-Eウィンドウ / P-Dデータベース / P-Fレポート / P-G 4Dシリーズ 実装済みの反映) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -274,7 +274,7 @@
 | 画像操作 | ~~Shutter tool~~ ✅実装済み / Full-screen mode | — | 中 |
 | Fusion | ~~Blending slider/mode, mergeFusedImages~~ ✅実装済（Toolbar Fusion→`FusionControlsPanel`） | — | 中 |
 | Key Image | ~~captureAndSetKeyImage → DICOM SC出力~~ ✅実装済（描画キャプチャ + `exportKeyImagesAsDICOM`） | `captureAndSetKeyImage:` / `exportROIAndKeyImagesAsDICOMSeries:` (BrowserController.m:17815, DicomImage.m:1266, DCMView.m:11115) | 中 |
-| Report | ~~PDF生成・DICOM SR変換~~ ✅HTMLレポート生成実装済（`generateReport`） | — | 中 |
+| Report | ~~レポート生成/削除/PDF/DICOM SR~~ ✅全実装済（`generateReport` / `deleteReport` / `convertReportToPDF` / `convertReportToDICOMSR`） | `generateReport:` / `deleteReport:` / `convertReportToPDF:` / `convertReportToDICOMSR:` (BrowserController.m) | 低 |
 | Print | ~~Print slider~~ ✅実装済（`showPrintDialog()`、現在/全スライス/範囲+間隔、AWT PrinterJobでOSプリント） / ~~12-bit display~~ ✅実装済（dormantフラグ+メニュートグル、HOROS準拠：canDisplay12Bit=NOデフォルト） | `imageArithmeticSubtraction` 系 (AppController.m) | 低 |
 
 ### ✅ P3.5: 2D Viewer メニュー（完了）
@@ -422,3 +422,139 @@
 | 未実装機能リスト | HOROS参照付き全機能ギャップ一覧 | `docs/OLD/UNIMPLEMENTED-FEATURES-LIST.md` (2025-12-10) |
 
 **2026-07-30** — ドキュメント最適化完了
+
+
+---
+
+## [2026-10-25 更新] — P-C 減算（Subtraction）／ P-B ROI群 実装
+
+### P-C 減算（HOROS: subCtrlOnOff / subCtrlNewMask / subSharpen / subCtrlOffset / subCtrlSliders / subSumSlider）
+- **DicomPix.java**
+  - `subtractWithMask(DicomPix mask, int offX, int offY)` — マスク引算（8方向シフト・0..65535クランプ）
+  - `applySharpen5x5()` — HOROS「Sharpen 5x5」カーネル
+  - `getOriginalShortData()` / `restoreOriginalShortData()` / `clearOriginalShortDataBackup()` — 引算OFF時の復元
+  - `subtractionEnabled` フラグ
+- **BrowserController.java** — 2D Viewerメニューに「減算」サブメニュー
+  - 減算（トグル・ON時WL=128/WW=256）／マスク作成／シャープ化
+  - ピクセルシフト NE/N/NW/W/なし/E/SW/S/SE（8方向再引算）
+  - コントラスト↓/標準/↑、明るさ↓/標準/↑、足し算↓/なし/↑
+
+### P-B ROI群（HOROS準拠）
+- **ROI.java**
+  - `groupID` フィールド＋ゲッター/セッター（HOROS: setGroupID）
+  - `copy()` — 伝播・生成ROI用のROIコピー（isAliased=NO相当）
+- **DCMView.java**
+  - `collectGroupedROIs()` — 同groupIDのROI収集
+  - ドラッグでグループ化ROIを共同移動（開始点保持・delta適用・統計再計算・保存）
+- **BrowserController.java**
+  - `groupSelectedROIs` / `ungroupSelectedROIs` — 選択ROIのグループ化/解除（timestamp ID）
+  - `roiPropagateSetup` — 全フレームへのROI伝播
+  - `roiPropagateSlab` — スラブ範囲（スライス厚/ピクセル間隔から推定）への伝播
+  - `roiVolume`(tag=1) / `generateMissingROIs()` — 欠損スライスへの生成ROI（線形補間・`morphing generated`マーカ）
+  - `roiDeleteGeneratedROIs` — `morphing generated`コメントのROI削除
+  - `convertBrushPolygon` — ブラッシュ→ポリゴン（凸包）／ポリゴン→ブラッシュ（辺密化）
+  - `mergeBrushROI` — 選択ブラシROIの点結合
+- **i18n** — messages_en/ja.properties に 減算・ROI群関連キー追加
+
+### 未実装のまま（プレースホルダ）
+- `createLayerROIFromSelectedROI`（HOROS: texture/レイヤーROI・複雑）
+- `segmentationTest`（Grow Region 2D/3D・Viewer3DController委譲・案内表示）
+- 4D Propagate（roiPropagateSetupの4D軸対応）
+
+
+---
+
+## [2026-10-25 更新2] — P-E ウィンドウ状態・タイルリング
+
+### 修正: Resize Window（HOROS準拠）
+- 旧実装: ウィンドウ幅を画面の%でリサイズ（HOROSと異なる挙動）
+- 新実装: `resizeWindowToScale(int tag)` — HOROS DCMView.m:13321準拠の**画像ズーム倍率**
+  - 25% / 50% / 100% / 200% / 300%: `DCMView.setScaleValue(scale)`
+  - iPod Video: 320px基準のフィットスケール（幅/高さ比率の小さい方を採用）
+
+### 追加: Bring All to Front（HOROS: arrangeInFront:）
+- `bringAllToFront()` — 全可視ウィンドウを前面に
+- Windowメニューに項目追加（既存のi18nキー`menu_window_bring_all_to_front`利用）
+
+### タイルリング
+- `ViewerController.tileWindows()` / `tile3DWindows()` は既存の実装をそのまま利用（スクエアグリッド配置）
+
+**コンパイル成功** ✅
+
+
+---
+
+## [2026-10-25 更新3] — P-D データベース管理
+
+### 実装した空ハンドラ（HOROS: BrowserController.m）
+| メニュー項目 | HOROS相当 | 実装内容 |
+|---|---|---|
+| **New Database Folder...** | `createDatabaseFolder:` (1860行) | フォルダ選択→名前入力→`OSIRIX_DATA_DIR_NAME`付きフォルダ作成 |
+| **Open Database Folder...** | `openDatabase:` (1843行) | フォルダ選択→`DicomDatabase.databaseAtPath()`→`setActiveLocalDatabase` |
+| **Create default albums...** | `defaultAlbums:` (1379行) | Favorites / Recently Used / Screen Captures を重複チェック付きで作成 |
+| **Rebuild SQL Index File...** | `rebuildSQLFile:` (2530行) | 確認ダイアログ→`DicomDatabase.save()` |
+| **Rebuild Selected Thumbnails** | `rebuildThumbnails:` (9985行) | `DicomPix.invalidateThumbnail()`（新規追加）で全サムネイルを無効化 |
+| **Page Setup...** | (xib 381行) | `java.awt.print.PrinterJob.printDialog()` |
+| **Add an album / smart album** | `addAlbum:`/`addSmartAlbum:` | 名前（＋smartはpredicate）入力→`DicomAlbum`作成→`save()` |
+| **Save albums... / Import albums...** | `saveAlbums:`(10811)/`addAlbums:`(10834) | `save()`／テキストファイル（1行1件、`名前|predicate`形式）から読み込み |
+| **Delete selected album** | `removeAlbum:` | `getAlbums().remove(target)`＋`save()` |
+
+### 新規追加API
+- `DicomPix.invalidateThumbnail()` — サムネイルキャッシュ無効化（再構築用）
+
+### i18n
+- `db.new_folder.*` / `db.open.*` / `db.album.*` / `db.default_albums.*` / `db.rebuild_sql.*` / `db.thumbnails.*` / `db.page_setup.*` キーを en/ja 両方に追加
+
+**コンパイル成功** ✅
+
+---
+
+## [2026-10-25 更新4] — P-F レポート（Report）
+
+### 実装したハンドラ（HOROS: BrowserController.m）
+| メニュー項目 | HOROS相当 | 実装内容 |
+|---|---|---|
+| **Open report** (既存) | `generateReport:` | HTMLレポート生成→`study.setReportURL()`＋`db.save()` で後続処理と連携 |
+| **Delete report...** | `deleteReport:` (18583行) | 確認→`reportURL`ファイル削除→`setReportURL(null)`→`save()` |
+| **Convert to PDF...** | `convertReportToPDF:` (18542行) | HTML→`JEditorPane`→`PrinterJob.print()`（Windows「Microsoft Print to PDF」推奨） |
+| **Convert to DICOM SR** | `convertReportToDICOMSR:` (18494行) | dcm4che `Attributes`＋`DicomOutputStream` で STUDY REPORT (SOP 1.2.840.10008.5.1.4.1.1.88.33) を生成 |
+
+### DICOM SR の技術的メモ
+- dcm4che-core 5.34.1 (mavenLocal) には `DicomObject`/`TagFromCode`/`UIDGenerator` が**存在しない**ため、`writeSCImage` と同じ**生タグint＋`VR`＋`Attributes`**パターンに統一
+- HTML→プレーンテキストへ簡易変換（`<p>/<br>`は改行、タグ除去、エンティティ展開）
+- 埋め込む主要タグ: SOPClassUID(0x00080016) / SOPInstanceUID(0x00080018) / StudyDate / Modality="SR" / StudyDescription / PatientID / StudyInstanceUID(0x0020000D) / ReportStatusID="PRELIMINARY"(0x00400244) / ReportClassID(0x00400250) / ReportDateTime(0x00400260, VR.DT) / **ReportDetailedDescription(0x00404010, VR.UT)**
+- FileMetaInformation(0x0002xxxx)＋`writeDataset`＋`finish` で Explicit VR LittleEndian 書き出し
+
+### 新規追加API
+- `activeStudy()` — アクティブDCMViewまたはdatabaseOutline選択から`DicomStudy`を解決するヘルパー
+
+### i18n
+- `report.delete.*` / `report.pdf.*` / `report.dcm.*` キー（各 en/ja 両方）を追加
+
+**コンパイル成功** ✅
+
+---
+
+## [2026-10-27 更新5] — P-G 4D シリーズ（4D Viewer）
+
+### 実装したハンドラ（HOROS: BrowserController.m）
+| 機能 | HOROS相当 | 実装内容 |
+|---|---|---|
+| **4D判定** | `isDataVolumicIn4D:` (ViewerController.m:7271) | `isSeries4D(DicomSeries)` — 同一 width/height のフレームが **4枚以上連続** する series を 4D と判定（null 安全な Integer 比較） |
+| **Open in 4D** | `MovieViewerDICOM:` (13530行) | `movieViewerDICOM(sender)` — 選択行を `viewerDICOMInt(true, selected, null)` でアニメーション4Dビューワーとして開く |
+| **Reparse in 4D...** | `reparseIn4D:` (12576行) | `reparseIn4D(sender)` — 選択 series の 4D判定 → 成立時は `movieViewerDICOM`、非成立時は理由を案内 |
+| **Select all 4D Series** | `selectAll4DSeries:` (12581行) | `selectAll4DSeries(sender)` — アウトライン全行を走査し 4D series 行を ListSelectionModel で複数選択 |
+
+### UI配線
+- **DatabaseOutlineView 右クリックコンテキストメニュー**（`setComponentPopupMenu`）に「4Dで開く / 4Dとして再解析... / 全4Dシリーズを選択」を追加 — HOROS `initContextualMenus` (10850行) の "Open Images in 4D" / "Open Reparsed series" 相当
+- `BrowserController.add4DMenuToOutline()` — プログラム側からメニューを再注入するためのヘルパー
+- **プレビューパネル（ステータスバー）** に HOROS MainMenu.xib 3193-3213行目相当の **3D/4D ラジオボタン +「全4Dシリーズを開く」ボタン** を追加（状態は `Preview4DMode` pref に永続化、4Dモードは `movieViewerDICOM` で開く）
+
+### 技術的メモ
+- SwingX `JXTable` には `addSelectionInterval` が無い → `getSelectionModel().addSelectionInterval()` 経由（選択モードを一時 MULTI に切り替えて復元）
+- `DicomImage.getWidth()/getHeight()` は `Integer`（null 可能性）→ null 安全な int 比較
+
+### i18n
+- `menu_4d_*` / `4d.open.*` / `4d.reparse.*` / `4d.select.*` キー（en/ja 両方）を追加
+
+**コンパイル成功** ✅

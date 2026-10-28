@@ -106,6 +106,10 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: アニメーションタイマー
     private javax.swing.Timer animationTimer;
 
+    // P-G: プレビューパネルの 3D/4D モードボタン（HOROS MainMenu.xib 3193-3202行目相当）
+    private JRadioButton preview3DButton;
+    private JRadioButton preview4DButton;
+
     // HOROS-20240407準拠: IBOutlet PreviewView *imageView; (146行目)
     private PreviewView imageView;
 
@@ -183,6 +187,18 @@ public class BrowserController extends JFrame {
     private MainMenuBar.ViewType currentViewType = MainMenuBar.ViewType.STANDARD_2D;
     private javax.swing.JMenu viewer3DMenu; // 3D Viewerメニューへの参照（updateForViewType用）
     private javax.swing.JMenu convolutionMenu; // Convolution Filtersメニューへの参照（rebuild用）
+
+    // --- HOROS-20240407 Subtraction state ---
+    // subCtrlOnOff / subSharpen / subCtrlNewMask / subCtrlOffset / subCtrlSliders / subSumSlider
+    // 参照: HOROS ViewerController.m:9827 subCtrlOnOff:, 9875 subCtrlNewMask:,
+    //       9910 subCtrlOffset:, 10136 subCtrlSliders:, 10173 subSumSlider:, 10211 subSharpen:
+    private javax.swing.JCheckBoxMenuItem subCtrlOnOffItem; // Subtract (toggle)
+    private javax.swing.JCheckBoxMenuItem subSharpenItem; // Sharpen (toggle)
+    private int subCtrlMaskIndex = -1; // HOROS: subCtrlMaskID (0-based)
+    private int subCtrlOffsetX = 0; // HOROS: subCtrlOffset.x
+    private int subCtrlOffsetY = 0; // HOROS: subCtrlOffset.y
+    private int subCtrlSum = 1; // HOROS: subCtrlSum (1..10)
+    private boolean subCtrlSharpenOn = false;
 
     /**
      * HOROS-20240407準拠: ビュータイプに基づいてメニュー項目をグレーアウト/非表示にする
@@ -1142,13 +1158,54 @@ public class BrowserController extends JFrame {
         animationSlider = new JSlider(JSlider.HORIZONTAL, 0, 0, 0);
         animationSlider.setEnabled(false);
         // Playチェックボックスの左隣に配置（幅294pxのまま）
-        animationSlider.setBounds(611 - 60 - 294, 2, 294, 16);
+        // HOROS-20240407準拠: MainMenu.xib 3193-3213行目 - 3D/4D ラジオボタン + "Open all 4D Series" ボタン
+        // 配置: [ 3D ] [ 4D ] [ Open all 4D Series ] [ animationSlider 200px ] [ Play ]
+        final javax.swing.ButtonGroup modeGroup = new javax.swing.ButtonGroup();
+        preview3DButton = new JRadioButton("3D");
+        preview4DButton = new JRadioButton("4D");
+        java.awt.Font tinyFont = new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 9);
+        preview3DButton.setFont(tinyFont);
+        preview4DButton.setFont(tinyFont);
+        preview3DButton.setOpaque(false);
+        preview4DButton.setOpaque(false);
+        preview3DButton.setFocusPainted(false);
+        preview4DButton.setFocusPainted(false);
+        modeGroup.add(preview3DButton);
+        modeGroup.add(preview4DButton);
+        boolean want4D = java.util.prefs.Preferences.userNodeForPackage(BrowserController.class)
+                .getBoolean("Preview4DMode", false);
+        (want4D ? preview4DButton : preview3DButton).setSelected(true);
+        preview4DButton.addActionListener(e -> {
+            java.util.prefs.Preferences.userNodeForPackage(BrowserController.class).putBoolean("Preview4DMode", true);
+        });
+        preview3DButton.addActionListener(e -> {
+            java.util.prefs.Preferences.userNodeForPackage(BrowserController.class).putBoolean("Preview4DMode", false);
+        });
+
+        javax.swing.JButton open4DButton = new javax.swing.JButton(LanguageManager.get("menu_4d_open_all", "Open all 4D Series"));
+        open4DButton.setFont(tinyFont);
+        open4DButton.setOpaque(false);
+        open4DButton.setBorderPainted(false);
+        open4DButton.setFocusPainted(false);
+        open4DButton.addActionListener(e -> movieViewerDICOM(null));
+
+        // animationSliderは幅を縮め、3D/4Dボタン群の右に収める（200px）
+        animationSlider.setBounds(611 - 60 - 200, 2, 200, 16);
         animationSlider.addChangeListener(e -> {
             // HOROS-20240407準拠: スライダーの値が変更されたときにpreviewSliderActionを呼び出す
             // getValueIsAdjusting()のチェックを削除して、常にpreviewSliderActionを呼び出す
             previewSliderAction(animationSlider);
         });
         rightStatusPanel.add(animationSlider);
+
+        // ボタン群を animationSlider の左に配置（null layout で手動バインド）
+        // 配置 (右パネル幅611): 3D[151,30] 4D[185,30] Open-all-4D[219,128] slider[351,200] Play[551,60]
+        preview3DButton.setBounds(151, 2, 30, 18);
+        preview4DButton.setBounds(185, 2, 30, 18);
+        open4DButton.setBounds(219, 2, 128, 18);
+        rightStatusPanel.add(preview3DButton);
+        rightStatusPanel.add(preview4DButton);
+        rightStatusPanel.add(open4DButton);
 
         // HOROS-20240407準拠: BrowserController.m 13889行目
         // [NSTimer scheduledTimerWithTimeInterval: 0.15 target:self
@@ -3575,11 +3632,20 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (void)addAlbum: (id) sender (BrowserController.m)
      */
     public void addAlbum(Object sender) {
-        if (database != null) {
-            // 新しいアルバムを作成してデータベースに追加
-            // DicomAlbum album = new DicomAlbum("New Album");
-            // database.addAlbum(album);
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            infoFmt(LanguageManager.get("db.album.no_db", "No active database."),
+                    LanguageManager.get("db.album.add.title", "Add Album"));
+            return;
         }
+        String name = JOptionPane.showInputDialog(this,
+                LanguageManager.get("db.album.name", "Album name"), "New Album");
+        if (name == null || name.trim().isEmpty()) {
+            return;
+        }
+        db.addAlbum(new com.oculus.jj.model.DicomAlbum(name.trim()));
+        db.save();
+        infoFmt(name.trim(), LanguageManager.get("db.album.add.done", "Album added"));
     }
 
     /**
@@ -3587,11 +3653,23 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (void)addSmartAlbum: (id) sender (BrowserController.m)
      */
     public void addSmartAlbum(Object sender) {
-        if (database != null) {
-            // 新しいスマートアルバムを作成してデータベースに追加
-            // DicomAlbum album = new DicomAlbum("New Smart Album", "predicate");
-            // database.addAlbum(album);
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            infoFmt(LanguageManager.get("db.album.no_db", "No active database."),
+                    LanguageManager.get("db.album.smart.title", "Add Smart Album"));
+            return;
         }
+        String name = JOptionPane.showInputDialog(this,
+                LanguageManager.get("db.album.name", "Album name"), "Smart Album");
+        if (name == null || name.trim().isEmpty()) {
+            return;
+        }
+        String predicate = JOptionPane.showInputDialog(this,
+                LanguageManager.get("db.album.predicate", "Filter predicate"), "modality == 'CT'");
+        if (predicate == null) predicate = "";
+        db.addAlbum(new com.oculus.jj.model.DicomAlbum(name.trim(), predicate));
+        db.save();
+        infoFmt(name.trim(), LanguageManager.get("db.album.smart.done", "Smart album added"));
     }
 
     /**
@@ -3599,8 +3677,23 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (void)removeAlbum: (id) album (BrowserController.m)
      */
     public void removeAlbum(Object album) {
-        if (database != null) {
-            // database.removeAlbum(album);
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null || album == null) {
+            infoFmt(LanguageManager.get("db.album.no_db", "No active database."),
+                    LanguageManager.get("db.album.remove.title", "Delete Album"));
+            return;
+        }
+        com.oculus.jj.model.DicomAlbum target = (album instanceof com.oculus.jj.model.DicomAlbum)
+                ? (com.oculus.jj.model.DicomAlbum) album : null;
+        if (target == null) {
+            infoFmt(LanguageManager.get("db.album.remove.invalid", "Invalid album reference"),
+                    LanguageManager.get("db.album.remove.title", "Delete Album"));
+            return;
+        }
+        java.util.List<com.oculus.jj.model.DicomAlbum> albums = db.getAlbums();
+        if (albums != null && albums.remove(target)) {
+            db.save();
+            infoFmt(target.getName(), LanguageManager.get("db.album.remove.done", "Album deleted"));
         }
     }
 
@@ -5766,6 +5859,186 @@ public class BrowserController extends JFrame {
         }
     }
 
+    // ========== P-G: 4D シリーズ（Movie / Reparse / Select All 4D） ==========
+    // HOROS-20240407準拠: BrowserController.m 12576/12581/13530行目
+
+    /**
+     * シリーズが4D（アニメーション可能な複数3D体積）かどうかを判定
+     * HOROS-20240407準拠: - (BOOL) isDataVolumicIn4D:checkEverythingLoaded: (7271行目)
+     * <p>
+     * HOROSの判定の中核（簡略化版）:
+     * <ol>
+     * <li>同一width/heightのフレームが4枚以上連続する → 4D 3D体積</li>
+     * <li>複数体積がseries内にある → 4Dシシリーズ</li>
+     * </ol>
+     * 実装: 連続width/height groupを収集し、最大 group size が 4 以上でtrue.
+     */
+    public boolean isSeries4D(com.oculus.jj.model.DicomSeries series) {
+        if (series == null) return false;
+        try {
+            List<com.oculus.jj.model.DicomImage> imgs = series.sortedImages();
+            if (imgs == null || imgs.size() < 4) return false;
+            int bestRun = 0, run = 1;
+            int prevW = -1, prevH = -1;
+            for (int i = 0; i < imgs.size(); i++) {
+                com.oculus.jj.model.DicomImage img = imgs.get(i);
+                Integer wi = img.getWidth();
+                Integer hi = img.getHeight();
+                int w = (wi != null) ? wi : -1;
+                int h = (hi != null) ? hi : -1;
+                if (i > 0 && w == prevW && h == prevH) {
+                    run++;
+                } else {
+                    run = 1;
+                }
+                if (run > bestRun) bestRun = run;
+                prevW = w; prevH = h;
+            }
+            return bestRun >= 4;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 選択されたイメージを4Dアニメーションとしてビューワーで開く
+     * HOROS-20240407準拠: - (void) MovieViewerDICOM: (id) sender (13530行目)
+     * [self viewerDICOMInt:YES dcmFile: selectedItems viewer:nil]
+     */
+    public void movieViewerDICOM(Object sender) {
+        List<Object> selected = databaseSelection();
+        if (selected.isEmpty()) {
+            infoFmt(LanguageManager.get("4d.open.none", "No series selected."),
+                    LanguageManager.get("4d.open.title", "Open in 4D"));
+            return;
+        }
+        try {
+            dontUpdatePreviewPane = true;
+            viewerDICOMInt(true, selected, null);
+            dontUpdatePreviewPane = false;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    /**
+     * 4Dシリーズとして再解析（連続同じwidth/heightの複数3D体積を4Dシリーズとして扱う）
+     * HOROS-20240407準拠: - (IBAction) reparseIn4D: (id) sender (12576行目)
+     * HOROSでは [NSApp stopModalWithCode: 11] を返し、open dialogが4D解析モードで続行される。
+     * Java版: 選択行を4Dとして開く（movieViewerDICOMに委譲）。
+     */
+    public void reparseIn4D(Object sender) {
+        List<Object> selected = databaseSelection();
+        if (selected.isEmpty()) {
+            infoFmt(LanguageManager.get("4d.reparse.none", "No series selected."),
+                    LanguageManager.get("4d.reparse.title", "Reparse in 4D"));
+            return;
+        }
+        // HOROSの挙動: 選択中の行を4Dシリーズとして再解析して開く
+        // OculusJJでは、同じwidth/heightの連続グループを検出し、movieViewerDICOMで開く
+        boolean any4D = false;
+        for (Object o : selected) {
+            if (o instanceof com.oculus.jj.model.DicomSeries) {
+                if (isSeries4D((com.oculus.jj.model.DicomSeries) o)) {
+                    any4D = true;
+                    break;
+                }
+            }
+        }
+        if (any4D) {
+            movieViewerDICOM(sender);
+        } else {
+            infoFmt(LanguageManager.get("4d.reparse.not_4d",
+                    "The selected series does not look like a 4D series (needs 4+ consecutive frames with identical width/height)."),
+                    LanguageManager.get("4d.reparse.title", "Reparse in 4D"));
+        }
+    }
+
+    /**
+     * 全4Dシリーズを選択する
+     * HOROS-20240407準拠: - (IBAction) selectAll4DSeries: (id) sender (12581行目)
+     * HOROSでは [subOpenMatrix4D isEnabled] 時 [NSApp stopModalWithCode: 7]
+     * Java版: アウトライン内で 4D 判定が成立するシリーズ行をすべて選択
+     */
+    public void selectAll4DSeries(Object sender) {
+        if (databaseOutline == null) {
+            infoFmt(LanguageManager.get("4d.select.none", "No outline view to select from."),
+                    LanguageManager.get("4d.select.title", "Select all 4D Series"));
+            return;
+        }
+        List<Integer> targetRows = new ArrayList<>();
+        int rowCount = databaseOutline.getRowCount();
+        for (int i = 0; i < rowCount; i++) {
+            try {
+                javax.swing.tree.TreePath path = databaseOutline.getPathForRow(i);
+                if (path == null) continue;
+                Object last = path.getLastPathComponent();
+                if (last instanceof com.oculus.jj.model.DicomSeries) {
+                    if (isSeries4D((com.oculus.jj.model.DicomSeries) last)) {
+                        targetRows.add(i);
+                    }
+                }
+            } catch (Exception e) { /* continue */ }
+        }
+        if (targetRows.isEmpty()) {
+            infoFmt(LanguageManager.get("4d.select.none_found",
+                    "No 4D series found in the current outline."),
+                    LanguageManager.get("4d.select.title", "Select all 4D Series"));
+            return;
+        }
+        // 複数行選択を有効にして、該当行すべてを選択
+        javax.swing.ListSelectionModel selModel = databaseOutline.getSelectionModel();
+        try {
+            selModel.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+            selModel.clearSelection();
+            for (Integer r : targetRows) {
+                selModel.addSelectionInterval(r, r);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        } finally {
+            // 元の選択モードに戻す
+            selModel.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+        }
+        String doneMsg = LanguageManager.get("4d.select.done", "Selected %d 4D series.");
+        doneMsg = doneMsg.replace("%d", String.valueOf(targetRows.size()));
+        infoFmt(doneMsg, LanguageManager.get("4d.select.title", "Select all 4D Series"));
+    }
+
+    /**
+     * databaseOutline に4Dメニュー項目を追加（Open in 4D / Reparse in 4D / Select all 4D Series）
+     * HOROS-20240407準拠: initContextualMenus (10850行目) の "Open Images in 4D" / "Open Reparsed series"
+     */
+    public void add4DMenuToOutline() {
+        if (databaseOutline == null) return;
+        javax.swing.JPopupMenu popup = databaseOutline.getComponentPopupMenu();
+        if (popup == null) {
+            popup = new javax.swing.JPopupMenu();
+            databaseOutline.setComponentPopupMenu(popup);
+        } else if (popup.getComponentCount() > 0) {
+            // 既に追加済みならスキップ（キーで確認）
+            for (int i = 0; i < popup.getComponentCount(); i++) {
+                if (popup.getComponent(i) instanceof javax.swing.JMenuItem
+                        && "menu_4d_open".equals(((javax.swing.JMenuItem) popup.getComponent(i)).getClientProperty("key"))) {
+                    return;
+                }
+            }
+        }
+        javax.swing.JMenuItem open4D = new javax.swing.JMenuItem(LanguageManager.get("menu_4d_open", "Open in 4D"));
+        open4D.putClientProperty("key", "menu_4d_open");
+        open4D.addActionListener(e -> movieViewerDICOM(null));
+        javax.swing.JMenuItem reparse4D = new javax.swing.JMenuItem(LanguageManager.get("menu_4d_reparse", "Reparse in 4D..."));
+        reparse4D.putClientProperty("key", "menu_4d_reparse");
+        reparse4D.addActionListener(e -> reparseIn4D(null));
+        javax.swing.JMenuItem selectAll4D = new javax.swing.JMenuItem(LanguageManager.get("menu_4d_select_all", "Select all 4D Series"));
+        selectAll4D.putClientProperty("key", "menu_4d_select_all");
+        selectAll4D.addActionListener(e -> selectAll4DSeries(null));
+        popup.addSeparator();
+        popup.add(open4D);
+        popup.add(reparse4D);
+        popup.add(selectAll4D);
+    }
+
     /**
      * ビューワーを開く
      * HOROS-20240407準拠: - (void) viewerDICOM: (id)sender (13372行目)
@@ -6731,10 +7004,10 @@ public class BrowserController extends JFrame {
         albumsMenu.addSeparator();
 
         // Create default albums...
-        // HOROS-20240407準拠: MainMenu.xib 141行目
+        // HOROS-20240407準拠: MainMenu.xib 141行目 / BrowserController.m:1379 defaultAlbums:
+        // [self.database addDefaultAlbums] → albumsInDatabase → refreshAlbums
         javax.swing.JMenuItem defaultAlbumsItem = new javax.swing.JMenuItem(LanguageManager.get("menu_file_default_albums", "Create default albums..."));
-        defaultAlbumsItem.addActionListener(e -> {
-        });
+        defaultAlbumsItem.addActionListener(e -> createDefaultAlbums());
         albumsMenu.add(defaultAlbumsItem);
 
         fileMenu.add(albumsMenu);
@@ -6966,11 +7239,10 @@ public class BrowserController extends JFrame {
         fileMenu.add(rebuildDatabaseItem);
 
         // Rebuild SQL Index File...
-        // HOROS-20240407準拠: MainMenu.xib 347行目
+        // HOROS-20240407準拠: MainMenu.xib 347行目 / BrowserController.m:2530 rebuildSQLFile:
         javax.swing.JMenuItem rebuildSQLItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("file_rebuild_sql"));
-        rebuildSQLItem.addActionListener(e -> {
-        });
+        rebuildSQLItem.addActionListener(e -> rebuildSQLIndexFile());
         fileMenu.add(rebuildSQLItem);
 
         // Rebuild Selected Thumbnails
@@ -6998,8 +7270,7 @@ public class BrowserController extends JFrame {
                 MenuResourceLoader.getString("menu_file_page_setup"));
         pageSetupItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_P,
                 java.awt.event.InputEvent.SHIFT_DOWN_MASK));
-        pageSetupItem.addActionListener(e -> {
-        });
+        pageSetupItem.addActionListener(e -> showPageSetup());
         fileMenu.add(pageSetupItem);
 
         // Print...
@@ -7717,6 +7988,98 @@ public class BrowserController extends JFrame {
 
         viewer2DMenu.addSeparator();
 
+        // ========== Subtractionメニュー ==========
+        // HOROS-20240407準拠: MainMenu.xib 951行目 (Subtraction サブメニュー全体)
+        // subCtrlOnOff / subCtrlNewMask / subSharpen / subCtrlOffset(8方向) /
+        // subCtrlSliders(Contrast・Brightness) / subSumSlider
+        javax.swing.JMenu subtractionMenu = new javax.swing.JMenu(LanguageManager.get("menu_subtraction", "Subtraction"));
+
+        // Subtract (toggle)
+        subCtrlOnOffItem = new javax.swing.JCheckBoxMenuItem(LanguageManager.get("menu_subtraction_subtract", "Subtract"));
+        subCtrlOnOffItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_SLASH,
+                java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        subCtrlOnOffItem.addActionListener(e -> subCtrlOnOff(0));
+        subtractionMenu.add(subCtrlOnOffItem);
+
+        // New Mask
+        javax.swing.JMenuItem newMaskItem = new javax.swing.JMenuItem(LanguageManager.get("menu_subtraction_new_mask", "New Mask"));
+        newMaskItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ASTERISK,
+                java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        newMaskItem.addActionListener(e -> subCtrlNewMask(null));
+        subtractionMenu.add(newMaskItem);
+
+        // Sharpen (toggle)
+        subSharpenItem = new javax.swing.JCheckBoxMenuItem(LanguageManager.get("menu_subtraction_sharpen", "Sharpen"));
+        subSharpenItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_0,
+                java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        subSharpenItem.addActionListener(e -> subSharpen(30));
+        subtractionMenu.add(subSharpenItem);
+
+        subtractionMenu.addSeparator();
+
+        // Pixel Shift 8方向 (HOROS: subCtrlOffset: tag 1..9)
+        String[] shiftLabels = {
+                LanguageManager.get("menu_subtraction_shift_ne", "Pixel Shift NE"),
+                LanguageManager.get("menu_subtraction_shift_n", "Pixel Shift N"),
+                LanguageManager.get("menu_subtraction_shift_nw", "Pixel Shift NW"),
+                LanguageManager.get("menu_subtraction_shift_w", "Pixel Shift W"),
+                LanguageManager.get("menu_subtraction_shift_none", "No Pixel Shift"),
+                LanguageManager.get("menu_subtraction_shift_e", "Pixel Shift E"),
+                LanguageManager.get("menu_subtraction_shift_sw", "Pixel Shift SW"),
+                LanguageManager.get("menu_subtraction_shift_s", "Pixel Shift S"),
+                LanguageManager.get("menu_subtraction_shift_se", "Pixel Shift SE"),
+        };
+        int[] shiftTags = { 7, 8, 9, 4, 5, 6, 1, 2, 3 };
+        String[] shiftKeys = { "9", "8", "7", "4", "5", "6", "1", "2", "3" };
+        for (int i = 0; i < shiftLabels.length; i++) {
+            javax.swing.JMenuItem si = new javax.swing.JMenuItem(shiftLabels[i]);
+            si.setAccelerator(javax.swing.KeyStroke.getKeyStroke(shiftKeys[i].charAt(0),
+                    java.awt.event.InputEvent.CTRL_DOWN_MASK));
+            final int tag = shiftTags[i]; si.addActionListener(e -> subCtrlOffset(tag));
+            subtractionMenu.add(si);
+        }
+
+        subtractionMenu.addSeparator();
+
+        // Contrast / Brightness (HOROS: subCtrlSliders: tag 34-39)
+        String[] sliderLabels = {
+                LanguageManager.get("menu_subtraction_contrast_down", "Contrast Down"),
+                LanguageManager.get("menu_subtraction_contrast_default", "Contrast Default"),
+                LanguageManager.get("menu_subtraction_contrast_up", "Contrast Up"),
+                LanguageManager.get("menu_subtraction_brightness_down", "Brightness Down"),
+                LanguageManager.get("menu_subtraction_brightness_default", "Brightness Default"),
+                LanguageManager.get("menu_subtraction_brightness_up", "Brightness Up"),
+        };
+        int[] sliderTags = { 37, 38, 39, 34, 35, 36 };
+        String[] sliderKeys = { "7", "8", "9", "4", "5", "6" };
+        for (int i = 0; i < sliderLabels.length; i++) {
+            javax.swing.JMenuItem si = new javax.swing.JMenuItem(sliderLabels[i]);
+            si.setAccelerator(javax.swing.KeyStroke.getKeyStroke(sliderKeys[i].charAt(0),
+                    java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.META_DOWN_MASK));
+            final int tag = sliderTags[i]; si.addActionListener(e -> subCtrlSliders(tag));
+            subtractionMenu.add(si);
+        }
+
+        // Sum (HOROS: subSumSlider: tag 31-33)
+        String[] sumLabels = {
+                LanguageManager.get("menu_subtraction_sum_less", "Sum Less"),
+                LanguageManager.get("menu_subtraction_sum_none", "No Sum"),
+                LanguageManager.get("menu_subtraction_sum_more", "Sum More"),
+        };
+        int[] sumTags = { 31, 32, 33 };
+        String[] sumKeys = { "1", "2", "3" };
+        for (int i = 0; i < sumLabels.length; i++) {
+            javax.swing.JMenuItem si = new javax.swing.JMenuItem(sumLabels[i]);
+            si.setAccelerator(javax.swing.KeyStroke.getKeyStroke(sumKeys[i].charAt(0),
+                    java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.META_DOWN_MASK));
+            final int tag = sumTags[i]; si.addActionListener(e -> subSumSlider(tag));
+            subtractionMenu.add(si);
+        }
+
+        viewer2DMenu.add(subtractionMenu);
+
+        viewer2DMenu.addSeparator();
+
         // Propagate Settings Between Series
         // HOROS-20240407準拠: MainMenu.xib 821行目
         javax.swing.JCheckBoxMenuItem propagateSettingsItem = new javax.swing.JCheckBoxMenuItem(
@@ -7895,32 +8258,24 @@ public class BrowserController extends JFrame {
         menuBar.add(viewer2DMenu);
 
         // ========== 3D Viewerメニュー ==========
-        // HOROS-20240407準拠: MainMenu.xib 1371行目
+        // HOROS-20240407準拠: MainMenu.xib の 3D Viewer メニュー構成に完全に準拠
+        // グループ: MPR系 / 描画系(MIP・VR・SR・Endo) / 操作(Reset・Revert) /
+        //          方向ビュー / FlyThru / Curved Path / Scissor / 3Dプリセット
+        // 各グループ間はセパレータで区切り、項目の並び・位置を統一する
         viewer3DMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu_viewer_3d"));
 
-        // 3D MPR
+        // --- Group 1: MPR系 ---
         // HOROS-20240407準拠: MainMenu.xib 1374行目
         javax.swing.JMenuItem mprViewerItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_viewer_3d_mpr"));
         mprViewerItem.addActionListener(e -> mprViewer(null));
         viewer3DMenu.add(mprViewerItem);
 
-        // 3D Curved-MPR
         // HOROS-20240407準拠: MainMenu.xib 1379行目
         javax.swing.JMenuItem cprViewerItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_viewer_3d_curved_mpr"));
         cprViewerItem.addActionListener(e -> cprViewer(null));
         viewer3DMenu.add(cprViewerItem);
-
-        // 3D MIP
-        javax.swing.JMenuItem mipViewerItem = new javax.swing.JMenuItem("3D MIP");
-        mipViewerItem.addActionListener(e -> MIPViewer(null));
-        viewer3DMenu.add(mipViewerItem);
-
-        // 3D Volume Rendering
-        javax.swing.JMenuItem vrViewerItem = new javax.swing.JMenuItem("3D Volume Rendering");
-        vrViewerItem.addActionListener(e -> VRViewer(null));
-        viewer3DMenu.add(vrViewerItem);
 
         // 2D Orthogonal MPR
         // HOROS-20240407準拠: MainMenu.xib 1384行目
@@ -7931,15 +8286,32 @@ public class BrowserController extends JFrame {
 
         viewer3DMenu.addSeparator();
 
+        // --- Group 2: 3D描画系ビューア ---
+        javax.swing.JMenuItem mipViewerItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_mip", "3D MIP"));
+        mipViewerItem.addActionListener(e -> MIPViewer(null));
+        viewer3DMenu.add(mipViewerItem);
+
+        javax.swing.JMenuItem vrViewerItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_volume_rendering", "3D Volume Rendering"));
+        vrViewerItem.addActionListener(e -> VRViewer(null));
+        viewer3DMenu.add(vrViewerItem);
+
         // HOROS-20240407準拠: 3D Surface Rendering (MainMenu.xib 1402行目)
         javax.swing.JMenuItem surfaceRenderingItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_viewer_3d_surface_rendering"));
         surfaceRenderingItem.addActionListener(e -> SRViewer(null));
         viewer3DMenu.add(surfaceRenderingItem);
 
+        // 3D Endoscopy
+        javax.swing.JMenuItem endoscopyItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_endoscopy", "3D Endoscopy"));
+        endoscopyItem.addActionListener(e -> endoscopyViewer(null));
+        viewer3DMenu.add(endoscopyItem);
+
         viewer3DMenu.addSeparator();
 
-        // Reset to Initial View
+        // --- Group 3: 操作 (Reset / Revert) ---
         // HOROS-20240407準拠: MainMenu.xib 1415行目
         javax.swing.JMenuItem reset3DItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_viewer_3d_reset_view"));
@@ -7947,7 +8319,6 @@ public class BrowserController extends JFrame {
         reset3DItem.addActionListener(e -> resetImage(null));
         viewer3DMenu.add(reset3DItem);
 
-        // Revert Series
         // HOROS-20240407準拠: MainMenu.xib 1420行目
         javax.swing.JMenuItem revert3DItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_viewer_3d_revert_series"));
@@ -7956,7 +8327,94 @@ public class BrowserController extends JFrame {
         revert3DItem.addActionListener(e -> revertSeries(null));
         viewer3DMenu.add(revert3DItem);
 
-        // 注: 3D Viewerメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
+        viewer3DMenu.addSeparator();
+
+        // --- Group 4: 方向ビュー ---
+        // HOROS-20240407準拠: coView:/saView:/saViewOpposite:/axView:
+        javax.swing.JMenuItem coronalItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_coronal", "Coronal View"));
+        coronalItem.addActionListener(e -> openOrientationView(Viewer3DController.OrientationView.CORONAL));
+        viewer3DMenu.add(coronalItem);
+
+        javax.swing.JMenuItem leftSagittalItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_left_sagittal", "Left Sagittal View"));
+        leftSagittalItem.addActionListener(e -> openOrientationView(Viewer3DController.OrientationView.LEFT_SAGITTAL));
+        viewer3DMenu.add(leftSagittalItem);
+
+        javax.swing.JMenuItem rightSagittalItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_right_sagittal", "Right Sagittal View"));
+        rightSagittalItem.addActionListener(e -> openOrientationView(Viewer3DController.OrientationView.RIGHT_SAGITTAL));
+        viewer3DMenu.add(rightSagittalItem);
+
+        javax.swing.JMenuItem axialItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_axial", "Axial View"));
+        axialItem.addActionListener(e -> openOrientationView(Viewer3DController.OrientationView.AXIAL));
+        viewer3DMenu.add(axialItem);
+
+        viewer3DMenu.addSeparator();
+
+        // --- Group 5: FlyThru (HOROS: flyThruButtonMenu:) ---
+        javax.swing.JMenuItem flyThruAddItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_flythru_add", "Add FlyThru Point"));
+        flyThruAddItem.addActionListener(e -> flyThruButtonMenu(0));
+        viewer3DMenu.add(flyThruAddItem);
+
+        javax.swing.JMenuItem flyThruRemoveItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_flythru_remove", "Remove FlyThru Point"));
+        flyThruRemoveItem.addActionListener(e -> flyThruButtonMenu(1));
+        viewer3DMenu.add(flyThruRemoveItem);
+
+        javax.swing.JMenuItem flyThruResetItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_flythru_reset", "Reset FlyThru Path"));
+        flyThruResetItem.addActionListener(e -> flyThruButtonMenu(2));
+        viewer3DMenu.add(flyThruResetItem);
+
+        viewer3DMenu.addSeparator();
+
+        // --- Group 6: 3D Curved Path サブメニュー ---
+        javax.swing.JMenu curvedPathMenu = new javax.swing.JMenu(
+                LanguageManager.get("menu_viewer_3d_curved_path", "3D Curved Path"));
+        javax.swing.JMenuItem curvedPathLoad = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_curved_path_load", "Load from file..."));
+        curvedPathLoad.addActionListener(e -> loadBezierPath(null));
+        curvedPathMenu.add(curvedPathLoad);
+        javax.swing.JMenuItem curvedPathSave = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_curved_path_save", "Save to file..."));
+        curvedPathSave.addActionListener(e -> saveBezierPath(null));
+        curvedPathMenu.add(curvedPathSave);
+        viewer3DMenu.add(curvedPathMenu);
+
+        viewer3DMenu.addSeparator();
+
+        // --- Group 7: Scissor Editing サブメニュー ---
+        javax.swing.JMenu scissorMenu = new javax.swing.JMenu(
+                LanguageManager.get("menu_viewer_3d_scissor", "Scissor Editing"));
+        javax.swing.JMenuItem scissorSave = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_scissor_save", "Save"));
+        scissorSave.addActionListener(e -> scissorStateButtons(0));
+        scissorMenu.add(scissorSave);
+        javax.swing.JMenuItem scissorLoad = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_scissor_load", "Load"));
+        scissorLoad.addActionListener(e -> scissorStateButtons(1));
+        scissorMenu.add(scissorLoad);
+        javax.swing.JMenuItem scissorDelete = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_scissor_delete", "Delete"));
+        scissorDelete.addActionListener(e -> scissorStateButtons(2));
+        scissorMenu.add(scissorDelete);
+        viewer3DMenu.add(scissorMenu);
+
+        viewer3DMenu.addSeparator();
+
+        // --- Group 8: 3Dプリセット (HOROS: load3DSettings:/save3DSettings:) ---
+        javax.swing.JMenuItem presetSelectItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_preset_select", "Select 3D Preset..."));
+        presetSelectItem.addActionListener(e -> load3DSettings(null));
+        viewer3DMenu.add(presetSelectItem);
+
+        javax.swing.JMenuItem presetSaveItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_viewer_3d_preset_save", "Save Current State as 3D Preset..."));
+        presetSaveItem.addActionListener(e -> save3DSettings(null));
+        viewer3DMenu.add(presetSaveItem);
 
         menuBar.add(viewer3DMenu);
 
@@ -8016,7 +8474,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 1578行目
         javax.swing.JMenuItem deselectAllROIItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_roi_deselect_all"));
-        deselectAllROIItem.addActionListener(e -> roiSelectDeselectAll(null));
+        deselectAllROIItem.addActionListener(e -> roiSelectDeselectAll("deselect"));
         roiMenu.add(deselectAllROIItem);
 
         roiMenu.addSeparator();
@@ -8049,7 +8507,208 @@ public class BrowserController extends JFrame {
         roiDefaultsItem.addActionListener(e -> roiDefaults(null));
         roiMenu.add(roiDefaultsItem);
 
-        // 注: ROIメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
+        roiMenu.addSeparator();
+
+        // --- Display options (HOROS: updateViews:) ---
+        javax.swing.JCheckBoxMenuItem roiInfoOnlyItem = new javax.swing.JCheckBoxMenuItem(
+                LanguageManager.get("menu_roi_display_info_only", "Display Info Only when ROI Selected"));
+        roiInfoOnlyItem.setSelected(com.oculus.jj.config.AppPreferences.isRoiInfoOnlyWhenSelected());
+        roiInfoOnlyItem.addActionListener(e -> updateViews(0));
+        roiMenu.add(roiInfoOnlyItem);
+
+        javax.swing.JCheckBoxMenuItem roiMouseOverItem = new javax.swing.JCheckBoxMenuItem(
+                LanguageManager.get("menu_roi_display_mouseover", "Display Info when mouse is over"));
+        roiMouseOverItem.addActionListener(e -> updateViews(1));
+        roiMenu.add(roiMouseOverItem);
+
+        javax.swing.JCheckBoxMenuItem roiNameOnlyItem = new javax.swing.JCheckBoxMenuItem(
+                LanguageManager.get("menu_roi_display_name_only", "Display Name Only"));
+        roiNameOnlyItem.addActionListener(e -> updateViews(2));
+        roiMenu.add(roiNameOnlyItem);
+
+        javax.swing.JCheckBoxMenuItem roiCobbItem = new javax.swing.JCheckBoxMenuItem(
+                LanguageManager.get("menu_roi_display_cobb", "Display Cobb angle"));
+        roiCobbItem.addActionListener(e -> updateViews(3));
+        roiMenu.add(roiCobbItem);
+
+        roiMenu.addSeparator();
+
+        // --- Thickness / Font ---
+        javax.swing.JMenuItem incThickItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_increase_thickness", "Increase Thickness"));
+        incThickItem.addActionListener(e -> increaseThickness(null));
+        roiMenu.add(incThickItem);
+
+        javax.swing.JMenuItem decThickItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_decrease_thickness", "Decrease Thickness"));
+        decThickItem.addActionListener(e -> decreaseThickness(null));
+        roiMenu.add(decThickItem);
+
+        javax.swing.JMenuItem incFontItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_increase_font", "Increase Font Size"));
+        incFontItem.addActionListener(e -> increaseFontSize(null));
+        roiMenu.add(incFontItem);
+
+        javax.swing.JMenuItem decFontItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_decrease_font", "Decrease Font Size"));
+        decFontItem.addActionListener(e -> decreaseFontSize(null));
+        roiMenu.add(decFontItem);
+
+        roiMenu.addSeparator();
+
+        // --- Flip ---
+        javax.swing.JMenuItem flipHItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_flip_horizontal", "Flip Horizontally"));
+        flipHItem.addActionListener(e -> flipROIHorizontally(null));
+        roiMenu.add(flipHItem);
+
+        javax.swing.JMenuItem flipVItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_flip_vertical", "Flip Vertically"));
+        flipVItem.addActionListener(e -> flipROIVertically(null));
+        roiMenu.add(flipVItem);
+
+        roiMenu.addSeparator();
+
+        // --- Statistics / Layer / Volume ---
+        javax.swing.JMenuItem roiHistItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_histogram", "Histogram of Selected ROI..."));
+        roiHistItem.addActionListener(e -> roiHistogram(null));
+        roiMenu.add(roiHistItem);
+
+        javax.swing.JMenuItem roiLayerItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_create_layer", "Create Layer from Selected ROI"));
+        roiLayerItem.addActionListener(e -> createLayerROIFromSelectedROI(null));
+        roiMenu.add(roiLayerItem);
+
+        javax.swing.JMenuItem roiVolumeItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_volume", "ROI Volume"));
+        roiVolumeItem.addActionListener(e -> roiVolume(null));
+        roiMenu.add(roiVolumeItem);
+
+        roiMenu.addSeparator();
+
+        // --- Generate / Delete Generated ---
+        javax.swing.JMenuItem roiGenItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_generate_missing", "Generate Missing ROIs"));
+        roiGenItem.addActionListener(e -> roiVolume(1));
+        roiMenu.add(roiGenItem);
+
+        javax.swing.JMenuItem roiDelGenItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_delete_generated", "Delete Generated ROIs"));
+        roiDelGenItem.addActionListener(e -> roiDeleteGeneratedROIs(null));
+        roiMenu.add(roiDelGenItem);
+
+        roiMenu.addSeparator();
+
+        // --- Erase / Restore Content ---
+        javax.swing.JMenuItem roiEraseItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_erase_content", "Erase Content"));
+        roiEraseItem.addActionListener(e -> roiVolumeEraseRestore(1));
+        roiMenu.add(roiEraseItem);
+
+        javax.swing.JMenuItem roiRestoreItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_restore_content", "Restore Content"));
+        roiRestoreItem.addActionListener(e -> roiVolumeEraseRestore(2));
+        roiMenu.add(roiRestoreItem);
+
+        roiMenu.addSeparator();
+
+        // --- Propagate ---
+        javax.swing.JMenuItem roiPropItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_propagate", "Propagate Selected ROI..."));
+        roiPropItem.addActionListener(e -> roiPropagateSetup(null));
+        roiMenu.add(roiPropItem);
+
+        javax.swing.JMenuItem roiPropSlabItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_propagate_slab", "Propagate Selected ROI to Current Thick Slab"));
+        roiPropSlabItem.addActionListener(e -> roiPropagateSlab(null));
+        roiMenu.add(roiPropSlabItem);
+
+        roiMenu.addSeparator();
+
+        // --- Group / UNGROUP ---
+        javax.swing.JMenuItem roiGroupItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_group", "Group Selected ROIs"));
+        roiGroupItem.addActionListener(e -> groupSelectedROIs(null));
+        roiMenu.add(roiGroupItem);
+
+        javax.swing.JMenuItem roiUngroupItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_ungroup", "Ungroup Selected ROIs"));
+        roiUngroupItem.addActionListener(e -> ungroupSelectedROIs(null));
+        roiMenu.add(roiUngroupItem);
+
+        roiMenu.addSeparator();
+
+        // --- Lock / Unlock ---
+        javax.swing.JMenuItem roiLockItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_lock", "Lock Selected ROIs"));
+        roiLockItem.addActionListener(e -> lockSelectedROIs(null));
+        roiMenu.add(roiLockItem);
+
+        javax.swing.JMenuItem roiUnlockItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_unlock", "Unlock Selected ROIs"));
+        roiUnlockItem.addActionListener(e -> unlockSelectedROIs(null));
+        roiMenu.add(roiUnlockItem);
+
+        roiMenu.addSeparator();
+
+        // --- Make unselectable / Selectable ---
+        javax.swing.JMenuItem roiUnselItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_unselectable", "Make Selected ROIs Unselectable"));
+        roiUnselItem.addActionListener(e -> makeSelectedROIsUnselectable(null));
+        roiMenu.add(roiUnselItem);
+
+        javax.swing.JMenuItem roiSelItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_make_selectable", "Make All ROIs Selectable"));
+        roiSelItem.addActionListener(e -> makeAllROIsSelectable(null));
+        roiMenu.add(roiSelItem);
+
+        roiMenu.addSeparator();
+
+        // --- Set Pixel Values / Grow Region / Brush ROIs ---
+        javax.swing.JMenuItem roiSetPixItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_set_pixel_values", "Set Pixel Values to..."));
+        roiSetPixItem.addActionListener(e -> roiSetPixelsSetup(null));
+        roiMenu.add(roiSetPixItem);
+
+        javax.swing.JMenuItem roiGrowItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_grow_region", "Grow Region (2D/3D Segmentation)..."));
+        roiGrowItem.addActionListener(e -> segmentationTest(null));
+        roiMenu.add(roiGrowItem);
+
+        javax.swing.JMenuItem roiBrushItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_brush", "Brush ROIs"));
+        roiBrushItem.addActionListener(e -> applyConvolutionOnSource(0));
+        roiMenu.add(roiBrushItem);
+
+        // --- Morphological brush ops (HOROS: morphoSelectedBrushROI:) ---
+        javax.swing.JMenuItem roiDilateItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_morpho_dilate", "Dilatation"));
+        roiDilateItem.addActionListener(e -> morphoSelectedBrushROI(1));
+        roiMenu.add(roiDilateItem);
+
+        javax.swing.JMenuItem roiCloseItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_morpho_close", "Closing"));
+        roiCloseItem.addActionListener(e -> morphoSelectedBrushROI(2));
+        roiMenu.add(roiCloseItem);
+
+        javax.swing.JMenuItem roiOpenItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_morpho_open", "Opening"));
+        roiOpenItem.addActionListener(e -> morphoSelectedBrushROI(3));
+        roiMenu.add(roiOpenItem);
+
+        roiMenu.addSeparator();
+
+        // --- Convert / Merge brush ---
+        javax.swing.JMenuItem roiConvertItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_convert_brush_polygon", "Convert Between Polygon / Brush ROIs"));
+        roiConvertItem.addActionListener(e -> convertBrushPolygon(null));
+        roiMenu.add(roiConvertItem);
+
+        javax.swing.JMenuItem roiMergeItem = new javax.swing.JMenuItem(
+                LanguageManager.get("menu_roi_merge_brush", "Merge Selected Brush ROIs"));
+        roiMergeItem.addActionListener(e -> mergeBrushROI(null));
+        roiMenu.add(roiMergeItem);
 
         menuBar.add(roiMenu);
 
@@ -8111,15 +8770,14 @@ public class BrowserController extends JFrame {
 
         // Resize Window サブメニュー
         // HOROS-20240407準拠: MainMenu.xib 1897行目
+        // HOROS: DCMView.m:13321 - resizeWindow: tag 0..5 → resizeWindowToScale:
+        // 25%/50%/100%/200%/300%: 画像ズーム倍率 / iPod Video: 320pxを基準に画像をフィット
         javax.swing.JMenu resizeWindowMenu = new javax.swing.JMenu(MenuResourceLoader.getString("menu_window_resize"));
-        String[] resizePercentages = { "25%", "50%", "100%", "200%", "300%", "iPod Video" };
-        for (int i = 0; i < resizePercentages.length; i++) {
-            javax.swing.JMenuItem resizeItem = new javax.swing.JMenuItem(resizePercentages[i]);
-            // final int tag = i;
-            resizeItem.addActionListener(e -> {
-                int p = Integer.parseInt(((javax.swing.JMenuItem) e.getSource()).getText().replace("%", ""));
-                resizeWindowByPercent(p);
-            });
+        String[] resizeLabels = { "25%", "50%", "100%", "200%", "300%", "iPod Video" };
+        for (int i = 0; i < resizeLabels.length; i++) {
+            javax.swing.JMenuItem resizeItem = new javax.swing.JMenuItem(resizeLabels[i]);
+            final int tag = i;
+            resizeItem.addActionListener(e -> resizeWindowToScale(tag));
             resizeWindowMenu.add(resizeItem);
         }
         windowMenu.add(resizeWindowMenu);
@@ -8157,6 +8815,12 @@ public class BrowserController extends JFrame {
         windowMenu.add(closeAllViewersItem);
 
         windowMenu.addSeparator();
+
+        // Bring All to Front (HOROS: MainMenu.xib 1949 - arrangeInFront:)
+        javax.swing.JMenuItem bringToFrontItem = new javax.swing.JMenuItem(
+                MenuResourceLoader.getString("menu_window_bring_all_to_front"));
+        bringToFrontItem.addActionListener(e -> bringAllToFront());
+        windowMenu.add(bringToFrontItem);
 
         menuBar.add(windowMenu);
 
@@ -8222,14 +8886,62 @@ public class BrowserController extends JFrame {
      * データベースフォルダを作成
      * HOROS-20240407準拠: - (IBAction) createDatabaseFolder:(id) sender (1860行目)
      */
+    /**
+     * データベースフォルダを作成
+     * HOROS-20240407準拠: - (IBAction) createDatabaseFolder:(id) sender (1860行目)
+     */
     public void createDatabaseFolder(Object sender) {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setAcceptAllFileFilterUsed(false);
+        fc.setDialogTitle(LanguageManager.get("db.new_folder.title", "New Database Folder"));
+        if (fc.showDialog(this, LanguageManager.get("db.new_folder.select", "Choose a location")) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File base = fc.getSelectedFile();
+        String name = JOptionPane.showInputDialog(this,
+                LanguageManager.get("db.new_folder.name", "Database folder name"), "My Database");
+        if (name == null || name.trim().isEmpty()) {
+            return;
+        }
+        java.io.File dir = new java.io.File(base, name.trim());
+        if (dir.exists()) {
+            int ans = JOptionPane.showConfirmDialog(this,
+                    LanguageManager.get("db.new_folder.exists", "Folder already exists. Overwrite?"),
+                    LanguageManager.get("db.new_folder.title", "New Database Folder"),
+                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (ans != JOptionPane.YES_OPTION) return;
+        }
+        if (dir.mkdirs()) {
+            new java.io.File(dir, DicomDatabase.OSIRIX_DATA_DIR_NAME).mkdirs();
+            infoFmt(dir.getAbsolutePath(), LanguageManager.get("db.new_folder.done", "Database folder created"));
+        } else {
+            infoFmt(LanguageManager.get("db.new_folder.fail", "Failed to create folder"),
+                    LanguageManager.get("db.new_folder.title", "New Database Folder"));
+        }
     }
 
     /**
-     * データベースを開く
+     * データベースフォルダを開く
      * HOROS-20240407準拠: -(IBAction)openDatabase:(id)sender (1843行目)
      */
     public void openDatabase(Object sender) {
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
+        fc.setAcceptAllFileFilterUsed(false);
+        fc.setDialogTitle(LanguageManager.get("db.open.title", "Open Database Folder"));
+        if (fc.showDialog(this, LanguageManager.get("db.open.select", "Open")) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        DicomDatabase db = DicomDatabase.databaseAtPath(fc.getSelectedFile().getAbsolutePath());
+        if (db != null) {
+            DicomDatabase.setActiveLocalDatabase(db);
+            infoFmt(db.getName() != null ? db.getName() : "(opened)",
+                    LanguageManager.get("db.open.done", "Database opened"));
+        } else {
+            infoFmt(LanguageManager.get("db.open.fail", "No valid database found at the selected folder"),
+                    LanguageManager.get("db.open.title", "Open Database Folder"));
+        }
     }
 
     /**
@@ -8237,13 +8949,63 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) saveAlbums:(id) sender (10811行目)
      */
     public void saveAlbums(Object sender) {
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            infoFmt(LanguageManager.get("db.album.no_db", "No active database."),
+                    LanguageManager.get("db.album.save.title", "Save Albums"));
+            return;
+        }
+        boolean ok = db.save();
+        infoFmt(LanguageManager.get(ok ? "db.album.save.ok" : "db.album.save.fail",
+                ok ? "Albums saved." : "Save failed."),
+                LanguageManager.get("db.album.save.title", "Save Albums"));
     }
 
     /**
-     * アルバムを追加（インポート）
+     * アルバムをインポート
      * HOROS-20240407準拠: - (IBAction) addAlbums:(id) sender (10834行目)
+     * 簡易形式: 1行1アルバム名、条件付きは「名前|predicate」
      */
     public void addAlbums(Object sender) {
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            infoFmt(LanguageManager.get("db.album.no_db", "No active database."),
+                    LanguageManager.get("db.album.import.title", "Import Albums"));
+            return;
+        }
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle(LanguageManager.get("db.album.import.title", "Import Albums"));
+        if (fc.showDialog(this, LanguageManager.get("db.album.import.select", "Open")) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File f = fc.getSelectedFile();
+        try {
+            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(f));
+            int added = 0;
+            String line;
+            while ((line = r.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                String name = line;
+                String pred = null;
+                int idx = line.indexOf('|');
+                if (idx > 0) {
+                    name = line.substring(0, idx).trim();
+                    pred = line.substring(idx + 1).trim();
+                }
+                if (pred != null && !pred.isEmpty())
+                    db.addAlbum(new com.oculus.jj.model.DicomAlbum(name, pred));
+                else
+                    db.addAlbum(new com.oculus.jj.model.DicomAlbum(name));
+                added++;
+            }
+            r.close();
+            db.save();
+            infoFmt(String.format(LanguageManager.get("db.album.import.done", "Imported {0} album(s)."), added),
+                    LanguageManager.get("db.album.import.title", "Import Albums"));
+        } catch (Exception ex) {
+            infoFmt(String.valueOf(ex.getMessage()), LanguageManager.get("db.album.import.fail", "Import failed"));
+        }
     }
 
     /**
@@ -8490,21 +9252,225 @@ public class BrowserController extends JFrame {
      * レポートを削除
      * HOROS-20240407準拠: - (IBAction)deleteReport: (id)sender (18583行目)
      */
+    /**
+     * 現在アクティブなStudyを取得（ビューアから or データベース選択から）
+     * HOROS: [self databaseSelection] → study / [study valueForKey:@"study"]
+     */
+    private com.oculus.jj.model.DicomStudy activeStudy() {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view != null && view.getCurDCM() != null) {
+            DicomPix pix = view.getCurDCM();
+            if (pix.getImageObj() != null && pix.getImageObj().getSeries() != null
+                    && pix.getImageObj().getSeries().getStudy() != null) {
+                return pix.getImageObj().getSeries().getStudy();
+            }
+        }
+        if (databaseOutline != null) {
+            Object sel = databaseOutline.getSelectedItem();
+            if (sel instanceof com.oculus.jj.model.DicomStudy) {
+                return (com.oculus.jj.model.DicomStudy) sel;
+            }
+            if (sel instanceof com.oculus.jj.model.DicomSeries) {
+                com.oculus.jj.model.DicomSeries s = (com.oculus.jj.model.DicomSeries) sel;
+                if (s.getStudy() != null) return s.getStudy();
+            }
+        }
+        return null;
+    }
+
     public void deleteReport(Object sender) {
+        com.oculus.jj.model.DicomStudy study = activeStudy();
+        if (study == null) {
+            infoFmt(LanguageManager.get("report.delete.no_study", "No study selected."),
+                    LanguageManager.get("report.title", "Report"));
+            return;
+        }
+        String url = study.getReportURL();
+        if (url == null || url.isEmpty()) {
+            infoFmt(LanguageManager.get("report.delete.none", "No report associated with this study."),
+                    LanguageManager.get("report.title", "Report"));
+            return;
+        }
+        int ans = JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("report.delete.confirm", "Are you sure you want to delete the selected report?"),
+                LanguageManager.get("report.delete.title", "Delete Report"),
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (ans != JOptionPane.YES_OPTION) return;
+        java.io.File f = new java.io.File(url);
+        boolean removed = f.delete();
+        study.setReportURL(null);
+        try {
+            DicomDatabase db = DicomDatabase.activeLocalDatabase();
+            if (db != null) db.save();
+        } catch (Exception ex) { /* ignore */ }
+        infoFmt(f.getAbsolutePath() + (removed ? " " + LanguageManager.get("report.delete.ok", "(deleted)") : " " + LanguageManager.get("report.delete.not_found", "(file not found / cleared)")),
+                LanguageManager.get("report.delete.title", "Delete Report"));
     }
 
     /**
      * レポートをPDFに変換
      * HOROS-20240407準拠: - (IBAction) convertReportToPDF: (id)sender (18542行目)
+     * [study saveReportAsPdfAtPath:] — Java版: 現在StudyのreportURL HTMLを
+     * JEditorPane の print() サポートでレンダリングし、PDFプリンタ（Windows の
+     * 「Microsoft Print to PDF」など）経由で保存する。
      */
     public void convertReportToPDF(Object sender) {
+        com.oculus.jj.model.DicomStudy study = activeStudy();
+        if (study == null) {
+            infoFmt(LanguageManager.get("report.pdf.no_study", "No study selected."),
+                    LanguageManager.get("report.title", "Report"));
+            return;
+        }
+        String url = study.getReportURL();
+        if (url == null || url.isEmpty()) {
+            infoFmt(LanguageManager.get("report.pdf.none",
+                    "No report associated with this study. Generate one first (File > Report > Open report)."),
+                    LanguageManager.get("report.title", "Report"));
+            return;
+        }
+        java.io.File html = new java.io.File(url);
+        if (!html.exists()) {
+            infoFmt(html.getAbsolutePath(),
+                    LanguageManager.get("report.pdf.missing", "Report file not found."));
+            return;
+        }
+        String base = study.getName() != null ? study.getName() : "Study";
+        int ans = JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("report.pdf.hint",
+                        "This opens a print dialog. Choose a PDF printer (e.g. \"Microsoft Print to PDF\"), then save as \"" + base + "-Report.pdf\"."),
+                LanguageManager.get("report.pdf.title", "Convert to PDF"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (ans != JOptionPane.OK_OPTION) return;
+        final java.io.File htmlFile = html;
+        new Thread(() -> {
+            final Exception[] err = new Exception[1];
+            final boolean[] printed = { false };
+            try {
+                String htmlContent = new String(java.nio.file.Files.readAllBytes(htmlFile.toPath()),
+                        java.nio.charset.StandardCharsets.UTF_8);
+                javax.swing.SwingUtilities.invokeAndWait(() -> {
+                    try {
+                        javax.swing.JEditorPane pane = new javax.swing.JEditorPane("text/html", htmlContent);
+                        pane.setOpaque(true);
+                        pane.setForeground(java.awt.Color.BLACK);
+                        java.awt.print.PrinterJob job = java.awt.print.PrinterJob.getPrinterJob();
+                        job.setJobName("OculusJJ Report - " + base);
+                        job.setPrintable((java.awt.print.Printable) pane, job.defaultPage());
+                        job.print();
+                        printed[0] = true;
+                    } catch (Exception ex) {
+                        err[0] = ex;
+                    }
+                });
+            } catch (Exception ex) {
+                err[0] = ex;
+            }
+            final boolean done = printed[0];
+            final Exception e = err[0];
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                if (e != null) {
+                    infoFmt(String.valueOf(e.getMessage()),
+                            LanguageManager.get("report.pdf.fail", "PDF export failed"));
+                } else if (done) {
+                    infoFmt(LanguageManager.get("report.pdf.sent", "Sent to printer. Choose \"Save as PDF\" to save as a PDF file."),
+                            LanguageManager.get("report.pdf.title", "Convert to PDF"));
+                }
+            });
+        }, "report-pdf").start();
     }
 
     /**
-     * レポートをDICOM SRに変換
+     * レポートをDICOM SR（STUDY REPORT）に変換
      * HOROS-20240407準拠: - (IBAction) convertReportToDICOMSR: (id)sender (18494行目)
+     * [study saveReportAsDicomAtPath:] — Java版: dcm4che-core で
+     * STUDY REPORT (1.2.840.10008.5.1.4.1.1.88.33) 形式のDICOMオブジェクトを生成し、
+     * study.databaseに追加・保存する。
      */
     public void convertReportToDICOMSR(Object sender) {
+        com.oculus.jj.model.DicomStudy study = activeStudy();
+        if (study == null) {
+            infoFmt(LanguageManager.get("report.dcm.no_study", "No study selected."),
+                    LanguageManager.get("report.title", "Report"));
+            return;
+        }
+        String url = study.getReportURL();
+        if (url == null || url.isEmpty()) {
+            infoFmt(LanguageManager.get("report.dcm.none", "No report associated with this study. Generate one first."),
+                    LanguageManager.get("report.title", "Report"));
+            return;
+        }
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        String base = study.getName() != null ? study.getName() : "Study";
+        fc.setSelectedFile(new java.io.File(base + "-Report.dcm"));
+        fc.setDialogTitle(LanguageManager.get("report.dcm.save.title", "Save Report as DICOM SR"));
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File out = fc.getSelectedFile();
+        if (!out.getName().toLowerCase().endsWith(".dcm")) {
+            out = new java.io.File(out.getAbsolutePath() + ".dcm");
+        }
+        String htmlContent;
+        try {
+            htmlContent = new String(java.nio.file.Files.readAllBytes(new java.io.File(url).toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            infoFmt(String.valueOf(ex.getMessage()), LanguageManager.get("report.dcm.fail", "DICOM SR export failed"));
+            return;
+        }
+        // HTML→プレーンテキストへ簡易変換（<p>/<br>は改行、タグ除去）
+        String text = htmlContent
+                .replaceAll("(?i)<\\s*(p|div|tr|h[1-6]|li|table)[^>]*>", "\n")
+                .replaceAll("(?i)<\\s*br\\s*/?\\s*>", "\n")
+                .replaceAll("(?i)<[^>]+>", "")
+                .replace("&nbsp;", " ")
+                .replace("&lt;", "<").replace("&gt;", ">")
+                .replace("&amp;", "&").replace("&quot;", "\"")
+                .replaceAll("[ \\t]+\\n", "\n")
+                .replaceAll("\\n{3,}", "\n\n");
+
+        java.text.SimpleDateFormat dtF = new java.text.SimpleDateFormat("yyyyMMddHHmmss");
+        String nowDT = dtF.format(new java.util.Date());
+        String uidRoot = "1.2.826.0.1.3680043.8.498"; // OculusJJ private UID root
+        String sopUID = uidRoot + "." + System.currentTimeMillis() + "." + (System.nanoTime() % 100000L);
+        String studyUID = study.getStudyInstanceUID();
+        if (studyUID == null || studyUID.isEmpty())
+            studyUID = uidRoot + ".study." + System.currentTimeMillis();
+        String patientID = study.getPatientID() != null && !study.getPatientID().isEmpty()
+                ? study.getPatientID() : "UNKNOWN";
+
+        org.dcm4che3.data.Attributes attrs = new org.dcm4che3.data.Attributes();
+        attrs.setString(0x00080005, org.dcm4che3.data.VR.UI, "ISO_IR 100"); // SpecificCharacterSet
+        attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.88.33"); // SOPClassUID (STUDY REPORT)
+        attrs.setString(0x00080018, org.dcm4che3.data.VR.UI, sopUID); // SOPInstanceUID
+        attrs.setString(0x00080020, org.dcm4che3.data.VR.DA, nowDT.substring(0, 8)); // StudyDate
+        attrs.setString(0x00080060, org.dcm4che3.data.VR.CS, "SR"); // Modality
+        attrs.setString(0x00081030, org.dcm4che3.data.VR.LO,
+                study.getName() != null ? study.getName() : "Study"); // StudyDescription
+        attrs.setString(0x00100020, org.dcm4che3.data.VR.SH, patientID); // PatientID
+        attrs.setString(0x0020000D, org.dcm4che3.data.VR.UI, studyUID); // StudyInstanceUID
+        attrs.setString(0x00400244, org.dcm4che3.data.VR.CS, "PRELIMINARY"); // ReportStatusID
+        attrs.setString(0x00400250, org.dcm4che3.data.VR.UI, "1.3.6.1.4.1.11456.9000.1.2.1.3.1"); // ReportClassID
+        attrs.setString(0x00400260, org.dcm4che3.data.VR.DT, nowDT); // ReportDateTime
+        attrs.setString(0x00404010, org.dcm4che3.data.VR.UT, text); // ReportDetailedDescription
+
+        java.io.File parent = out.getParentFile();
+        if (parent != null && !parent.exists())
+            parent.mkdirs();
+        try {
+            org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(out);
+            org.dcm4che3.data.Attributes fmi = new org.dcm4che3.data.Attributes();
+            fmi.setString(0x00020000, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.88.33"); // MediaStorageSOPClassUID
+            fmi.setString(0x00020001, org.dcm4che3.data.VR.UI, sopUID); // MediaStorageSOPInstanceUID
+            fmi.setString(0x00020002, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID (Explicit VR LE)
+            dos.writeFileMetaInformation(fmi);
+            dos.writeDataset(attrs, null);
+            dos.finish();
+            dos.close();
+            infoFmt(out.getAbsolutePath(), LanguageManager.get("report.dcm.done", "Report saved as DICOM SR"));
+        } catch (Exception ex) {
+            infoFmt(String.valueOf(ex.getMessage()), LanguageManager.get("report.dcm.fail", "DICOM SR export failed"));
+        }
     }
 
     /**
@@ -8693,10 +9659,110 @@ public class BrowserController extends JFrame {
     }
 
     /**
+     * デフォルトアルバムの作成
+     * HOROS-20240407準拠: BrowserController.m:1379 defaultAlbums: → [self.database addDefaultAlbums]
+     * 簡易実装: 「Favorites」/「Recently Used」などのプレフィックス付きアルバムを作成し、
+     * database（DicomDatabase）に追加してUIをリフレッシュする。
+     */
+    public void createDefaultAlbums() {
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            infoFmt(LanguageManager.get("db.default_albums.no_db", "No active database."),
+                    LanguageManager.get("db.default_albums.title", "Create Default Albums"));
+            return;
+        }
+        String[] defaults = { "Favorites", "Recently Used", "Screen Captures" };
+        int added = 0;
+        for (String name : defaults) {
+            // 重複防止: 同じ名前のアルバムが存在するか確認
+            boolean exists = false;
+            try {
+                if (db.getAlbums() != null) {
+                    for (com.oculus.jj.model.DicomAlbum a : db.getAlbums()) {
+                        if (a != null && name.equals(a.getName())) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore
+            }
+            if (!exists) {
+                try {
+                    db.addAlbum(new com.oculus.jj.model.DicomAlbum(name));
+                    added++;
+                } catch (Exception ex) {
+                    // 単一アルバムの失敗はスキップ
+                }
+            }
+        }
+        infoFmt(String.format(LanguageManager.get("db.default_albums.done", "Created {0} default album(s)."), added),
+                LanguageManager.get("db.default_albums.title", "Create Default Albums"));
+    }
+
+    /**
+     * SQLインデックスの再構築
+     * HOROS-20240407準拠: BrowserController.m:2530 rebuildSQLFile:
+     * 確認ダイアログ → DicomDatabase.save() でデータベースを保存（=SQLインデックス再構築）
+     */
+    public void rebuildSQLIndexFile() {
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            infoFmt(LanguageManager.get("db.rebuild_sql.no_db", "No active database."),
+                    LanguageManager.get("db.rebuild_sql.title", "Rebuild SQL Index File"));
+            return;
+        }
+        int ans = JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("db.rebuild_sql.confirm",
+                        "Are you sure you want to rebuild this database's SQL index? This operation can take several minutes."),
+                LanguageManager.get("db.rebuild_sql.title", "Rebuild SQL Index File"),
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (ans != JOptionPane.YES_OPTION)
+            return;
+        boolean ok = db.save();
+        infoFmt(LanguageManager.get(ok ? "db.rebuild_sql.ok" : "db.rebuild_sql.fail",
+                ok ? "SQL index rebuilt successfully." : "SQL index rebuild failed."),
+                LanguageManager.get("db.rebuild_sql.title", "Rebuild SQL Index File"));
+    }
+
+    /**
+     * ページセットアップ
+     * HOROS-20240407準拠: MainMenu.xib 381行目 (Java Print Service API)
+     * javax.print.PageFormat + PrinterJob.printDialog を使用する。
+     */
+    public void showPageSetup() {
+        try {
+            java.awt.print.PrinterJob job = java.awt.print.PrinterJob.getPrinterJob();
+            job.printDialog();
+        } catch (Exception ex) {
+            infoFmt(String.format(LanguageManager.get("db.page_setup.error", "Page setup error: {0}"), ex.getMessage()),
+                    LanguageManager.get("db.page_setup.title", "Page Setup"));
+        }
+    }
+
+    /**
      * サムネイルを再構築
      * HOROS-20240407準拠: - (IBAction)rebuildThumbnails:(id)sender (9985行目)
+     * 全スライスのサムネイルを再生成する（DicomPix.thumbnailImage = null にリセット）。
      */
     public void rebuildThumbnails(Object sender) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null) {
+            infoFmt(LanguageManager.get("db.thumbnails.no_view", "No active viewer."),
+                    LanguageManager.get("db.thumbnails.title", "Rebuild Thumbnails"));
+            return;
+        }
+        int count = 0;
+        for (DicomPix pix : view.getDcmPixList()) {
+            if (pix != null) {
+                pix.invalidateThumbnail();
+                count++;
+            }
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("db.thumbnails.done", "Rebuilt {0} thumbnail(s)."), count),
+                LanguageManager.get("db.thumbnails.title", "Rebuild Thumbnails"));
     }
 
     /**
@@ -9057,6 +10123,206 @@ public class BrowserController extends JFrame {
                 tView.subtract(fSources.get(idx), absolute);
             }
         }
+    }
+
+    // ========================================================================
+    // HOROS-20240407 Subtraction (XA造影CT向け)
+    // 参照: ViewerController.m:
+    //   subCtrlOnOff: 9827  - トグル。ON時 各フレーム = フレーム - マスク
+    //   subCtrlNewMask: 9875 - 現在フレームをマスクに設定し引算を有効化
+    //   subCtrlOffset: 9910 - 8方向1pxシフトでマスクをずらして再引算
+    //   subCtrlSliders: 10136 - Contrast/Brightness (WL/WW 調整)
+    //   subSumSlider: 10173 - Sum 調整 (fusion stack 対応)
+    //   subSharpen: 10211 - "Sharpen 5x5" カーネル適用
+    // ========================================================================
+
+    /**
+     * Subtract トグル (HOROS: subCtrlOnOff: tag=0)
+     * ON : 現在フレームをマスクから引算 → WL=128/WW=256 で表示
+     * OFF: バックアップから元に戻す → WL/WW リセット
+     */
+    public void subCtrlOnOff(int tag) {
+        DCMView view = activeDCMView();
+        if (view == null || view.getCurDCM() == null) {
+            info("roi.msg.no_rois", "No active image view.");
+            return;
+        }
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.isEmpty())
+            return;
+
+        boolean turningOn = !subCtrlOnOffItem.isSelected();
+        subCtrlOnOffItem.setSelected(turningOn);
+
+        if (turningOn) {
+            if (subCtrlMaskIndex < 0) {
+                // マスク未設定: 最初のスライスをマスクに自動設定
+                subCtrlNewMask(null);
+                return;
+            }
+            int cur = view.getCurImage();
+            DicomPix maskPix = pixList.get(subCtrlMaskIndex);
+            if (maskPix == null)
+                return;
+            for (DicomPix pix : pixList) {
+                if (pix == null)
+                    continue;
+                pix.getOriginalShortData(); // バックアップ取得
+                pix.setSubtractionEnabled(true);
+                pix.subtractWithMask(maskPix, subCtrlOffsetX, subCtrlOffsetY);
+            }
+            // HOROS: [imageView setWLWW:128 :256]
+            DicomPix curPix = pixList.get(Math.min(cur, pixList.size() - 1));
+            if (curPix != null)
+                curPix.setWindowLevelWidth(128, 256);
+        } else {
+            for (DicomPix pix : pixList) {
+                if (pix == null)
+                    continue;
+                pix.setSubtractionEnabled(false);
+                pix.restoreOriginalShortData();
+            }
+            // HOROS: [imageView setWLWW:0 :0] (自動再計算)
+            int cur = view.getCurImage();
+            DicomPix curPix = pixList.get(Math.min(cur, pixList.size() - 1));
+            if (curPix != null)
+                curPix.setWindowLevelWidth(0, 0);
+        }
+        view.repaint();
+    }
+
+    /**
+     * New Mask (HOROS: subCtrlNewMask:)
+     * 現在フレームをマスクとして設定し、引算を有効化する。
+     */
+    public void subCtrlNewMask(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null)
+            return;
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.isEmpty())
+            return;
+        subCtrlMaskIndex = view.getCurImage(); // 0-based
+        // 引算を有効化
+        if (!subCtrlOnOffItem.isSelected()) {
+            subCtrlOnOff(0);
+        }
+    }
+
+    /**
+     * 8方向1pxシフト (HOROS: subCtrlOffset:)
+     * tag: 1=SW 2=S 3=SE 4=W 5=None 6=E 7=NE 8=N 9=NW
+     */
+    public void subCtrlOffset(int tag) {
+        DCMView view = activeDCMView();
+        if (view == null || !subCtrlOnOffItem.isSelected())
+            return;
+        switch (tag) {
+            case 1: subCtrlOffsetX--; subCtrlOffsetY--; break; // SW
+            case 2: subCtrlOffsetY--; break; // S
+            case 3: subCtrlOffsetX++; subCtrlOffsetY--; break; // SE
+            case 4: subCtrlOffsetX--; break; // W
+            case 5: subCtrlOffsetX = 0; subCtrlOffsetY = 0; break; // None
+            case 6: subCtrlOffsetX++; break; // E
+            case 7: subCtrlOffsetX++; subCtrlOffsetY++; break; // NE
+            case 8: subCtrlOffsetY++; break; // N
+            case 9: subCtrlOffsetX--; subCtrlOffsetY++; break; // NW
+        }
+        // HOROS: 範囲 -30..30 にクランプ
+        subCtrlOffsetX = Math.max(-30, Math.min(30, subCtrlOffsetX));
+        subCtrlOffsetY = Math.max(-30, Math.min(30, subCtrlOffsetY));
+
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.isEmpty())
+            return;
+        if (subCtrlMaskIndex < 0)
+            return;
+        DicomPix maskPix = pixList.get(Math.min(subCtrlMaskIndex, pixList.size() - 1));
+        if (maskPix == null)
+            return;
+        // バックアップから再引算（offset分を反映）
+        for (DicomPix pix : pixList) {
+            if (pix == null)
+                continue;
+            pix.restoreOriginalShortData();
+            pix.subtractWithMask(maskPix, subCtrlOffsetX, subCtrlOffsetY);
+        }
+        view.repaint();
+    }
+
+    /**
+     * Contrast / Brightness 調整 (HOROS: subCtrlSliders:)
+     * tag: 37=Contrast Down 38=Contrast Default 39=Contrast Up
+     *      34=Brightness Down 35=Brightness Default 36=Brightness Up
+     * HOROS: Contrast=WL, Brightness=WW (Gamma/Zero スライダーは未対応)
+     */
+    public void subCtrlSliders(int tag) {
+        DCMView view = activeDCMView();
+        if (view == null || view.getCurDCM() == null || !subCtrlOnOffItem.isSelected())
+            return;
+        DicomPix pix = view.getCurDCM();
+        float cwl = pix.getWindowLevel();
+        float cww = pix.getWindowWidth();
+        switch (tag) {
+            case 37: cwl = cwl - 5; break;
+            case 38: cwl = 128; break;
+            case 39: cwl = cwl + 5; break;
+            case 34: cww = cww - 5; break;
+            case 35: cww = 256; break;
+            case 36: cww = cww + 5; break;
+        }
+        pix.setWindowLevelWidth(cwl, cww);
+        view.repaint();
+    }
+
+    /**
+     * Sum 調整 (HOROS: subSumSlider:)
+     * tag: 31=Sum Less 32=No Sum 33=Sum More
+     * HOROS: fusion stack 用。ここでは1..10を保持し、将来setFusionに配線。
+     */
+    public void subSumSlider(int tag) {
+        switch (tag) {
+            case 31: subCtrlSum = Math.max(1, subCtrlSum - 1); break;
+            case 32: subCtrlSum = 1; break;
+            case 33: subCtrlSum = Math.min(10, subCtrlSum + 1); break;
+        }
+        // 現状: subCtrlSum は状態保持のみ。fusion stack 実装時に使用。
+    }
+
+    /**
+     * Sharpen トグル (HOROS: subSharpen: tag=30)
+     * ON : "Sharpen 5x5" カーネルを全スライスの引算結果に適用
+     * OFF: バックアップから元に戻す
+     */
+    public void subSharpen(int tag) {
+        DCMView view = activeDCMView();
+        if (view == null)
+            return;
+        subCtrlSharpenOn = !subCtrlSharpenOn;
+        if (subSharpenItem != null)
+            subSharpenItem.setSelected(subCtrlSharpenOn);
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.isEmpty())
+            return;
+        if (subCtrlSharpenOn) {
+            for (DicomPix pix : pixList) {
+                if (pix != null)
+                    pix.applySharpen5x5();
+            }
+        } else {
+            // OFF: 引算OFF時のバックアップに復元（引算がONなら引算も再適用）
+            for (DicomPix pix : pixList) {
+                if (pix == null)
+                    continue;
+                pix.restoreOriginalShortData();
+                if (subCtrlOnOffItem.isSelected() && subCtrlMaskIndex >= 0) {
+                    DicomPix maskPix = pixList.get(Math.min(subCtrlMaskIndex, pixList.size() - 1));
+                    if (maskPix != null)
+                        pix.subtractWithMask(maskPix, subCtrlOffsetX, subCtrlOffsetY);
+                }
+            }
+        }
+        view.repaint();
     }
 
     // --- Resample (HOROS: ViewerController.m resampleDataFromPixArray, blending sheet tag 11) ---
@@ -11365,20 +12631,302 @@ public class BrowserController extends JFrame {
         }
     }
 
-    /**
+        /**
      * 内視鏡ビューア
      * HOROS-20240407準拠: - (IBAction) endoscopyViewer: (id) sender
      */
     public void endoscopyViewer(Object sender) {
+        List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+        if (!viewers.isEmpty()) {
+            ViewerController active = viewers.get(viewers.size() - 1);
+            Viewer3DController.openEndoscopy(active);
+            updateForViewType(MainMenuBar.ViewType.VIEWER_3D);
+        } else {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_need_viewer",
+                    "Please open a 2D Viewer first."));
+        }
+    }
+
+    // ================= 3D Viewer メニュー (HOROS-20240407準拠: 追加項目) =================
+    // 上記メニューに追加した 方向ビュー / FlyThru / Curved Path / Scissor Editing / 3Dプリセット
+    // のハンドラ。未実装機能は「プレースホルダ」として整えて後から実装できる形にする。
+
+    /** 方向ビューの適用 (HOROS: coView:/saView:/saViewOpposite:/axView: のJava相当) */
+    private void openOrientationView(Viewer3DController.OrientationView v) {
+        Viewer3DController active = Viewer3DController.getActiveInstance();
+        if (active == null) {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_need_viewer",
+                    "Please open a 3D Viewer first."));
+            return;
+        }
+        active.setOrientationView(v);
+        active.toFront();
+        active.requestFocus();
+    }
+
+    /**
+     * FlyThruポイントの追加 / 削除 / パスリセット (HOROS: flyThruButtonMenu:)
+     * 現状はプレースホルダ: 実装後にこの分岐を伸ばす。
+     */
+    private void flyThruButtonMenu(int op) {
+        Viewer3DController active = Viewer3DController.getActiveInstance();
+        if (active == null) {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_need_viewer",
+                    "Please open a 3D Viewer first."));
+            return;
+        }
+        JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_not_implemented",
+                "Not yet implemented in this port."),
+                LanguageManager.get("menu_viewer_3d_flythru_add", "Add FlyThru Point"),
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** ビジェーパスのファイル読み込み (HOROS: loadBezierPath:) — プレースホルダ */
+    private void loadBezierPath(Object sender) {
+        JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_not_implemented",
+                "Not yet implemented in this port."),
+                LanguageManager.get("menu_viewer_3d_curved_path_load", "Load from file..."),
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** ビジェーパスのファイル保存 (HOROS: saveBezierPath:) — プレースホルダ */
+    private void saveBezierPath(Object sender) {
+        JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_not_implemented",
+                "Not yet implemented in this port."),
+                LanguageManager.get("menu_viewer_3d_curved_path_save", "Save to file..."),
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** シザー状態の保存 / 読み込み / 削除 (HOROS: scissorStateButtons:) — プレースホルダ */
+    private void scissorStateButtons(int op) {
+        String title = (op == 0)
+                ? LanguageManager.get("menu_viewer_3d_scissor_save", "Save")
+                : (op == 1)
+                        ? LanguageManager.get("menu_viewer_3d_scissor_load", "Load")
+                        : LanguageManager.get("menu_viewer_3d_scissor_delete", "Delete");
+        JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_not_implemented",
+                "Not yet implemented in this port."), title, JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * 3Dプリセットの保存 (HOROS: save3DSettings:)。
+     * 現在アクティブな3D Viewer の状態を JSON として ~/.oculusjj/3d_presets/ に保存する。
+     */
+    private void save3DSettings(Object sender) {
+        Viewer3DController active = Viewer3DController.getActiveInstance();
+        if (active == null) {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_need_viewer",
+                    "Please open a 3D Viewer first."));
+            return;
+        }
+        String name = JOptionPane.showInputDialog(this,
+                LanguageManager.get("menu_viewer_3d_preset_save", "Save Current State as 3D Preset..."),
+                "My 3D Preset");
+        if (name == null || name.trim().isEmpty())
+            return;
+        try {
+            java.io.File dir = new java.io.File(
+                    System.getProperty("user.home"), ".oculusjj/3d_presets");
+            dir.mkdirs();
+            String safe = name.replaceAll("[^A-Za-z0-9_\\-\\u3040-\\u30ff\\u4e00-\\u9fff]", "_");
+            java.io.File out = new java.io.File(dir, safe + ".json");
+            com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+            m.writerWithDefaultPrettyPrinter().writeValue(out, active.captureState());
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("msg_3d_preset_saved_to", "Saved 3D preset to:") + "\n" + out,
+                    LanguageManager.get("menu_viewer_3d_preset_save", "Save Current State as 3D Preset..."),
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("msg_3d_not_implemented", "Not yet implemented in this port.")
+                            + "\n" + ex.getMessage(),
+                    LanguageManager.get("menu_viewer_3d_preset_save", "Save Current State as 3D Preset..."),
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * 3Dプリセットの読み込み (HOROS: load3DSettings:)。
+     * ~/.oculusjj/3d_presets/ 配下のJSON一覧を表示し、選択されたプリセットを適用する。
+     */
+    private void load3DSettings(Object sender) {
+        Viewer3DController active = Viewer3DController.getActiveInstance();
+        if (active == null) {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_need_viewer",
+                    "Please open a 3D Viewer first."));
+            return;
+        }
+        java.io.File dir = new java.io.File(System.getProperty("user.home"), ".oculusjj/3d_presets");
+        java.io.File[] files = (dir.isDirectory()) ? dir.listFiles((d, n) -> n.toLowerCase().endsWith(".json")) : null;
+        if (files == null || files.length == 0) {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("msg_3d_no_presets",
+                    "No saved 3D presets were found."),
+                    LanguageManager.get("menu_viewer_3d_preset_select", "Select 3D Preset..."),
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        java.util.Arrays.sort(files, java.util.Comparator.comparing(java.io.File::getName));
+        String[] names = new String[files.length];
+        for (int i = 0; i < files.length; i++)
+            names[i] = files[i].getName();
+        int idx = JOptionPane.showOptionDialog(this,
+                LanguageManager.get("menu_viewer_3d_preset_select", "Select 3D Preset..."),
+                LanguageManager.get("menu_viewer_3d_preset_select", "Select 3D Preset..."),
+                JOptionPane.YES_NO_OPTION, JOptionPane.PLAIN_MESSAGE, null, names, names[0]);
+        if (idx < 0 || idx >= files.length)
+            return;
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode node = m.readTree(files[idx]);
+            if (node.has("windowLevel") && node.has("windowWidth")) {
+                float wl = (float) node.get("windowLevel").asDouble();
+                float ww = (float) node.get("windowWidth").asDouble();
+                active.updateWindow(wl, ww);
+            }
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("msg_3d_preset_loaded_from", "Loaded 3D preset from:") + "\n" + files[idx],
+                    LanguageManager.get("menu_viewer_3d_preset_select", "Select 3D Preset..."),
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("msg_3d_not_implemented", "Not yet implemented in this port.")
+                            + "\n" + ex.getMessage(),
+                    LanguageManager.get("menu_viewer_3d_preset_select", "Select 3D Preset..."),
+                    JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     // ========== ROIメニューアクションメソッド ==========
+
+    /** アクティブな2Dビュー (null=なし) */
+    private DCMView activeDCMView() {
+        return getActiveDCMViewForEdit();
+    }
+
+    /** アクティブシリーズの全ROI（DicomPix単位で集約） */
+    private java.util.List<com.oculus.jj.model.ROI> seriesROIs() {
+        java.util.List<com.oculus.jj.model.ROI> out = new java.util.ArrayList<>();
+        DCMView view = activeDCMView();
+        if (view == null)
+            return out;
+        java.util.Set<com.oculus.jj.model.ROI> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (DicomPix pix : view.getDcmPixList()) {
+            if (pix == null)
+                continue;
+            for (com.oculus.jj.model.ROI roi : pix.getROIs()) {
+                if (roi != null && seen.add(roi))
+                    out.add(roi);
+            }
+        }
+        return out;
+    }
+
+    /** 現在選択中/複数選択されたROI */
+    private java.util.List<com.oculus.jj.model.ROI> selectedROIs() {
+        java.util.List<com.oculus.jj.model.ROI> out = new java.util.ArrayList<>();
+        DCMView view = activeDCMView();
+        if (view == null)
+            return out;
+        if (view.getSelectedRoi() != null)
+            out.add(view.getSelectedRoi());
+        for (com.oculus.jj.model.ROI roi : seriesROIs()) {
+            if (roi != view.getSelectedRoi() && roi.isSelected())
+                out.add(roi);
+        }
+        return out;
+    }
+
+    /** 選択状態を有するROI（複数選択）の数を返す */
+    private int multiSelectedCount() {
+        int n = 0;
+        for (com.oculus.jj.model.ROI roi : seriesROIs())
+            if (roi.isSelected())
+                n++;
+        DCMView v = activeDCMView();
+        if (v != null && v.getSelectedRoi() != null && !v.getSelectedRoi().isSelected())
+            n++;
+        return n;
+    }
+
+    private void info(String key, String def) {
+        JOptionPane.showMessageDialog(this, LanguageManager.get(key, def));
+    }
+
+    private void infoFmt(String text, String title) {
+        JOptionPane.showMessageDialog(this, text, title, JOptionPane.INFORMATION_MESSAGE);
+    }
 
     /**
      * ROIをファイルから読み込み
      * HOROS-20240407準拠: - (IBAction) roiLoadFromFiles: (id) sender
      */
     public void roiLoadFromFiles(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null || view.getCurDCM() == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setMultiSelectionEnabled(true);
+        if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
+        java.io.File[] files = fc.getSelectedFiles();
+        com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+        int loaded = 0;
+        for (java.io.File f : files) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode root = m.readTree(f);
+                com.fasterxml.jackson.databind.JsonNode rois = root.get("rois");
+                if (rois == null)
+                    continue;
+                for (com.fasterxml.jackson.databind.JsonNode r : rois) {
+                    com.oculus.jj.model.ROI roi = buildROIFromJson(r, view.getCurDCM(), view);
+                    if (roi != null) {
+                        view.getCurDCM().getROIs().add(roi);
+                        loaded++;
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.selected", "Selected ROIs: {0}"), loaded + " (loaded)"),
+                LanguageManager.get("menu_roi_import", "Import ROI(s)..."));
+    }
+
+    private com.oculus.jj.model.ROI buildROIFromJson(com.fasterxml.jackson.databind.JsonNode r, DicomPix pix, DCMView view) {
+        DCMView.ToolMode type = DCMView.ToolMode.tCPolygon;
+        String t = r.path("type").asText("");
+        for (DCMView.ToolMode tm : DCMView.ToolMode.values()) {
+            if (tm.name().equals(t)) {
+                type = tm;
+                break;
+            }
+        }
+        com.oculus.jj.model.ROI roi = new com.oculus.jj.model.ROI(type,
+                (float) pix.getPixelSpacingX(), (float) pix.getPixelSpacingY(),
+                new java.awt.geom.Point2D.Float(0f, 0f));
+        roi.setName(r.path("name").asText(com.oculus.jj.config.AppPreferences.getRoiDefaultName()));
+        roi.setComments(r.path("comments").asText(""));
+        roi.setColor(java.awt.Color.decode(r.path("color").asText("#FFAA00")));
+        roi.setLocked(r.path("locked").asBoolean(false));
+        roi.setSelectable(r.path("selectable").asBoolean(true));
+        roi.setThickness((float) r.path("thickness").asDouble(1.0));
+        com.fasterxml.jackson.databind.JsonNode pts = r.path("points");
+        java.util.List<java.awt.geom.Point2D.Float> list = new java.util.ArrayList<>();
+        if (pts.isArray()) {
+            for (com.fasterxml.jackson.databind.JsonNode p : pts) {
+                list.add(new java.awt.geom.Point2D.Float((float) p.path("x").asDouble(), (float) p.path("y").asDouble()));
+            }
+        }
+        roi.setPoints(list);
+        roi.setSourcePix(pix);
+        roi.setParentView(view);
+        roi.setSOPInstanceUID(pix.getSOPInstanceUID());
+        return roi;
     }
 
     /**
@@ -11386,6 +12934,12 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiSaveSelected: (id) sender
      */
     public void roiSaveSelected(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        saveROIsToFile(rois);
     }
 
     /**
@@ -11393,6 +12947,60 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiSaveSeries: (id) sender
      */
     public void roiSaveSeries(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = seriesROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        saveROIsToFile(rois);
+    }
+
+    private void saveROIsToFile(java.util.List<com.oculus.jj.model.ROI> rois) {
+        DCMView view = activeDCMView();
+        JFileChooser fc = new JFileChooser();
+        if (view != null && view.getCurDCM() != null) {
+            fc.setSelectedFile(new java.io.File("ROIs_" + view.getCurDCM().getSOPInstanceUID() + ".json"));
+        }
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
+        java.io.File out = fc.getSelectedFile();
+        if (!out.getName().toLowerCase().endsWith(".json"))
+            out = new java.io.File(out.getAbsolutePath() + ".json");
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.node.ArrayNode arr = m.createArrayNode();
+            for (com.oculus.jj.model.ROI roi : rois) {
+                com.fasterxml.jackson.databind.node.ObjectNode o = m.createObjectNode();
+                o.put("type", roi.getType() != null ? roi.getType().name() : "tCPolygon");
+                o.put("name", roi.getName() != null ? roi.getName() : "");
+                o.put("comments", roi.getComments() != null ? roi.getComments() : "");
+                o.put("color", "#" + Integer.toHexString(roi.getColor().getRGB()));
+                o.put("locked", roi.isLocked());
+                o.put("selectable", roi.isSelectable());
+                o.put("thickness", roi.getThickness());
+                o.put("sopInstanceUID", roi.getSOPInstanceUID() != null ? roi.getSOPInstanceUID() : "");
+                com.fasterxml.jackson.databind.node.ArrayNode pts = m.createArrayNode();
+                for (java.awt.geom.Point2D.Float p : roi.getPoints()) {
+                    com.fasterxml.jackson.databind.node.ObjectNode p2 = m.createObjectNode();
+                    p2.put("x", p.x);
+                    p2.put("y", p.y);
+                    pts.add(p2);
+                }
+                o.set("points", pts);
+                arr.add(o);
+            }
+            com.fasterxml.jackson.databind.node.ObjectNode root = m.createObjectNode();
+            root.put("sopInstanceUID", view != null && view.getCurDCM() != null ? view.getCurDCM().getSOPInstanceUID() : "");
+            root.set("rois", arr);
+            m.writerWithDefaultPrettyPrinter().writeValue(out, root);
+            infoFmt(LanguageManager.get("roi.msg.saved", "Saved ROI(s) to:") + "\n" + out,
+                    LanguageManager.get("menu_roi_save_selected", "Save Selected ROI(s)..."));
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, ex.getMessage(),
+                    LanguageManager.get("menu_roi_save_selected", "Save Selected ROI(s)..."),
+                    JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -11400,6 +13008,20 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiDeleteAll: (id) sender
      */
     public void roiDeleteAll(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null)
+            return;
+        int total = 0;
+        for (DicomPix pix : view.getDcmPixList()) {
+            if (pix != null) {
+                total += pix.getROIs().size();
+                pix.getROIs().clear();
+            }
+        }
+        view.selectedRoi = null;
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.rois_removed", "Removed ROIs: {0}"), total),
+                LanguageManager.get("menu_roi_delete_all", "Delete All ROIs in this Series"));
     }
 
     /**
@@ -11407,13 +13029,53 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiDeleteAllROIsWithSameName: (id) sender
      */
     public void roiDeleteAllROIsWithSameName(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> sel = selectedROIs();
+        if (sel.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        String name = sel.get(0).getName();
+        if (name == null || name.isEmpty()) {
+            info("roi.msg.no_selection", "Selected ROI has no name.");
+            return;
+        }
+        DCMView view = activeDCMView();
+        int removed = 0;
+        for (DicomPix pix : view.getDcmPixList()) {
+            if (pix == null)
+                continue;
+            java.util.List<com.oculus.jj.model.ROI> rois = pix.getROIs();
+            java.util.Iterator<com.oculus.jj.model.ROI> it = rois.iterator();
+            while (it.hasNext()) {
+                com.oculus.jj.model.ROI roi = it.next();
+                if (name.equals(roi.getName())) {
+                    it.remove();
+                    removed++;
+                }
+            }
+        }
+        if (view.getSelectedRoi() != null && name.equals(view.getSelectedRoi().getName()))
+            view.selectedRoi = null;
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.rois_removed", "Removed ROIs: {0}"), removed),
+                "Delete All ROIs with Same Name");
     }
 
     /**
      * ROIを選択/選択解除
      * HOROS-20240407準拠: - (IBAction) roiSelectDeselectAll: (id) sender
+     * sender == "deselect" 時に全解除
      */
     public void roiSelectDeselectAll(Object sender) {
+        boolean select = !"deselect".equals(sender);
+        for (com.oculus.jj.model.ROI roi : seriesROIs())
+            roi.setSelected(select);
+        DCMView view = activeDCMView();
+        if (view != null)
+            view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.selected", "Selected ROIs: {0}"), multiSelectedCount()),
+                select ? LanguageManager.get("menu_roi_select_all", "Select All ROIs")
+                        : LanguageManager.get("menu_roi_deselect_all", "Deselect All ROIs"));
     }
 
     /**
@@ -11421,6 +13083,12 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiGetManager: (id) sender
      */
     public void roiGetManager(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        AnnotationsPanel.toggle(this, view);
     }
 
     /**
@@ -11428,6 +13096,22 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiGetInfo: (id) sender
      */
     public void roiGetInfo(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty())
+            rois = seriesROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.history_empty", "No statistics available for the selected ROI(s).");
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (com.oculus.jj.model.ROI roi : rois) {
+            sb.append("• ").append(roi.getName() != null ? roi.getName() : "").append("\n");
+            sb.append("  ").append(roi.getType()).append("  ")
+                    .append(String.format("Area=%.2f  Mean=%.2f  SD=%.2f  Min=%.1f  Max=%.1f",
+                            roi.getArea() / 100.0, roi.getMean(), roi.getStDev(), roi.getMin(), roi.getMax()))
+                    .append("\n");
+        }
+        infoFmt(sb.toString(), LanguageManager.get("roi.msg.history", "ROI Statistics"));
     }
 
     /**
@@ -11435,6 +13119,20 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiRename: (id) sender
      */
     public void roiRename(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        String name = JOptionPane.showInputDialog(this,
+                LanguageManager.get("menu_roi_rename", "ROI Rename..."), rois.get(0).getName());
+        if (name == null)
+            return;
+        for (com.oculus.jj.model.ROI roi : rois)
+            roi.setName(name);
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
     }
 
     /**
@@ -11442,6 +13140,783 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) roiDefaults: (id) sender
      */
     public void roiDefaults(Object sender) {
+        String name = JOptionPane.showInputDialog(this,
+                LanguageManager.get("menu_roi_defaults", "Set Default ROI Name..."),
+                com.oculus.jj.config.AppPreferences.getRoiDefaultName());
+        if (name == null || name.isEmpty())
+            return;
+        com.oculus.jj.config.AppPreferences.setRoiDefaultName(name);
+    }
+
+    // ========== ROIメニューアクションメソッド（HOROS追加項目） ==========
+
+    /** 表示オプション切替 (HOROS: updateViews:)。
+     *  op=0: 選択中ROIのみ情報表示  op=1: マウスオーバー  op=2: 名前のみ  op=3: コッブ角
+     */
+    private void updateViews(int op) {
+        boolean sel = !com.oculus.jj.config.AppPreferences.isRoiInfoOnlyWhenSelected();
+        com.oculus.jj.config.AppPreferences.setRoiInfoOnlyWhenSelected(sel);
+        DCMView v2 = activeDCMView();
+        if (v2 != null)
+            v2.repaint();
+    }
+
+    // ===== Thickness / Font (HOROS: increaseThickness / decreaseThickness / increaseFontSize / decreaseFontSize) =====
+
+    /** 選択/系列のROI線太を太く (HOROS: increaseThickness:) */
+    public void increaseThickness(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty())
+            rois = seriesROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        float t = rois.get(0).getThickness() + 1.0f;
+        for (com.oculus.jj.model.ROI r : rois)
+            r.setThickness(Math.max(1.0f, t));
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+    }
+
+    /** 選択/系列のROI線太を細く (HOROS: decreaseThickness:) */
+    public void decreaseThickness(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty())
+            rois = seriesROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        float t = rois.get(0).getThickness() - 1.0f;
+        for (com.oculus.jj.model.ROI r : rois)
+            r.setThickness(Math.max(1.0f, t));
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+    }
+
+    /** ROIフォントを大きく (HOROS: increaseFontSize:) */
+    public void increaseFontSize(Object sender) {
+        double s = com.oculus.jj.config.AppPreferences.getRoiFontScale() + 0.25;
+        com.oculus.jj.config.AppPreferences.setRoiFontScale(Math.min(3.0, s));
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+    }
+
+    /** ROIフォントを小さく (HOROS: decreaseFontSize:) */
+    public void decreaseFontSize(Object sender) {
+        double s = com.oculus.jj.config.AppPreferences.getRoiFontScale() - 0.25;
+        com.oculus.jj.config.AppPreferences.setRoiFontScale(Math.max(0.5, s));
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+    }
+
+    // ===== Flip (HOROS: flipROIHorizontally / flipROIVertically) =====
+
+    /** 選択ROIを水平反転 (HOROS: flipROIHorizontally:) */
+    public void flipROIHorizontally(Object sender) {
+        flipROI(true);
+    }
+
+    /** 選択ROIを垂直反転 (HOROS: flipROIVertically:) */
+    public void flipROIVertically(Object sender) {
+        flipROI(false);
+    }
+
+    private void flipROI(boolean horizontal) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        DCMView view = activeDCMView();
+        int w = view != null && view.getCurDCM() != null ? view.getCurDCM().getWidth() : 0;
+        int h = view != null && view.getCurDCM() != null ? view.getCurDCM().getHeight() : 0;
+        for (com.oculus.jj.model.ROI roi : rois) {
+            java.util.List<java.awt.geom.Point2D.Float> pts = roi.getPoints();
+            for (int i = 0; i < pts.size(); i++) {
+                java.awt.geom.Point2D.Float p = pts.get(i);
+                if (horizontal && w > 0)
+                    pts.set(i, new java.awt.geom.Point2D.Float(w - p.x, p.y));
+                else if (!horizontal && h > 0)
+                    pts.set(i, new java.awt.geom.Point2D.Float(p.x, h - p.y));
+            }
+            roi.setPoints(new java.util.ArrayList<>(pts));
+        }
+        if (view != null)
+            view.repaint();
+    }
+
+    // ===== Statistics (HOROS: roiHistogram) =====
+
+    /** 選択ROIのヒストグラム表示 (HOROS: roiHistogram:) */
+    public void roiHistogram(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        com.oculus.jj.model.ROI roi = rois.get(0);
+        int[] bins = new int[64];
+        DCMView view = activeDCMView();
+        DicomPix pix = view != null ? view.getCurDCM() : null;
+        if (pix == null)
+            return;
+        int w = pix.getWidth();
+        int h = pix.getHeight();
+        for (java.awt.geom.Point2D.Float p : roi.getPoints()) {
+            if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h)
+                continue;
+            int v = pix.getShortData()[(int) p.y * w + (int) p.x] & 0xFFFF;
+            int bin = Math.min(63, v / 64);
+            bins[bin]++;
+        }
+        int max = 1;
+        for (int b : bins)
+            max = Math.max(max, b);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bins.length; i++) {
+            sb.append(String.format("%5d-%5d ", i * 64, i * 64 + 63));
+            int bar = (int) (Math.round((double) bins[i] / max * 40));
+            for (int k = 0; k < bar; k++)
+                sb.append('#');
+            sb.append("  ").append(bins[i]).append("\n");
+        }
+        javax.swing.JTextArea ta = new javax.swing.JTextArea(sb.toString(), 30, 80);
+        ta.setFont(new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 11));
+        ta.setEditable(false);
+        javax.swing.JScrollPane sp = new javax.swing.JScrollPane(ta);
+        sp.setPreferredSize(new java.awt.Dimension(420, 500));
+        JOptionPane.showMessageDialog(this, sp,
+                LanguageManager.get("roi.msg.history", "ROI Statistics") + " - "
+                        + (roi.getName() != null ? roi.getName() : ""),
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // ===== Layer / Volume / Propagate (HOROS) =====
+
+    /** 選択ROIからレイヤーを作成 (HOROS: createLayerROIFromSelectedROI:) - プレースホルダ */
+    public void createLayerROIFromSelectedROI(Object sender) {
+        info("roi.msg.not_implemented", "Not yet implemented in this port.");
+    }
+
+    /** ROI体積 / Generate Missing ROIs (HOROS: roiVolume: tag=0/1) */
+    public void roiVolume(Object sender) {
+        int op = (sender instanceof Integer) ? (Integer) sender : 0;
+        if (op == 1) {
+            generateMissingROIs();
+            return;
+        }
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        DCMView view = activeDCMView();
+        DicomPix pix = view != null ? view.getCurDCM() : null;
+        double thickness = pix != null ? pix.getSliceThickness() : 1.0;
+        if (thickness <= 0)
+            thickness = 1.0;
+        double volume = 0;
+        for (com.oculus.jj.model.ROI roi : rois)
+            volume += roi.getArea() / 100.0 * thickness;
+        infoFmt(String.format("%.2f mm^3", volume), LanguageManager.get("roi.msg.volume", "ROI Volume (approx.)"));
+    }
+
+    /**
+     * HOROS-20240407準拠: computeVolume ... generateMissingROIs:YES相当。
+     * 選択したROIの名前を共有するスライス間にある「空のスライス」に、
+     * 隣接する2つの同名ROIを線形補間（点同士の比率補間）した生成ROIを挿入する。
+     * comments="morphing generated" で識別し、 roiDeleteGeneratedROIs で削除可能。
+     * 近似: HOROSのITK等値線/isoContourではなく、点列の線形補間を使う（点列長が一致しない場合は一致部分のみ使用）。
+     */
+    private void generateMissingROIs() {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        com.oculus.jj.model.ROI src = rois.get(0);
+        String name = src.getName();
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.size() < 2) {
+            info("roi.msg.single_image", "There is only one image in this series. Nothing to propagate!");
+            return;
+        }
+
+        // (1) まず、既に生成済みの同名ROIを削除（HOROS: roiDeleteGeneratedROIsForName: [selectedRoi name]）
+        int removed = 0;
+        for (DicomPix pix : pixList) {
+            if (pix == null)
+                continue;
+            java.util.List<com.oculus.jj.model.ROI> rr = pix.getROIs();
+            for (int i = rr.size() - 1; i >= 0; i--) {
+                com.oculus.jj.model.ROI r = rr.get(i);
+                if (r != null && "morphing generated".equals(r.getComments())
+                        && (name == null || name.equals(r.getName()))) {
+                    rr.remove(i);
+                    removed++;
+                }
+            }
+        }
+
+        // (2) 各スライス上の同名ROIをスライス順に収集
+        int n = pixList.size();
+        @SuppressWarnings("unchecked")
+        com.oculus.jj.model.ROI[] roiBySlice = new com.oculus.jj.model.ROI[n];
+        for (int i = 0; i < n; i++) {
+            DicomPix pix = pixList.get(i);
+            if (pix == null)
+                continue;
+            for (com.oculus.jj.model.ROI r : pix.getROIs()) {
+                if (r != null && name != null && name.equals(r.getName())
+                        && !"morphing generated".equals(r.getComments())) {
+                    roiBySlice[i] = r;
+                    break;
+                }
+            }
+        }
+
+        // (3) 隣接する2つの同名ROIの間の空きスライスに補間ROIを生成
+        int generated = 0;
+        com.oculus.jj.model.ROI last = null;
+        int lastIdx = -1;
+        for (int i = 0; i < n; i++) {
+            if (roiBySlice[i] != null) {
+                if (last != null && (lastIdx + 1) < i) {
+                    for (int y = lastIdx + 1; y < i; y++) {
+                        float ratio = (float) (y - lastIdx) / (float) (i - lastIdx);
+                        com.oculus.jj.model.ROI c = morphBetween(last, roiBySlice[i], ratio);
+                        if (c != null) {
+                            DicomPix targetPix = pixList.get(y);
+                            if (targetPix != null) {
+                                targetPix.addROI(c);
+                                generated++;
+                            }
+                        }
+                    }
+                }
+                last = roiBySlice[i];
+                lastIdx = i;
+            }
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.generated", "Removed {0} previous, generated {1} new ROI(s)."), removed, generated),
+                LanguageManager.get("roi.msg.generated_title", "Generate Missing ROIs"));
+    }
+
+    /**
+     * 2つのROIの点列を線形補間（HOROS: roiMorphingBetween: の近似）。
+     * 点列長が異なる場合は短い方の長さを基準に補間する。
+     * 生成ROI: type=tCPolygon, name=親名, comments="morphing generated"。
+     */
+    private com.oculus.jj.model.ROI morphBetween(com.oculus.jj.model.ROI a,
+            com.oculus.jj.model.ROI b, float ratio) {
+        if (a == null || b == null)
+            return null;
+        List<java.awt.geom.Point2D.Float> aPts = a.getPoints();
+        List<java.awt.geom.Point2D.Float> bPts = b.getPoints();
+        if (aPts == null || bPts == null || aPts.size() < 2 || bPts.size() < 2)
+            return null;
+        int m = Math.min(aPts.size(), bPts.size());
+        if (m < 2)
+            return null;
+        List<java.awt.geom.Point2D.Float> out = new ArrayList<>(m);
+        for (int i = 0; i < m; i++) {
+            java.awt.geom.Point2D.Float p0 = aPts.get(i);
+            java.awt.geom.Point2D.Float p1 = bPts.get(i);
+            float x = (float) (p0.x + (p1.x - p0.x) * ratio);
+            float y = (float) (p0.y + (p1.y - p0.y) * ratio);
+            out.add(new java.awt.geom.Point2D.Float(x, y));
+        }
+        com.oculus.jj.model.ROI c = new com.oculus.jj.model.ROI(DCMView.ToolMode.tCPolygon,
+                (float) a.getPixelSpacingX(), (float) a.getPixelSpacingY(), null);
+        c.setPoints(out);
+        c.setName(a.getName());
+        c.setColor(a.getColor());
+        c.setOpacity(a.getOpacity());
+        c.setThickness(a.getThickness());
+        c.setComments("morphing generated");
+        c.setSelected(false);
+        return c;
+    }
+
+    /** 生成ROIを削除 (HOROS: roiDeleteGeneratedROIs:)
+     *  HOROS: comments == "morphing generated" のROIを削除する。
+     */
+    public void roiDeleteGeneratedROIs(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        int removed = 0;
+        for (DicomPix pix : view.getDcmPixList()) {
+            if (pix == null)
+                continue;
+            java.util.List<com.oculus.jj.model.ROI> rois = pix.getROIs();
+            for (int i = rois.size() - 1; i >= 0; i--) {
+                com.oculus.jj.model.ROI r = rois.get(i);
+                if (r != null && "morphing generated".equals(r.getComments())) {
+                    rois.remove(i);
+                    removed++;
+                }
+            }
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.generated_deleted", "Removed {0} generated ROI(s)."), removed),
+                LanguageManager.get("roi.msg.generated_deleted_title", "Remove Generated ROIs"));
+    }
+
+    /** ROI内容消去/復元 (HOROS: roiVolumeEraseRestore:) */
+    public void roiVolumeEraseRestore(Object sender) {
+        int op = (sender instanceof Integer) ? (Integer) sender : 0;
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        DCMView view = activeDCMView();
+        if (view == null || view.getCurDCM() == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        for (com.oculus.jj.model.ROI roi : rois)
+            roi.setEraseMode(op == 1);
+        view.repaint();
+    }
+
+    /** ROI伝播 (HOROS: roiPropagateSetup:)
+     *  HOROSではダイアログで伝播範囲を指定する。
+     *  Java版では簡易ダイアログで「全フレームへ伝播」を実行。
+     */
+    public void roiPropagateSetup(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.size() < 2) {
+            info("roi.msg.single_image", "There is only one image in this series. Nothing to propagate!");
+            return;
+        }
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI(s) selected to propagate on the series!");
+            return;
+        }
+        int from = 0, to = pixList.size() - 1;
+        int cur = view.getCurImage();
+        int confirm = JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("roi.msg.propagate_all",
+                        "Propagate selected ROI(s) to all frames of the series?"),
+                LanguageManager.get("roi.msg.propagate_title", "Propagate ROI"),
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION)
+            return;
+        int added = 0;
+        for (int i = from; i <= to; i++) {
+            if (i == cur)
+                continue;
+            DicomPix pix = pixList.get(i);
+            if (pix == null)
+                continue;
+            for (com.oculus.jj.model.ROI roi : rois) {
+                pix.addROI(roi.copy());
+                added++;
+            }
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.propagated", "Propagated {0} ROI(s) to other frames."), added),
+                LanguageManager.get("roi.msg.propagated_title", "ROI Propagation"));
+    }
+
+    /** ROI伝播スラブ (HOROS: roiPropagateSlab:)
+     *  HOROS: スラブ(stack)内の近傍スライスに選択ROIをコピーする。
+     *  Java版: 現在スライスの前後 N 枚の範囲にコピー（N はスライス厚/ピクセル間隔から推定、最小1）。
+     */
+    public void roiPropagateSlab(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList == null || pixList.size() < 2) {
+            info("roi.msg.single_image", "There is only one image in this series. Nothing to propagate!");
+            return;
+        }
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI(s) selected to propagate on the series!");
+            return;
+        }
+        // スラブの厚さを推定（スライス厚/ピクセル間隔から。1以上の整数）
+        int slab = 1;
+        DicomPix curPix = pixList.get(Math.min(view.getCurImage(), pixList.size() - 1));
+        if (curPix != null) {
+            double ps = curPix.getPixelSpacingY();
+            double th = curPix.getSliceThickness();
+            if (ps > 0 && th > 0)
+                slab = Math.max(1, (int) Math.round(th / ps));
+        }
+        int cur = view.getCurImage();
+        int start = Math.max(0, cur - slab);
+        int end = Math.min(pixList.size() - 1, cur + slab);
+        int added = 0;
+        for (int i = start; i <= end; i++) {
+            if (i == cur)
+                continue;
+            DicomPix pix = pixList.get(i);
+            if (pix == null)
+                continue;
+            for (com.oculus.jj.model.ROI roi : rois) {
+                pix.addROI(roi.copy());
+                added++;
+            }
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.propagated_slab", "Propagated {0} ROI(s) to ±{1} slab frame(s)."), added, slab),
+                LanguageManager.get("roi.msg.propagated_slab_title", "ROI Propagate to Slab"));
+    }
+
+    // ===== Group / Lock / Selectable (HOROS) =====
+
+    /** 選択ROIをグループ化 (HOROS: groupSelectedROIs:) */
+    public void groupSelectedROIs(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        // HOROS: newGroupID = [NSDate timeIntervalSinceReferenceDate] (一意な時刻ベースID)
+        long gid = System.currentTimeMillis();
+        for (com.oculus.jj.model.ROI r : rois)
+            r.setGroupID((int) gid);
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+        info("roi.msg.grouped", "ROI group updated.");
+    }
+
+    /** 選択ROIのグループ解除 (HOROS: ungroupSelectedROIs:) */
+    public void ungroupSelectedROIs(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        // HOROS: newGroupID = 0 (非グループ)
+        for (com.oculus.jj.model.ROI r : rois)
+            r.setGroupID(-1);
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+        info("roi.msg.ungrouped", "ROI group cleared.");
+    }
+
+    /** 選択ROIをロック (HOROS: lockSelectedROIs:) */
+    public void lockSelectedROIs(Object sender) {
+        setROIsLock(true);
+    }
+
+    /** 選択ROIのロック解除 (HOROS: unlockSelectedROIs:) */
+    public void unlockSelectedROIs(Object sender) {
+        setROIsLock(false);
+    }
+
+    private void setROIsLock(boolean lock) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty())
+            rois = seriesROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        for (com.oculus.jj.model.ROI r : rois)
+            r.setLocked(lock);
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+    }
+
+    /** 選択ROIを選択不能にする (HOROS: makeSelectedROIsUnselectable:) */
+    public void makeSelectedROIsUnselectable(Object sender) {
+        setROIsSelectable(false, false);
+    }
+
+    /** 全ROIを選択可能にする (HOROS: makeAllROIsSelectable:) */
+    public void makeAllROIsSelectable(Object sender) {
+        setROIsSelectable(true, true);
+    }
+
+    private void setROIsSelectable(boolean selectable, boolean all) {
+        java.util.List<com.oculus.jj.model.ROI> rois = all ? seriesROIs() : selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        for (com.oculus.jj.model.ROI r : rois)
+            r.setSelectable(selectable);
+        DCMView v = activeDCMView();
+        if (v != null)
+            v.repaint();
+    }
+
+    // ===== Set Pixel Values / Grow Region (HOROS) =====
+
+    /** ROI内のピクセル値を設定 (HOROS: roiSetPixelsSetup:) */
+    public void roiSetPixelsSetup(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        String s = JOptionPane.showInputDialog(this,
+                LanguageManager.get("menu_roi_set_pixel_values", "Set Pixel Values to..."), "0");
+        if (s == null)
+            return;
+        int val;
+        try {
+            val = (int) Short.parseShort(s.trim());
+        } catch (Exception ex) {
+            val = 0;
+        }
+        DCMView view = activeDCMView();
+        if (view == null || view.getCurDCM() == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        DicomPix pix = view.getCurDCM();
+        short[] data = pix.getShortData();
+        if (data == null)
+            return;
+        int w = pix.getWidth();
+        int h = pix.getHeight();
+        int count = 0;
+        for (com.oculus.jj.model.ROI roi : rois) {
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    if (roi.isPointInside(new java.awt.geom.Point2D.Float(x, y))) {
+                        data[y * w + x] = (short) val;
+                        count++;
+                    }
+                }
+            }
+        }
+        pix.setShortImageData(data);
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.pixels_set", "Pixel values set inside ROI: {0}"), count),
+                LanguageManager.get("menu_roi_set_pixel_values", "Set Pixel Values to..."));
+    }
+
+    /** 領域成長 (HOROS: segmentationTest:) - 既存のViewer3DController実装にフォールバック */
+    public void segmentationTest(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        // 領域成長は3D Viewer内の実装(Viewer3DController)に委譲するのがHOROS準拠。
+        // 2Dメニューからは案内表示にとどめる
+        infoFmt(LanguageManager.get("roi.msg.not_implemented", "Not yet implemented in this port."),
+                LanguageManager.get("menu_roi_grow_region", "Grow Region (2D/3D Segmentation)..."));
+    }
+
+    // ===== Brush ROIs (HOROS) =====
+
+    /** ブラッシュROI (HOROS: applyConvolutionOnSource: tag=0) - プレースホルダ */
+    public void applyConvolutionOnSource(Object sender) {
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        view.currentTool = DCMView.ToolMode.tBrush;
+        view.repaint();
+    }
+
+    /** ブラッシュ形態学操作 (HOROS: morphoSelectedBrushROI:) */
+    public void morphoSelectedBrushROI(Object sender) {
+        int op = (sender instanceof Integer) ? (Integer) sender : 0;
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        boolean ok;
+        switch (op) {
+            case 1: // Dilatation
+                ok = view.applyBrushMorph(true, 2);
+                break;
+            case 2: // Closing (Dilate + Erode)
+                view.applyBrushMorph(true, 2);
+                ok = view.applyBrushMorph(false, 2);
+                break;
+            case 3: // Opening (Erode + Dilate)
+                view.applyBrushMorph(false, 2);
+                ok = view.applyBrushMorph(true, 2);
+                break;
+            default:
+                ok = false;
+        }
+        if (!ok)
+            info("roi.msg.no_selection", "No ROI is selected.");
+    }
+
+    // ===== Convert / Merge (HOROS) =====
+
+    /** ブラッシュ/ポリゴン変換 (HOROS: convertBrushPolygon:)
+     *  HOROS: textureベース（brush→ITKコンター抽出 / polygon→texture化）。
+     *  Java版: 近似で
+     *   - ブラッシュ(点集合) → ポリゴン: 点の凸包(convex hull)をポリゴンとして作成
+     *   - ポリゴン(点集合) → ブラッシュ: 辺を密化した点をブラッシュとして作成
+     */
+    public void convertBrushPolygon(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        if (rois.isEmpty()) {
+            info("roi.msg.no_selection", "No ROI is selected.");
+            return;
+        }
+        DCMView view = activeDCMView();
+        if (view == null) {
+            info("roi.msg.no_rois", "No ROIs in the current series.");
+            return;
+        }
+        DicomPix pix = view.getCurDCM();
+        if (pix == null)
+            return;
+        int converted = 0;
+        for (com.oculus.jj.model.ROI roi : rois) {
+            List<java.awt.geom.Point2D.Float> pts = roi.getPoints();
+            if (pts == null || pts.size() < 2)
+                continue;
+            DCMView.ToolMode newType;
+            List<java.awt.geom.Point2D.Float> newPts;
+            if (roi.getType() == DCMView.ToolMode.tPencil || roi.isEraseMode()
+                    || roi.getThickness() > 1) {
+                // ブラッシュ → ポリゴン（凸包）
+                newType = DCMView.ToolMode.tCPolygon;
+                newPts = convexHull(pts);
+            } else if (roi.getType() == DCMView.ToolMode.tCPolygon
+                    || roi.getType() == DCMView.ToolMode.tOPolygon
+                    || roi.getType() == DCMView.ToolMode.tPencil) {
+                // ポリゴン → ブラッシュ（辺の密化）
+                newType = DCMView.ToolMode.tPencil;
+                newPts = densifyPolygon(pts, 8);
+            } else {
+                continue;
+            }
+            if (newPts == null || newPts.size() < 2)
+                continue;
+            com.oculus.jj.model.ROI nroi = new com.oculus.jj.model.ROI(newType,
+                    (float) pix.getPixelSpacingX(), (float) pix.getPixelSpacingY(), null);
+            nroi.setPoints(newPts);
+            nroi.setName(roi.getName());
+            nroi.setComments(roi.getComments());
+            nroi.setColor(roi.getColor());
+            nroi.setOpacity(roi.getOpacity());
+            nroi.setSelected(true);
+            pix.addROI(nroi);
+            pix.removeROI(roi);
+            if (newType == DCMView.ToolMode.tPencil)
+                nroi.setThickness(3);
+            converted++;
+        }
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.converted", "Converted {0} ROI(s)."), converted),
+                LanguageManager.get("roi.msg.converted_title", "Convert Brush/Polygon"));
+    }
+
+    /** ブラッシュROI結合 (HOROS: mergeBrushROI:)
+     *  HOROS: textureの統合。Java版: 点集合の統合（最初のROIに他の点を追加し、他を削除）。
+     */
+    public void mergeBrushROI(Object sender) {
+        java.util.List<com.oculus.jj.model.ROI> rois = selectedROIs();
+        // 同じタイプかつ点集合を持つものだけを扱う
+        java.util.List<com.oculus.jj.model.ROI> brush = new java.util.ArrayList<>();
+        for (com.oculus.jj.model.ROI r : rois) {
+            if (r != null && r.getPoints() != null && !r.getPoints().isEmpty()
+                    && (r.getType() == DCMView.ToolMode.tPencil || r.getThickness() > 1))
+                brush.add(r);
+        }
+        if (brush.size() < 2) {
+            info("roi.msg.merge_need_two", "Select at least two brush ROIs to merge.");
+            return;
+        }
+        DCMView view = activeDCMView();
+        if (view == null)
+            return;
+        DicomPix pix = view.getCurDCM();
+        if (pix == null)
+            return;
+        com.oculus.jj.model.ROI target = brush.get(0);
+        List<java.awt.geom.Point2D.Float> all = new ArrayList<>(target.getPoints());
+        for (int i = 1; i < brush.size(); i++) {
+            all.addAll(brush.get(i).getPoints());
+            pix.removeROI(brush.get(i));
+        }
+        target.setPoints(all);
+        view.repaint();
+        infoFmt(String.format(LanguageManager.get("roi.msg.merged", "Merged {0} brush ROIs."), brush.size()),
+                LanguageManager.get("roi.msg.merged_title", "Merge Brush ROIs"));
+    }
+
+    /** Andrew's monotone chain convex hull（ブラシ→ポリゴンの近似） */
+    private static List<java.awt.geom.Point2D.Float> convexHull(List<java.awt.geom.Point2D.Float> pts) {
+        List<java.awt.geom.Point2D.Float> p = new ArrayList<>(pts);
+        p.sort((a, b) -> a.x != b.x ? Float.compare(a.x, b.x) : Float.compare(a.y, b.y));
+        int n = p.size();
+        if (n <= 2)
+            return p;
+        java.util.List<java.awt.geom.Point2D.Float> hull = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            while (hull.size() >= 2 && cross(hull.get(hull.size() - 2), hull.get(hull.size() - 1), p.get(i)) <= 0)
+                hull.remove(hull.size() - 1);
+            hull.add(p.get(i));
+        }
+        int lower = hull.size() + 1;
+        for (int i = n - 2; i >= 0; i--) {
+            while (hull.size() > lower && cross(hull.get(hull.size() - 2), hull.get(hull.size() - 1), p.get(i)) <= 0)
+                hull.remove(hull.size() - 1);
+            hull.add(p.get(i));
+        }
+        hull.remove(hull.size() - 1);
+        return hull;
+    }
+
+    private static int cross(java.awt.geom.Point2D.Float o, java.awt.geom.Point2D.Float a, java.awt.geom.Point2D.Float b) {
+        long v = Math.round((a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x));
+        if (v > 0) return 1;
+        if (v < 0) return -1;
+        return 0;
+    }
+
+    /** ポリゴンの辺を密化（ポリゴン→ブラシの近似） */
+    private static List<java.awt.geom.Point2D.Float> densifyPolygon(List<java.awt.geom.Point2D.Float> pts, int perEdge) {
+        List<java.awt.geom.Point2D.Float> out = new ArrayList<>();
+        int n = pts.size();
+        for (int i = 0; i < n; i++) {
+            java.awt.geom.Point2D.Float a = pts.get(i);
+            java.awt.geom.Point2D.Float b = pts.get((i + 1) % n);
+            for (int s = 0; s < perEdge; s++) {
+                double t = (double) s / perEdge;
+                out.add(new java.awt.geom.Point2D.Float(
+                        (float) (a.x + (b.x - a.x) * t),
+                        (float) (a.y + (b.y - a.y) * t)));
+            }
+        }
+        return out;
     }
 
     /**
@@ -11758,15 +14233,55 @@ public class BrowserController extends JFrame {
             vc.dispose();
     }
 
-    /** Resize current viewer window by percentage */
-    private void resizeWindowByPercent(int percent) {
-        BrowserController bc = BrowserController.currentBrowser();
-        if (bc == null || bc.getState() != java.awt.Frame.NORMAL)
+    /** Resize image zoom level (HOROS: DCMView.m resizeWindow: tag 0..5 → resizeWindowToScale:)
+     *  0: 25% / 1: 50% / 2: 100% / 3: 200% / 4: 300% / 5: iPod Video (320px基準) */
+    private void resizeWindowToScale(int tag) {
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null)
             return;
-        java.awt.Dimension screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
-        int w = (int) (screenSize.width * percent / 100);
-        int h = (int) (screenSize.height * percent / 100);
-        bc.setSize(Math.min(w, screenSize.width), Math.min(h, screenSize.height));
+        float resizeScale;
+        switch (tag) {
+            case 0:
+                resizeScale = 0.25f;
+                break;
+            case 1:
+                resizeScale = 0.5f;
+                break;
+            case 2:
+                resizeScale = 1.0f;
+                break;
+            case 3:
+                resizeScale = 2.0f;
+                break;
+            case 4:
+                resizeScale = 3.0f;
+                break;
+            case 5: { // iPod Video: 320pxを基準に画像をフィット
+                DicomPix pix = view.getCurDCM();
+                if (pix == null)
+                    return;
+                int w = pix.getWidth();
+                int h = pix.getHeight();
+                if (w <= 0 || h <= 0)
+                    return;
+                float widthRatio = 320.0f / w;
+                float heightRatio = 320.0f / h;
+                resizeScale = Math.min(widthRatio, heightRatio);
+                break;
+            }
+            default:
+                return;
+        }
+        view.setScaleValue(resizeScale);
+        view.repaint();
+    }
+
+    /** Bring all viewer windows to front (HOROS: arrangeInFront:) */
+    private void bringAllToFront() {
+        for (java.awt.Window w : java.awt.Window.getWindows()) {
+            if (w.isVisible() && w != this)
+                w.toFront();
+        }
     }
 
     /** Export to DICOM Network Node (PACS) */
@@ -12083,6 +14598,15 @@ public class BrowserController extends JFrame {
         }
         try {
             java.nio.file.Files.write(out.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            // HOROS-20240407準拠: レポートはStudyに紐づく（reportURL）。
+            // 以降 convertReportToPDF / convertReportToDICOMSR / deleteReport が利用可能になる。
+            com.oculus.jj.model.DicomStudy study = activeStudy();
+            if (study != null) {
+                study.setReportURL(out.getAbsolutePath());
+                DicomDatabase db = DicomDatabase.activeLocalDatabase();
+                if (db != null)
+                    db.save();
+            }
             JOptionPane.showMessageDialog(this,
                     LanguageManager.get("report.saved", "Report saved to:") + "\n" + out.getAbsolutePath(),
                     LanguageManager.get("report.title", "Report"), JOptionPane.INFORMATION_MESSAGE);

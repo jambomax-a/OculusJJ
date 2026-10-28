@@ -391,6 +391,20 @@ public class DatabaseOutlineView extends JXTreeTable {
         // ダブルクリックリスナーを追加
         addDoubleClickListener();
 
+        // P-G: 4D シリーズメニュー（Open in 4D / Reparse in 4D / Select all 4D Series）を追加
+        // HOROS-20240407準拠: initContextualMenus (10850行目) の "Open Images in 4D" / "Open Reparsed series"
+        javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem open4D = new javax.swing.JMenuItem(com.oculus.jj.utils.LanguageManager.get("menu_4d_open", "Open in 4D"));
+        open4D.addActionListener(e -> browserController.movieViewerDICOM(null));
+        javax.swing.JMenuItem reparse4D = new javax.swing.JMenuItem(com.oculus.jj.utils.LanguageManager.get("menu_4d_reparse", "Reparse in 4D..."));
+        reparse4D.addActionListener(e -> browserController.reparseIn4D(null));
+        javax.swing.JMenuItem selectAll4D = new javax.swing.JMenuItem(com.oculus.jj.utils.LanguageManager.get("menu_4d_select_all", "Select all 4D Series"));
+        selectAll4D.addActionListener(e -> browserController.selectAll4DSeries(null));
+        popup.add(open4D);
+        popup.add(reparse4D);
+        popup.add(selectAll4D);
+        setComponentPopupMenu(popup);
+
         // HOROS-20240407準拠: stateText列のクリックイベントを追加
         addStateTextClickListener();
 

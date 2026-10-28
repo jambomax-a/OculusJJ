@@ -18,6 +18,10 @@ import com.oculus.jj.utils.LanguageManager;
  */
 public class Viewer3DController extends JFrame {
 
+    // Live instance tracking (for BrowserController menu items to drive the active 3D window)
+    private static final java.util.List<Viewer3DController> INSTANCES =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
     private ViewerController viewer2D;
     private List<DicomPix> pixList;
     private short[] volume; // [z * dimY * dimX + y * dimX + x] 1D統合配列
@@ -388,7 +392,13 @@ public class Viewer3DController extends JFrame {
             public void windowClosing(WindowEvent e) {
                 cleanup();
             }
+            @Override
+            public void windowClosed(WindowEvent e) {
+                INSTANCES.remove(Viewer3DController.this);
+            }
         });
+        INSTANCES.add(this);
+        requestFocus();
 
         // Asynchronously prepare data and launch GPU renderer
         startAsyncGPUInitialization();
@@ -2710,6 +2720,79 @@ public class Viewer3DController extends JFrame {
                 v3d.setVisible(true);
             });
         }
+    }
+
+    /**
+     * 現在アクティブな3D Viewerウィンドウ（最前面のウィンドウ）を返す。
+     * BrowserController の 3D Viewer メニュー項目がこれを操作する。
+     */
+    public static Viewer3DController getActiveInstance() {
+        Viewer3DController last = null;
+        long lastTime = -1L;
+        synchronized (INSTANCES) {
+            for (Viewer3DController inst : INSTANCES) {
+                if (!inst.isVisible())
+                    continue;
+                if (inst.isFocusOwner() || (last == null)) {
+                    last = inst;
+                    break;
+                }
+            }
+            if (last == null) {
+                for (Viewer3DController inst : INSTANCES) {
+                    if (inst.isVisible()) {
+                        last = inst;
+                        break;
+                    }
+                }
+            }
+        }
+        return last;
+    }
+
+    public enum OrientationView {
+        CORONAL, LEFT_SAGITTAL, RIGHT_SAGITTAL, AXIAL, LATERAL, ANTERIOR_POSTERIOR, SUPERIOR_INFERIOR
+    }
+
+    /**
+     * 方向プリセットで3Dビューを回転する (HOROS-20240407準拠: coView/saView/saViewOpposite/axView 相当)。
+     * 実装は Viewer3DController 内の Orientation ボタン（Lateral / Anterior-Posterior / Superior-Inferior）の
+     * setRotation 呼び出しと揃える。
+     */
+    public void setOrientationView(OrientationView v) {
+        if (glViewer == null)
+            return;
+        switch (v) {
+            case CORONAL:
+            case LATERAL:
+                glViewer.setRotation(-1.5707963f, 1.5707963f);
+                break;
+            case LEFT_SAGITTAL:
+            case ANTERIOR_POSTERIOR:
+                glViewer.setRotation(-1.5707963f, 0.0f);
+                break;
+            case RIGHT_SAGITTAL:
+                glViewer.setRotation(-1.5707963f, -1.5707963f);
+                break;
+            case AXIAL:
+            case SUPERIOR_INFERIOR:
+                glViewer.setRotation(0.0f, 0.0f);
+                break;
+        }
+        repaint();
+    }
+
+    /** 現在の3D状態をJSONにシリアライズ（プリセット保存用）。 */
+    public com.fasterxml.jackson.databind.node.ObjectNode captureState() {
+        com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode root = m.createObjectNode();
+        root.put("mode", mode);
+        root.put("windowLevel", windowLevel);
+        root.put("windowWidth", windowWidth);
+        if (glViewer != null) {
+            root.put("perspective", glViewer.isPerspective());
+        }
+        return root;
     }
 
     public void updateInfoLabel(int mouseX, int mouseY) {

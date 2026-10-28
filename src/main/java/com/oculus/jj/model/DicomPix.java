@@ -1239,6 +1239,151 @@ public class DicomPix {
         }
     }
 
+    // ========================================================================
+    // HOROS-20240407準拠: Subtraction (XA造影CT向け)
+    // - subCtrlOnOff: トグル。ON時 各フレーム = フレーム - マスクフレーム
+    // - subCtrlOffset: 8方向1ピクセルシフトでマスクをずらして再引算
+    // - subSharpen:   シャープフィルタ(5x5)を引算結果に適用
+    // ========================================================================
+
+    /** 引算前の生データバックアップ (HOROS: 引算OFF時に元に戻す用) */
+    private short[] originalShortDataBackup = null;
+
+    /** 引算状態のフラグ (HOROS: [subCtrlOnOff state]) */
+    private boolean subtractionEnabled = false;
+
+    public boolean isSubtractionEnabled() {
+        return subtractionEnabled;
+    }
+
+    public void setSubtractionEnabled(boolean on) {
+        this.subtractionEnabled = on;
+    }
+
+    /**
+     * バックアップを取得（初回のみ生データを保持）
+     */
+    public short[] getOriginalShortData() {
+        if (originalShortDataBackup == null && rawShortData != null) {
+            originalShortDataBackup = rawShortData.clone();
+        }
+        return originalShortDataBackup;
+    }
+
+    public void clearOriginalShortDataBackup() {
+        originalShortDataBackup = null;
+    }
+
+    /**
+     * HOROS-20240407準拠: 引算 + オフセット。
+     * mask の生データから (x+offX, y+offY) 位置を差し引く。
+     * 結果は 0..65535 にクランプ（絶対値は取らない — HOROS vsubtract 相当）。
+     *
+     * @param mask        マスクフレームの DicomPix
+     * @param offX        マスクをずらすピクセル数（-30..+30 / HOROS: subCtrlOffset.x）
+     * @param offY        マスクをずらすピクセル数（-30..+30 / HOROS: subCtrlOffset.y）
+     */
+    public void subtractWithMask(DicomPix mask, int offX, int offY) {
+        if (mask == null || mask.rawShortData == null || rawShortData == null)
+            return;
+        int w = this.width;
+        int h = this.height;
+        short[] m = mask.rawShortData;
+        if (m.length < w * h)
+            return;
+        for (int y = 0; y < h; y++) {
+            int my = y + offY;
+            if (my < 0 || my >= h) {
+                // 範囲外: 0 とみなす（HOROS は境界外をスキップ）
+                int base = y * w;
+                for (int x = 0; x < w; x++)
+                    rawShortData[base + x] = (short) (rawShortData[base + x] & 0xFFFF);
+                continue;
+            }
+            for (int x = 0; x < w; x++) {
+                int mx = x + offX;
+                int diff;
+                if (mx < 0 || mx >= w) {
+                    diff = rawShortData[y * w + x] & 0xFFFF;
+                } else {
+                    int a = rawShortData[y * w + x] & 0xFFFF;
+                    int b = m[my * w + mx] & 0xFFFF;
+                    diff = a - b;
+                }
+                if (diff < 0) diff = 0;
+                if (diff > 0xFFFF) diff = 0xFFFF;
+                rawShortData[y * w + x] = (short) diff;
+            }
+        }
+        if (isGrayscale && rawShortData != null) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: Sharpen 5x5 カーネルを in-place で適用
+     * (HOROS: ApplyConvString:@"Sharpen 5x5" 相当)
+     * カーネル:  0 -1 -1 -1 -1 -1
+     *           -1  2  2  2 -1
+     *           -1  2  8  2 -1
+     *           -1  2  2  2 -1
+     *            0 -1 -1 -1 -1 -1
+     * 合計=1 (自己重み 8 + 周辺 -1*12 + 角 0)
+     */
+    public void applySharpen5x5() {
+        if (rawShortData == null || width <= 0 || height <= 0)
+            return;
+        int w = width;
+        int h = height;
+        short[] src = rawShortData;
+        short[] dst = new short[src.length];
+        int[] kernel = { 0, -1, -1, -1, 0,
+                -1, 2, 2, 2, -1,
+                -1, 2, 8, 2, -1,
+                -1, 2, 2, 2, -1,
+                0, -1, -1, -1, 0 };
+        int kr = 2; // カーネル半径
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int sum = 0;
+                for (int dy = -kr; dy <= kr; dy++) {
+                    int yy = y + dy;
+                    if (yy < 0) yy = 0;
+                    if (yy >= h) yy = h - 1;
+                    for (int dx = -kr; dx <= kr; dx++) {
+                        int xx = x + dx;
+                        if (xx < 0) xx = 0;
+                        if (xx >= w) xx = w - 1;
+                        sum += kernel[(dy + kr) * (2 * kr + 1) + (dx + kr)]
+                                * (src[yy * w + xx] & 0xFFFF);
+                    }
+                }
+                if (sum < 0) sum = 0;
+                if (sum > 0xFFFF) sum = 0xFFFF;
+                dst[y * w + x] = (short) sum;
+            }
+        }
+        rawShortData = dst;
+        if (isGrayscale) {
+            applyWLWWInMemory();
+            thumbnailImage = null;
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: 引算OFF時、バックアップから元に戻す
+     */
+    public void restoreOriginalShortData() {
+        if (originalShortDataBackup != null) {
+            rawShortData = originalShortDataBackup;
+            if (isGrayscale) {
+                applyWLWWInMemory();
+                thumbnailImage = null;
+            }
+        }
+    }
+
     /**
      * 2D 畳み込みカーネルを設定（HOROS: DCMPix.m setConvolutionKernel: : :）
      * @param val    size*size のカーネル値。null でフィルタ無効（No Filter）
@@ -1693,7 +1838,15 @@ public class DicomPix {
         return val;
     }
 
-    /**
+        /**
+     * サムネイルを無効化（次回 getThumbnailImage() 時に再生成される）
+     * HOROS-20240407準拠: rebuildThumbnails: (BrowserController.m)
+     */
+    public void invalidateThumbnail() {
+        this.thumbnailImage = null;
+    }
+
+/**
      * サムネイル画像を取得
      */
     public BufferedImage getThumbnailImage() {

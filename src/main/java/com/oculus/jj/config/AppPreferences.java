@@ -132,6 +132,34 @@ public class AppPreferences {
         prefs.putDouble(KEY_FUSION_WEIGHT, weight);
     }
 
+    // --- ROI display options (HOROS-20240407: Display Info Only when ROI Selected / font size) ---
+    /** HOROS準拠: 「選択中のROIのみ情報表示」の切替（デフォルト: 常に表示） */
+    public static boolean isRoiInfoOnlyWhenSelected() {
+        return prefs.getBoolean("roi.infoOnlyWhenSelected", false);
+    }
+
+    public static void setRoiInfoOnlyWhenSelected(boolean b) {
+        prefs.putBoolean("roi.infoOnlyWhenSelected", b);
+    }
+
+    /** HOROS準拠: ROIフォントサイズの倍率（デフォルト1.0、increase/decreaseで±0.25） */
+    public static double getRoiFontScale() {
+        return prefs.getDouble("roi.fontScale", 1.0);
+    }
+
+    public static void setRoiFontScale(double scale) {
+        prefs.putDouble("roi.fontScale", scale);
+    }
+
+    /** HOROS準拠: 新規ROIの既定名（デフォルト "ROI"） */
+    public static String getRoiDefaultName() {
+        return prefs.get("roi.defaultName", "ROI");
+    }
+
+    public static void setRoiDefaultName(String name) {
+        prefs.put("roi.defaultName", name);
+    }
+
     // --- Viewer 2D (Use VOI LUT) ---
     /** HOROS-20240407準拠: NSUserDefaults "UseVOILUT" (default: true) */
     public static boolean isUseVOILUT() {

@@ -227,6 +227,9 @@ public class DCMView extends JPanel {
     protected float startTextBoxOffsetX = 0;
     protected float startTextBoxOffsetY = 0;
 
+    // HOROS-20240407準拠: グループ化ROIの共同移動 (groupIDで束ねたROI)
+    protected java.util.Map<com.oculus.jj.model.ROI, java.util.List<java.awt.geom.Point2D.Float>> startGroupPoints = null;
+
     // HOROS-20240407準拠: DCMView.h - sliceFromTo lines
     protected float[][] sliceFromTo = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
     protected float[][] sliceFromToS = { { Float.POSITIVE_INFINITY, 0, 0 }, { Float.POSITIVE_INFINITY, 0, 0 } };
@@ -676,6 +679,20 @@ public class DCMView extends JPanel {
                                         new java.awt.geom.Point2D.Float((float) (p.x + dx), (float) (p.y + dy)));
                             }
                             selectedRoi.setPoints(newPoints);
+
+                            // HOROS-20240407準拠: グループ化されたROIも同じdeltaで移動
+                            if (startGroupPoints != null && !startGroupPoints.isEmpty()) {
+                                for (java.util.Map.Entry<com.oculus.jj.model.ROI, java.util.List<java.awt.geom.Point2D.Float>> e2 : startGroupPoints
+                                        .entrySet()) {
+                                    List<java.awt.geom.Point2D.Float> base = e2.getValue();
+                                    List<java.awt.geom.Point2D.Float> gp = new ArrayList<>();
+                                    for (java.awt.geom.Point2D.Float p : base) {
+                                        gp.add(new java.awt.geom.Point2D.Float((float) (p.x + dx),
+                                                (float) (p.y + dy)));
+                                    }
+                                    e2.getKey().setPoints(gp);
+                                }
+                            }
                         }
 
                         // リアルタイムで統計情報を更新
@@ -1003,6 +1020,10 @@ public class DCMView extends JPanel {
                                     (float) curDCM.getPixelSpacingY(), imgPt);
                             newRoi.setSourcePix(curDCM);
                             newRoi.setParentView(DCMView.this);
+                            // HOROS-20240407: Set Default ROI Name - 新規ROIに既定名を適用
+                            if (newRoi.getName() == null || newRoi.getName().isEmpty()) {
+                                newRoi.setName(com.oculus.jj.config.AppPreferences.getRoiDefaultName());
+                            }
 
                             if (currentTool == ToolMode.tText) {
                                 // HOROS-20240407: Create with only 1 point and default text
@@ -1109,8 +1130,11 @@ public class DCMView extends JPanel {
                     startRoiPoints = selectedRoi.getPoints();
                     startTextBoxOffsetX = selectedRoi.getTextBoxOffsetX();
                     startTextBoxOffsetY = selectedRoi.getTextBoxOffsetY();
+                    // HOROS-20240407準拠: 選択ROIとgroupIDが同じ他のROIも一緒に動かす
+                    startGroupPoints = collectGroupedROIs(selectedRoi);
                 } else {
                     startRoiPoints = null;
+                    startGroupPoints = null;
                 }
             }
 
@@ -1165,8 +1189,25 @@ public class DCMView extends JPanel {
                         if (db != null) {
                             db.saveROI(selectedRoi, selectedRoi.getSOPInstanceUID(), curDCM.getFrameNumber());
                         }
+
+                        // HOROS-20240407準拠: グループ化されたROIも一緒に移動・保存・統計更新
+                        if (startGroupPoints != null && !startGroupPoints.isEmpty()) {
+                            for (java.util.Map.Entry<com.oculus.jj.model.ROI, java.util.List<java.awt.geom.Point2D.Float>> e2 : startGroupPoints
+                                    .entrySet()) {
+                                com.oculus.jj.model.ROI r2 = e2.getKey();
+                                if (r2.getType() == ToolMode.tOval || r2.getType() == ToolMode.tROI
+                                        || r2.getType() == ToolMode.tCPolygon
+                                        || r2.getType() == ToolMode.tPencil) {
+                                    curDCM.computeROIStatistics(r2);
+                                }
+                                if (db != null) {
+                                    db.saveROI(r2, r2.getSOPInstanceUID(), curDCM.getFrameNumber());
+                                }
+                            }
+                        }
                     }
                     startRoiPoints = null;
+                    startGroupPoints = null;
                 }
 
                 // --- ROI作成中のマウスリリース ---
@@ -1273,6 +1314,31 @@ public class DCMView extends JPanel {
         }
 
         return new java.awt.geom.Point2D.Float(imgX, imgY);
+    }
+
+    /**
+     * HOROS-20240407準拠: groupIDが同じ（選択中・編集可能）のROIを収集する。
+     * ドラッグ開始時に初期点列を保持し、ドラッグ中に同じdeltaで移動させる。
+     *
+     * @param selectedRoi 選択されたROI
+     * @return 選択ROI自身を除く、同じgroupIDを持つROIとその初期点列のマップ
+     *         （対象がなければ空マップ、groupIDが-1なら空）
+     */
+    protected java.util.Map<com.oculus.jj.model.ROI, java.util.List<java.awt.geom.Point2D.Float>> collectGroupedROIs(
+            com.oculus.jj.model.ROI selectedRoi) {
+        java.util.Map<com.oculus.jj.model.ROI, java.util.List<java.awt.geom.Point2D.Float>> map = new java.util.LinkedHashMap<>();
+        if (selectedRoi == null)
+            return map;
+        int gid = selectedRoi.getGroupID();
+        if (gid < 0 || curRoiList == null)
+            return map;
+        for (com.oculus.jj.model.ROI roi : curRoiList) {
+            if (roi == null || roi == selectedRoi)
+                continue;
+            if (roi.getGroupID() == gid && roi.getPoints() != null)
+                map.put(roi, new ArrayList<>(roi.getPoints()));
+        }
+        return map;
     }
 
     /**

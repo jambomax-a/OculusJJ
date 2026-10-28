@@ -155,6 +155,8 @@ public class ROI {
     private boolean isSpline = false;
     private boolean selectable = true;
     private boolean hidden = false;
+    private boolean selected = false; // 複数選択（Select All/Deselect All 用）
+    private int groupID = -1; // HOROS: setGroupID - 選択ROIをグループ化するためのID
     private DCMView parentView = null;
 
     private boolean isEraseMode = false;
@@ -241,6 +243,41 @@ public class ROI {
         roiLock = new ReentrantLock();
         points = new ArrayList<>();
         rect = new Rectangle();
+    }
+
+    /**
+     * HOROS-20240407準拠: copy 相当。
+     * 選択したROIを新しいROIインスタンスとしてコピーする（伝播スラブ / 生成ROI等に使用）。
+     * 点が保持される。統計値・位置属性（name/color/thickness/opacity/...）もコピーする。
+     * groupIDはコピー先で -1 にリセットする（HOROS: isAliased=NO相当）。
+     */
+    public ROI copy() {
+        ROI c = new ROI(this.type, (float) pixelSpacingX, (float) pixelSpacingY, null);
+        if (this.points != null)
+            c.setPoints(new ArrayList<>(this.points));
+        if (this.points3D != null)
+            c.points3D = new ArrayList<>(this.points3D);
+        c.name = this.name;
+        c.color = this.color;
+        c.opacity = this.opacity;
+        c.thickness = this.thickness;
+        c.comments = this.comments;
+        c.fill = this.fill;
+        c.isSpline = this.isSpline;
+        c.locked = this.locked;
+        c.selectable = this.selectable;
+        c.hidden = this.hidden;
+        c.isEraseMode = this.isEraseMode;
+        c.closed = this.closed;
+        c.groupID = -1; // HOROS: 伝播先は新しい非エイリアス
+        // selectedフラグはコピー先では false に（元の選択状態を引き継がない）
+        c.selected = false;
+        // 座標関連
+        c.textBoxOffsetX = this.textBoxOffsetX;
+        c.textBoxOffsetY = this.textBoxOffsetY;
+        c.setSourcePix(this.sourcePix);
+        c.setParentView(this.parentView);
+        return c;
     }
 
     /**
@@ -524,11 +561,13 @@ public class ROI {
 
         // フォントサイズを調整 (Horizontal: thickness slider usually affects font size in some
         // tools)
-        float fontSize = (float) (12.0 / currentScale);
+        // HOROS準拠: Increase/Decrease Font Size メニューによる倍率 (AppPreferences.getRoiFontScale)
+        float fontScale = (float) com.oculus.jj.config.AppPreferences.getRoiFontScale();
+        float fontSize = (float) (12.0 * fontScale / currentScale);
         if (type == DCMView.ToolMode.tText) {
             // Text ROI: Horos uses 12.0 + thickness * 2.0 (but adjusted for Java coordinate
             // system)
-            fontSize = (float) ((12.0f + thickness * 2.0f) / currentScale);
+            fontSize = (float) ((12.0f + thickness * 2.0f) * fontScale / currentScale);
         }
         g2d.setFont(originalFont.deriveFont(fontSize));
 
@@ -1676,6 +1715,14 @@ public class ROI {
         this.locked = locked;
     }
 
+    public boolean isSelected() {
+        return selected;
+    }
+
+    public void setSelected(boolean selected) {
+        this.selected = selected;
+    }
+
     public boolean isHidden() {
         return hidden;
     }
@@ -1690,6 +1737,14 @@ public class ROI {
 
     public void setSelectable(boolean selectable) {
         this.selectable = selectable;
+    }
+
+    public int getGroupID() {
+        return groupID;
+    }
+
+    public void setGroupID(int groupID) {
+        this.groupID = groupID;
     }
 
     public Rectangle getRect() {
