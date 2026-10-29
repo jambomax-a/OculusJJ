@@ -493,6 +493,12 @@ public class MPRController extends JFrame {
 
         setLayout(new BorderLayout());
 
+        // HOROS-20240407準拠: MPRウィンドウも独立したメニューバーを持ち、MPR専用のResponder Chain検証を行う
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null && browser.getJMenuBar() != null) {
+            setJMenuBar(ViewerController.replicateMenuBar(browser.getJMenuBar(), this));
+        }
+
         commonToolbar = createCommonToolbar();
         mprSpecificToolbar = createMprSpecificToolbar();
 
@@ -706,6 +712,10 @@ public class MPRController extends JFrame {
      */
     private void updateMenuBarForViewType() {
         if (getJMenuBar() != null) {
+            if (!(getJMenuBar() instanceof MainMenuBar)) {
+                BrowserController.validateMenuBar(getJMenuBar(), this);
+                return;
+            }
             MainMenuBar menuBar = (MainMenuBar) getJMenuBar();
             switch (currentLayout) {
                 case ORTHOGONAL:

@@ -1442,6 +1442,17 @@ public class ViewerController extends JFrame {
      * SwingのJMenuBar/JMenuItemは1つの場所にしか所属できないため、新しいインスタンスを作成する必要がある
      */
     public static javax.swing.JMenuBar replicateMenuBar(javax.swing.JMenuBar original) {
+        return replicateMenuBar(original, null);
+    }
+
+    /**
+     * HOROS-20240407準拠: 指定されたウィンドウ（ViewerController / Viewer3DController / MPRController / CPRController）向けの
+     * メニューバーを複製し、ウィンドウ毎の Responder Chain + validateMenuItem: 相当の動的グレーアウト検証を設定する。
+     */
+    public static javax.swing.JMenuBar replicateMenuBar(javax.swing.JMenuBar original, java.awt.Window ownerWindow) {
+        if (original != null) {
+            return replicateMenuBarWithValidation(original, ownerWindow);
+        }
         javax.swing.JMenuBar copy = new javax.swing.JMenuBar();
         for (int i = 0; i < original.getMenuCount(); i++) {
             javax.swing.JMenu menu = original.getMenu(i);
@@ -1479,6 +1490,81 @@ public class ViewerController extends JFrame {
     }
 
     /** Tile all 3D viewer windows in a grid layout */
+    private static javax.swing.JMenuBar replicateMenuBarWithValidation(javax.swing.JMenuBar original, java.awt.Window ownerWindow) {
+        javax.swing.JMenuBar copy = new javax.swing.JMenuBar();
+        if (ownerWindow != null) {
+            copy.putClientProperty("horosOwnerWindow", ownerWindow);
+        }
+        for (int i = 0; i < original.getMenuCount(); i++) {
+            javax.swing.JMenu menu = original.getMenu(i);
+            if (menu != null) {
+                copy.add(replicateMenuWithValidation(menu, ownerWindow));
+            }
+        }
+        BrowserController.attachMenuValidation(copy, ownerWindow);
+        BrowserController.validateMenuBar(copy, ownerWindow);
+        return copy;
+    }
+
+    private static javax.swing.JMenu replicateMenuWithValidation(javax.swing.JMenu original, java.awt.Window ownerWindow) {
+        javax.swing.JMenu copy = new javax.swing.JMenu(original.getText());
+        copy.setForeground(Color.BLACK);
+        copy.setEnabled(original.isEnabled());
+        Object menuAction = original.getClientProperty("horosAction");
+        if (menuAction != null) {
+            copy.putClientProperty("horosAction", menuAction);
+        }
+        if (ownerWindow != null) {
+            copy.putClientProperty("horosOwnerWindow", ownerWindow);
+        }
+        for (int i = 0; i < original.getMenuComponentCount(); i++) {
+            java.awt.Component item = original.getMenuComponent(i);
+            if (item instanceof javax.swing.JSeparator || item instanceof javax.swing.JPopupMenu.Separator) {
+                copy.addSeparator();
+            } else if (item instanceof javax.swing.JMenu subMenu) {
+                copy.add(replicateMenuWithValidation(subMenu, ownerWindow));
+            } else if (item instanceof javax.swing.JMenuItem originalItem) {
+                final javax.swing.JMenuItem itemCopy;
+                final String actionKey = (String) originalItem.getClientProperty("horosAction");
+                if (originalItem instanceof javax.swing.JCheckBoxMenuItem originalCb) {
+                    javax.swing.JCheckBoxMenuItem cbCopy =
+                            new javax.swing.JCheckBoxMenuItem(originalItem.getText(), originalCb.isSelected());
+                    cbCopy.addActionListener(e -> {
+                        if (!"subCtrlOnOff".equals(actionKey)) {
+                            originalCb.setSelected(cbCopy.isSelected());
+                        }
+                        for (java.awt.event.ActionListener al : originalItem.getActionListeners()) {
+                            al.actionPerformed(e);
+                        }
+                        cbCopy.setSelected(originalCb.isSelected());
+                    });
+                    itemCopy = cbCopy;
+                } else {
+                    itemCopy = new javax.swing.JMenuItem(originalItem.getText());
+                    for (java.awt.event.ActionListener al : originalItem.getActionListeners()) {
+                        itemCopy.addActionListener(al);
+                    }
+                    for (java.awt.event.MouseListener ml : originalItem.getMouseListeners()) {
+                        if (ml instanceof java.awt.event.MouseAdapter) {
+                            itemCopy.addMouseListener(ml);
+                        }
+                    }
+                }
+                itemCopy.setForeground(UIStyle.TEXT_COLOR);
+                itemCopy.setAccelerator(originalItem.getAccelerator());
+                itemCopy.setEnabled(originalItem.isEnabled());
+                if (actionKey != null) {
+                    itemCopy.putClientProperty("horosAction", actionKey);
+                }
+                if (ownerWindow != null) {
+                    itemCopy.putClientProperty("horosOwnerWindow", ownerWindow);
+                }
+                copy.add(itemCopy);
+            }
+        }
+        return copy;
+    }
+
     public static void tile3DWindows() {
         java.util.List<ViewerController> viewers = ViewerController.getDisplayedViewers();
         int count = viewers.size();

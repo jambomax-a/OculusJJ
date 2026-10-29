@@ -900,7 +900,7 @@ public class Viewer3DController extends JFrame {
         // HOROS-20240407準拠: 3D Viewerも独立したメニューバーを持つ（Windows環境）
         BrowserController browser = BrowserController.currentBrowser();
         if (browser != null && browser.getJMenuBar() != null) {
-            JMenuBar replicated = ViewerController.replicateMenuBar(browser.getJMenuBar());
+            JMenuBar replicated = ViewerController.replicateMenuBar(browser.getJMenuBar(), this);
             // 3D固有のメニューを追加
             JMenu modeMenu = new JMenu("3D Mode");
             modeMenu.setForeground(Color.BLACK);

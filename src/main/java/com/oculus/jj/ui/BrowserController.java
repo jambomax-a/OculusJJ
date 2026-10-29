@@ -242,6 +242,9 @@ public class BrowserController extends JFrame {
         if (getJMenuBar() instanceof MainMenuBar mainMenuBar) {
             mainMenuBar.updateForViewType(viewType);
         }
+        if (getJMenuBar() != null) {
+            validateMenuBarForWindow(getJMenuBar(), this);
+        }
     }
 
     /**
@@ -6969,7 +6972,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem showDatabaseItem = new javax.swing.JMenuItem(LanguageManager.get("menu_file_show_db", "Show Database Window"));
         showDatabaseItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_D, 0));
         showDatabaseItem.addActionListener(e -> {
-            toggleDatabaseOutlineVisibility();
+            handleShowDatabaseWindow(e);
         });
         fileMenu.add(showDatabaseItem);
 
@@ -7323,7 +7326,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem closeWindowItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("file_close_window"));
         closeWindowItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W, 0));
-        closeWindowItem.addActionListener(e -> dispose());
+        closeWindowItem.addActionListener(e -> closeMenuOwnerWindow(e));
         fileMenu.add(closeWindowItem);
 
         fileMenu.addSeparator();
@@ -7531,6 +7534,8 @@ public class BrowserController extends JFrame {
             }
         });
 
+        editMenu.add(undoItem);
+        editMenu.add(redoItem);
         editMenu.addSeparator();
 
         // Cut
@@ -7568,6 +7573,8 @@ public class BrowserController extends JFrame {
             }
         });
 
+        editMenu.add(selectAllItem);
+
         menuBar.add(editMenu);
 
         // ========== Formatメニュー ==========
@@ -7589,7 +7596,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem fullscreenItem = new javax.swing.JMenuItem(LanguageManager.get("fmt_fullscreen", "Fullscreen"));
         fullscreenItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F, 0));
         fullscreenItem.addActionListener(e -> {
-            JFrame mainFrame = BrowserController.this;
+            JFrame mainFrame = resolveMenuOwnerFrame(e);
             if (mainFrame.getExtendedState() == JFrame.MAXIMIZED_BOTH) {
                 mainFrame.setExtendedState(JFrame.NORMAL);
             } else {
@@ -8929,7 +8936,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem minimizeItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_window_minimize"));
         minimizeItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_M, 0));
-        minimizeItem.addActionListener(e -> setState(java.awt.Frame.ICONIFIED));
+        minimizeItem.addActionListener(e -> minimizeMenuOwnerWindow(e));
         windowMenu.add(minimizeItem);
 
         // Resize Window サブメニュー
@@ -9005,7 +9012,1172 @@ public class BrowserController extends JFrame {
 
         menuBar.add(helpMenu);
 
+        // HOROS-20240407準拠: 各メニュー・サブメニュー・メニュー項目にアクション識別子を付与
+        // （MainMenu.xib autoenablesItems="YES" + Responder Chain + validateMenuItem: 相当）
+        // File menu
+        tagMenu(fileMenu, "fileMenu");
+        tagMenu(showDatabaseItem, "showDatabase");
+        tagMenu(drawerToggleItem, "drawerToggle");
+        tagMenu(comparativeToggleItem, "comparativeToggle");
+        tagMenu(prefMenuItem, "preferences");
+        tagMenu(newDatabaseFolderItem, "newDatabaseFolder");
+        tagMenu(openDatabaseFolderItem, "openDatabaseFolder");
+        tagMenu(albumsMenu, "albumsMenu");
+        tagMenu(addAlbumItem, "addAlbum");
+        tagMenu(addSmartAlbumItem, "addSmartAlbum");
+        tagMenu(addSelectedStudiesItem, "addSelectedStudiesToAlbum");
+        tagMenu(deleteAlbumItem, "deleteAlbum");
+        tagMenu(saveAlbumsItem, "saveAlbums");
+        tagMenu(importAlbumsItem, "importAlbums");
+        tagMenu(defaultAlbumsItem, "defaultAlbums");
+        tagMenu(reportMenu, "reportMenu");
+        tagMenu(openReportItem, "openReport");
+        tagMenu(deleteReportItem, "deleteReport");
+        tagMenu(convertToPDFItem, "convertToPDF");
+        tagMenu(convertToDICOMSRItem, "convertToDICOMSR");
+        tagMenu(importMenu, "importMenu");
+        tagMenu(importFilesItem, "importFiles");
+        tagMenu(importURLItem, "importURL");
+        tagMenu(importRawDataItem, "importRawData");
+        tagMenu(exportMenu, "exportMenu");
+        tagMenu(export2PACSItem, "export2PACS");
+        tagMenu(exportMovieItem, "exportMovie");
+        tagMenu(exportJPEGItem, "exportJPEG");
+        tagMenu(exportRAWItem, "exportRAW");
+        tagMenu(exportTIFFItem, "exportTIFF");
+        tagMenu(exportDICOMFileItem, "exportDICOMFile");
+        tagMenu(exportEmailItem, "exportEmail");
+        tagMenu(exportPhotosItem, "exportPhotos");
+        tagMenu(saveDBListItemItem, "saveDBListAs");
+        tagMenu(burnItem, "burn");
+        tagMenu(anonymizeItem, "anonymize");
+        tagMenu(copyToDBFolderItem, "copyToDBFolder");
+        tagMenu(searchItem, "search");
+        tagMenu(mergeStudiesItem, "mergeStudies");
+        tagMenu(deleteExamItem, "deleteExam");
+        tagMenu(metaDataItem, "metaData");
+        tagMenu(compressFilesItem, "compressFiles");
+        tagMenu(decompressFilesItem, "decompressFiles");
+        tagMenu(rebuildDatabaseItem, "rebuildDatabase");
+        tagMenu(rebuildSQLItem, "rebuildSQL");
+        tagMenu(rebuildThumbnailsItem, "rebuildThumbnails");
+        tagMenu(closeWindowItem, "closeWindow");
+        tagMenu(pageSetupItem, "pageSetup");
+        tagMenu(printItem, "print");
+        tagMenu(dicomPrintItem, "dicomPrint");
+
+        // Network menu
+        tagMenu(networkMenu, "networkMenu");
+        tagMenu(networkExport2PACSItem, "networkExport2PACS");
+        tagMenu(queryDICOMItem, "queryDICOM");
+        tagMenu(querySelectedStudyItem, "querySelectedStudy");
+        tagMenu(autoQueryItem, "autoQuery");
+        tagMenu(autoQueryRefreshItem, "autoQueryRefresh");
+        tagMenu(retrievePODItem, "retrievePOD");
+        tagMenu(refreshPODItem, "refreshPOD");
+        tagMenu(abortStoreSCUItem, "abortStoreSCU");
+        tagMenu(networkLogsItem, "networkLogs");
+        tagMenu(preferencesItem, "preferences");
+        tagMenu(pacsQuerySettingsItem, "pacsQuerySettings");
+
+        // Edit menu
+        tagMenu(editMenu, "editMenu");
+        tagMenu(undoItem, "undo");
+        tagMenu(redoItem, "redo");
+        tagMenu(cutItem, "cut");
+        tagMenu(copyItem, "copy");
+        tagMenu(pasteItem, "paste");
+        tagMenu(selectAllItem, "selectAll");
+
+        // Format menu
+        tagMenu(formatMenu, "formatMenu");
+        tagMenu(customizeToolbarItem, "customizeToolbar");
+        tagMenu(fullscreenItem, "fullscreen");
+        tagMenu(fontMenu, "fontMenu");
+        tagMenu(showFontsItem, "showFonts");
+        tagMenu(boldItem, "bold");
+        tagMenu(italicItem, "italic");
+        tagMenu(biggerItem, "bigger");
+        tagMenu(smallerItem, "smaller");
+        tagMenu(showColorsItem, "showColors");
+
+        // 2D Viewer menu
+        tagMenu(viewer2DMenu, "viewer2DMenu");
+        tagMenu(nextSeriesItem, "nextSeries");
+        tagMenu(previousSeriesItem, "previousSeries");
+        tagMenu(nextPatientItem, "nextPatient");
+        tagMenu(previousPatientItem, "previousPatient");
+        tagMenu(seriesListItem, "seriesList");
+        tagMenu(convertBWRGBMenu, "convertBWRGBMenu");
+        tagChildMenuItems(convertBWRGBMenu, "convertBWRGB");
+        tagMenu(resetImageViewItem, "resetImageView");
+        tagMenu(revertSeriesItem, "revertSeries");
+        tagMenu(scaleMenu, "scaleMenu");
+        tagChildMenuItems(scaleMenu, "scale");
+        tagMenu(sortByMenu, "sortByMenu");
+        tagChildMenuItems(sortByMenu, "sortBy");
+        tagMenu(orientationMenu, "orientationMenu");
+        tagChildMenuItems(orientationMenu, "orientation");
+        tagMenu(calibrateItem, "calibrate");
+        tagMenu(threeDPanelItem, "threeDPanel");
+        tagMenu(navigatorItem, "navigator");
+        tagMenu(flipSeriesItem, "flipSeries");
+        tagMenu(useVOILUTItem, "useVOILUT");
+        tagMenu(displayOverlaysItem, "displayOverlays");
+        tagMenu(dicomMetaDataItem, "dicomMetaData");
+        tagMenu(convertSUVItem, "convertSUV");
+        tagMenu(fuseItem, "fuse");
+        tagMenu(flattenFusedItem, "flattenFused");
+        tagMenu(propagateSettingsItem, "propagateSettings");
+        tagMenu(dontPropagateWLWWItem, "dontPropagateWLWW");
+        tagMenu(propagateInSeriesItem, "propagateInSeries");
+        tagMenu(zoomParallelItem, "zoomParallel");
+        tagMenu(syncSeriesMenu, "syncSeriesMenu");
+        tagChildMenuItems(syncSeriesMenu, "syncSeries");
+        tagMenu(syncDifferentItem, "syncDifferent");
+        tagMenu(keyImageItem, "keyImage");
+        tagMenu(markAllKeyItem, "markAllKey");
+        tagMenu(unmarkAllKeyItem, "unmarkAllKey");
+        tagMenu(markROIsKeyItem, "markROIsKey");
+        tagMenu(saveDICOMSCItem, "saveDICOMSC");
+        tagMenu(exportKeySCItem, "exportKeySC");
+        tagMenu(findNextKeyItem, "findNextKey");
+        tagMenu(findPrevKeyItem, "findPrevKey");
+        tagMenu(subtractionMenu, "subtractionMenu");
+        tagChildMenuItems(subtractionMenu, "subCtrlParam");
+        tagMenu(subCtrlOnOffItem, "subCtrlOnOff");
+        tagMenu(newMaskItem, "subCtrlNewMask");
+        tagMenu(subSharpenItem, "subSharpen");
+        tagMenu(annotationsMenu, "annotationsMenu");
+        tagMenu(openAnnotationsItem, "annotationsOpen");
+        tagMenu(windowWidthLevelMenu, "windowWidthLevelMenu");
+        tagMenu(applyWindowProtocolItem, "applyWindowProtocol");
+        tagMenu(resetWLWWItem, "resetWLWW");
+        tagMenu(clutMenu, "clutMenu");
+        tagChildMenuItems(clutMenu, "applyCLUT");
+        tagMenu(clutBarMenu, "clutBarMenu");
+        tagMenu(clutBarUnavailableItem, "clutBarUnavailable");
+        tagMenu(opacityMenu, "opacityMenu");
+        tagChildMenuItems(opacityMenu, "applyOpacity");
+        tagMenu(convolutionMenu, "convolutionMenu");
+        tagChildMenuItems(convolutionMenu, "applyConvolution");
+        tagMenu(resampleItem, "resample");
+        tagMenu(item12Bit, "item12Bit");
+        tagMenu(workspaceMenu, "workspaceMenu");
+        tagMenu(saveWorkspaceItem, "saveWorkspace");
+        tagMenu(loadWorkspaceItem, "loadWorkspace");
+        tagMenu(resetWorkspaceItem, "resetWorkspace");
+
+        // 3D Viewer menu
+        tagMenu(viewer3DMenu, "viewer3DMenu");
+        tagMenu(mprViewerItem, "mprViewer");
+        tagMenu(cprViewerItem, "cprViewer");
+        tagMenu(orthogonalMPRItem, "orthogonalMPR");
+        tagMenu(mipViewerItem, "mipViewer");
+        tagMenu(vrViewerItem, "vrViewer");
+        tagMenu(surfaceRenderingItem, "surfaceRendering");
+        tagMenu(endoscopyItem, "endoscopy");
+        tagMenu(reset3DItem, "reset3D");
+        tagMenu(revert3DItem, "revert3D");
+        tagMenu(coronalItem, "coronal");
+        tagMenu(leftSagittalItem, "leftSagittal");
+        tagMenu(rightSagittalItem, "rightSagittal");
+        tagMenu(axialItem, "axial");
+        tagMenu(flyThruAddItem, "flyThruAdd");
+        tagMenu(flyThruRemoveItem, "flyThruRemove");
+        tagMenu(flyThruResetItem, "flyThruReset");
+        tagMenu(curvedPathMenu, "curvedPathMenu");
+        tagMenu(curvedPathLoad, "curvedPathLoad");
+        tagMenu(curvedPathSave, "curvedPathSave");
+        tagMenu(scissorMenu, "scissorMenu");
+        tagMenu(scissorSave, "scissorSave");
+        tagMenu(scissorLoad, "scissorLoad");
+        tagMenu(scissorDelete, "scissorDelete");
+        tagMenu(presetSelectItem, "presetSelect");
+        tagMenu(presetSaveItem, "presetSave");
+
+        // ROI menu
+        tagMenu(roiMenu, "roiMenu");
+        tagMenu(importROIItem, "importROI");
+        tagMenu(saveSelectedROIItem, "saveSelectedROI");
+        tagMenu(saveSeriesROIItem, "saveSeriesROI");
+        tagMenu(deleteAllROIItem, "deleteAllROI");
+        tagMenu(deleteSameNameROIItem, "deleteSameNameROI");
+        tagMenu(selectAllROIItem, "selectAllROI");
+        tagMenu(deselectAllROIItem, "deselectAllROI");
+        tagMenu(roiManagerItem, "roiManager");
+        tagMenu(roiInfoItem, "roiInfo");
+        tagMenu(roiRenameItem, "roiRename");
+        tagMenu(roiDefaultsItem, "roiDefaults");
+        tagMenu(roiInfoOnlyItem, "roiInfoOnly");
+        tagMenu(roiMouseOverItem, "roiMouseOver");
+        tagMenu(roiNameOnlyItem, "roiNameOnly");
+        tagMenu(roiCobbItem, "roiCobb");
+        tagMenu(incThickItem, "incThick");
+        tagMenu(decThickItem, "decThick");
+        tagMenu(incFontItem, "incFont");
+        tagMenu(decFontItem, "decFont");
+        tagMenu(flipHItem, "flipH");
+        tagMenu(flipVItem, "flipV");
+        tagMenu(roiHistItem, "roiHist");
+        tagMenu(roiLayerItem, "roiLayer");
+        tagMenu(roiVolumeItem, "roiVolume");
+        tagMenu(roiGenItem, "roiGen");
+        tagMenu(roiDelGenItem, "roiDelGen");
+        tagMenu(roiEraseItem, "roiErase");
+        tagMenu(roiRestoreItem, "roiRestore");
+        tagMenu(roiPropItem, "roiProp");
+        tagMenu(roiPropSlabItem, "roiPropSlab");
+        tagMenu(roiGroupItem, "roiGroup");
+        tagMenu(roiUngroupItem, "roiUngroup");
+        tagMenu(roiLockItem, "roiLock");
+        tagMenu(roiUnlockItem, "roiUnlock");
+        tagMenu(roiUnselItem, "roiUnsel");
+        tagMenu(roiSelItem, "roiSel");
+        tagMenu(roiSetPixItem, "roiSetPix");
+        tagMenu(roiGrowItem, "roiGrow");
+        tagMenu(roiBrushItem, "roiBrush");
+        tagMenu(roiDilateItem, "roiDilate");
+        tagMenu(roiCloseItem, "roiClose");
+        tagMenu(roiOpenItem, "roiOpen");
+        tagMenu(roiConvertItem, "roiConvert");
+        tagMenu(roiMergeItem, "roiMerge");
+
+        // Plugins menu
+        tagMenu(pluginsMenu, "pluginsMenu");
+        tagMenu(imageFiltersMenu, "imageFiltersMenu");
+        tagMenu(roiToolsMenu, "roiToolsMenu");
+        tagMenu(othersMenu, "othersMenu");
+        tagMenu(databasePluginsMenu, "databasePluginsMenu");
+        tagMenu(pluginsManagerItem, "pluginsManager");
+
+        // Recent Studies menu
+        tagMenu(recentStudiesMenu, "recentStudiesMenu");
+        tagMenu(emptyItem, "recentEmpty");
+
+        // Window menu
+        tagMenu(windowMenu, "windowMenu");
+        tagMenu(minimizeItem, "minimize");
+        tagMenu(resizeWindowMenu, "resizeWindowMenu");
+        tagChildMenuItems(resizeWindowMenu, "resizeWindowItem");
+        tagMenu(tile2DItem, "tile2D");
+        tagMenu(tile3DItem, "tile3D");
+        tagMenu(closeAllViewersItem, "closeAllViewers");
+        tagMenu(bringToFrontItem, "bringAllToFront");
+
+        // Help menu
+        tagMenu(helpMenu, "helpMenu");
+        tagMenu(shortcutsItem, "shortcuts");
+        tagMenu(aboutItem, "about");
+
+        attachMenuValidation(menuBar, this);
+        validateMenuBarForWindow(menuBar, this);
         setJMenuBar(menuBar);
+    }
+
+    /**
+     * HOROS-20240407準拠: メニュー項目にアクション識別子 (horosAction) を設定する
+     */
+    public static void tagMenu(javax.swing.JComponent item, String action) {
+        if (item != null && action != null) {
+            item.putClientProperty("horosAction", action);
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: サブメニュー内の全子JMenuItemに同一アクション識別子を設定する
+     */
+    private static void tagChildMenuItems(javax.swing.JMenu menu, String action) {
+        if (menu == null || action == null) {
+            return;
+        }
+        for (int i = 0; i < menu.getMenuComponentCount(); i++) {
+            java.awt.Component comp = menu.getMenuComponent(i);
+            if (comp instanceof javax.swing.JMenuItem child) {
+                child.putClientProperty("horosAction", action);
+            }
+        }
+    }
+
+    /**
+     * メニューイベントの発生元コンポーネントまたはフォーカス状態から対象ウィンドウを特定する
+     */
+    private java.awt.Window resolveMenuOwnerWindow(java.awt.event.ActionEvent e) {
+        if (e != null && e.getSource() instanceof javax.swing.JComponent comp) {
+            Object prop = comp.getClientProperty("horosOwnerWindow");
+            if (prop instanceof java.awt.Window w) {
+                return w;
+            }
+            java.awt.Window ancestor = resolveWindowFromMenuComponent(comp);
+            if (ancestor != null) {
+                return ancestor;
+            }
+        }
+        java.awt.Window active = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+        return active != null ? active : this;
+    }
+
+    private static java.awt.Window resolveWindowFromMenuComponent(java.awt.Component comp) {
+        java.awt.Component cur = comp;
+        while (cur != null) {
+            if (cur instanceof javax.swing.JComponent jc) {
+                Object prop = jc.getClientProperty("horosOwnerWindow");
+                if (prop instanceof java.awt.Window w) {
+                    return w;
+                }
+            }
+            if (cur instanceof java.awt.Window w) {
+                return w;
+            }
+            if (cur instanceof javax.swing.JPopupMenu popup) {
+                cur = popup.getInvoker();
+            } else {
+                cur = cur.getParent();
+            }
+        }
+        return null;
+    }
+
+    private javax.swing.JFrame resolveMenuOwnerFrame(java.awt.event.ActionEvent e) {
+        java.awt.Window w = resolveMenuOwnerWindow(e);
+        if (w instanceof ToolbarPanel tp && tp.getViewer() != null) {
+            return tp.getViewer();
+        }
+        if (w instanceof javax.swing.JFrame f) {
+            return f;
+        }
+        return this;
+    }
+
+    private void closeMenuOwnerWindow(java.awt.event.ActionEvent e) {
+        javax.swing.JFrame target = resolveMenuOwnerFrame(e);
+        if (target != null) {
+            target.dispose();
+        }
+    }
+
+    private void minimizeMenuOwnerWindow(java.awt.event.ActionEvent e) {
+        javax.swing.JFrame target = resolveMenuOwnerFrame(e);
+        if (target != null) {
+            target.setState(java.awt.Frame.ICONIFIED);
+        }
+    }
+
+    private void handleShowDatabaseWindow(java.awt.event.ActionEvent e) {
+        java.awt.Window w = resolveMenuOwnerWindow(e);
+        if (w == this) {
+            toggleDatabaseOutlineVisibility();
+        } else {
+            setVisible(true);
+            if (getExtendedState() == java.awt.Frame.ICONIFIED) {
+                setExtendedState(java.awt.Frame.NORMAL);
+            }
+            toFront();
+            requestFocus();
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: ウインドウ種別（Cocoa First Responder Chain のコントローラ種別相当）
+     */
+    public enum WindowRole {
+        BROWSER,    // BrowserController.m
+        VIEWER_2D,  // ViewerController.m / DCMView.m
+        VIEWER_3D,  // VRController.m / SRController.m / EndoscopyViewer.m
+        MPR,        // MPRController.m / OrthogonalMPRController.m
+        CPR         // CPRController.m
+    }
+
+    /**
+     * HOROS-20240407準拠: メニューバーの各トップレベルJMenuおよび対象Windowに
+     * 動的メニュー検証リスナー（NSMenu autoenablesItems + validateMenuItem: 相当）を登録する
+     */
+    public static void attachMenuValidation(javax.swing.JMenuBar menuBar, java.awt.Window ownerWindow) {
+        if (menuBar == null) {
+            return;
+        }
+        if (ownerWindow != null) {
+            menuBar.putClientProperty("horosOwnerWindow", ownerWindow);
+            propagateOwnerWindow(menuBar, ownerWindow);
+        }
+        for (int i = 0; i < menuBar.getMenuCount(); i++) {
+            javax.swing.JMenu menu = menuBar.getMenu(i);
+            if (menu == null) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(menu.getClientProperty("horosValidationAttached"))) {
+                continue;
+            }
+            menu.putClientProperty("horosValidationAttached", Boolean.TRUE);
+            menu.addMenuListener(new javax.swing.event.MenuListener() {
+                @Override
+                public void menuSelected(javax.swing.event.MenuEvent e) {
+                    java.awt.Window target = (java.awt.Window) menuBar.getClientProperty("horosOwnerWindow");
+                    if (target == null) {
+                        target = resolveWindowFromMenuComponent(menuBar);
+                    }
+                    validateMenuBar(menuBar, target);
+                }
+
+                @Override
+                public void menuDeselected(javax.swing.event.MenuEvent e) {
+                }
+
+                @Override
+                public void menuCanceled(javax.swing.event.MenuEvent e) {
+                }
+            });
+        }
+        if (ownerWindow != null) {
+            ownerWindow.addWindowFocusListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowGainedFocus(java.awt.event.WindowEvent e) {
+                    validateMenuBar(menuBar, ownerWindow);
+                }
+            });
+        }
+    }
+
+    public static void propagateOwnerWindow(javax.swing.JComponent root, java.awt.Window ownerWindow) {
+        if (root == null || ownerWindow == null) {
+            return;
+        }
+        root.putClientProperty("horosOwnerWindow", ownerWindow);
+        if (root instanceof javax.swing.JMenuBar mb) {
+            for (int i = 0; i < mb.getMenuCount(); i++) {
+                javax.swing.JMenu m = mb.getMenu(i);
+                if (m != null) {
+                    propagateOwnerWindow(m, ownerWindow);
+                }
+            }
+        } else if (root instanceof javax.swing.JMenu menu) {
+            for (int i = 0; i < menu.getMenuComponentCount(); i++) {
+                java.awt.Component c = menu.getMenuComponent(i);
+                if (c instanceof javax.swing.JComponent jc) {
+                    propagateOwnerWindow(jc, ownerWindow);
+                }
+            }
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: 指定されたメニューバーを対象ウィンドウのロール・状態に応じて検証・更新する
+     */
+    public static void validateMenuBar(javax.swing.JMenuBar menuBar, java.awt.Window ownerWindow) {
+        BrowserController browser = currentBrowser();
+        if (browser != null) {
+            browser.validateMenuBarForWindow(menuBar, ownerWindow);
+        }
+    }
+
+    /**
+     * HOROS-20240407準拠: 各ウインドウ（BrowserController / ViewerController / Viewer3DController /
+     * MPRController / CPRController）の Responder Chain および validateMenuItem: に準拠して
+     * メニュー項目の有効/無効（グレーアウト）およびチェック状態を動的に更新する。
+     */
+    public void validateMenuBarForWindow(javax.swing.JMenuBar menuBar, java.awt.Window ownerWindow) {
+        if (menuBar == null) {
+            return;
+        }
+        java.awt.Window resolvedWindow = ownerWindow;
+        if (resolvedWindow == null) {
+            Object prop = menuBar.getClientProperty("horosOwnerWindow");
+            if (prop instanceof java.awt.Window w) {
+                resolvedWindow = w;
+            } else {
+                resolvedWindow = resolveWindowFromMenuComponent(menuBar);
+            }
+        }
+        if (resolvedWindow == null) {
+            resolvedWindow = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+        }
+        if (resolvedWindow == null) {
+            resolvedWindow = this;
+        }
+
+        WindowRole role = determineWindowRole(resolvedWindow);
+        ViewerController viewer2D = resolveViewer2D(resolvedWindow);
+
+        for (int i = 0; i < menuBar.getMenuCount(); i++) {
+            javax.swing.JMenu menu = menuBar.getMenu(i);
+            if (menu != null) {
+                // トップレベルJMenu自体は常に開けるように有効化し、内部項目をグレーアウト制御する（HOROS NSMenu準拠）
+                menu.setEnabled(true);
+                validateMenuChildren(menu, role, resolvedWindow, viewer2D);
+            }
+        }
+    }
+
+    private WindowRole determineWindowRole(java.awt.Window w) {
+        if (w instanceof BrowserController) {
+            return WindowRole.BROWSER;
+        }
+        if (w instanceof ViewerController || w instanceof ToolbarPanel) {
+            return WindowRole.VIEWER_2D;
+        }
+        if (w instanceof Viewer3DController) {
+            return WindowRole.VIEWER_3D;
+        }
+        if (w instanceof MPRController) {
+            return WindowRole.MPR;
+        }
+        if (w instanceof CPRController) {
+            return WindowRole.CPR;
+        }
+        return WindowRole.BROWSER;
+    }
+
+    private ViewerController resolveViewer2D(java.awt.Window w) {
+        if (w instanceof ViewerController vc) {
+            return vc;
+        }
+        if (w instanceof ToolbarPanel tp && tp.getViewer() != null) {
+            return tp.getViewer();
+        }
+        List<ViewerController> displayed = ViewerController.getDisplayed2DViewers();
+        if (displayed != null && !displayed.isEmpty()) {
+            return displayed.get(displayed.size() - 1);
+        }
+        return null;
+    }
+
+    private boolean validateMenuChildren(javax.swing.JMenu menu, WindowRole role,
+            java.awt.Window ownerWindow, ViewerController viewer2D) {
+        boolean anyChildEnabled = false;
+        for (int i = 0; i < menu.getMenuComponentCount(); i++) {
+            java.awt.Component comp = menu.getMenuComponent(i);
+            if (comp instanceof javax.swing.JMenu subMenu) {
+                String subAction = (String) subMenu.getClientProperty("horosAction");
+                // プラグインの空サブメニューや明示的に許可されたサブメニューの判定
+                boolean childrenEnabled = validateMenuChildren(subMenu, role, ownerWindow, viewer2D);
+                boolean subEnabled = evaluateSubMenuEnabled(subAction, childrenEnabled, role, ownerWindow, viewer2D);
+                subMenu.setEnabled(subEnabled);
+                if (subEnabled) {
+                    anyChildEnabled = true;
+                }
+            } else if (comp instanceof javax.swing.JMenuItem item) {
+                String action = (String) item.getClientProperty("horosAction");
+                boolean enabled = validateMenuItemForWindow(action, item, role, ownerWindow, viewer2D);
+                item.setEnabled(enabled);
+                syncCheckBoxMenuItemState(action, item, viewer2D);
+                if (enabled) {
+                    anyChildEnabled = true;
+                }
+            }
+        }
+        return anyChildEnabled;
+    }
+
+    private boolean evaluateSubMenuEnabled(String subAction, boolean childrenEnabled,
+            WindowRole role, java.awt.Window ownerWindow, ViewerController viewer2D) {
+        if (subAction == null) {
+            return childrenEnabled;
+        }
+        switch (subAction) {
+            case "clutBarMenu":
+                return false;
+            case "albumsMenu":
+            case "importMenu":
+                return role == WindowRole.BROWSER;
+            case "reportMenu":
+                return role == WindowRole.BROWSER && hasDatabaseSelection();
+            case "resizeWindowMenu":
+                return role == WindowRole.VIEWER_2D;
+            case "curvedPathMenu":
+                if (role == WindowRole.CPR) {
+                    return true;
+                }
+                if (role == WindowRole.MPR && ownerWindow instanceof MPRController mpr) {
+                    return mpr.getLayoutType() == MPRController.LayoutType.CURVED_MPR;
+                }
+                return false;
+            case "scissorMenu":
+                return role == WindowRole.VIEWER_3D;
+            case "imageFiltersMenu":
+            case "roiToolsMenu":
+            case "othersMenu":
+                return role == WindowRole.VIEWER_2D;
+            case "databasePluginsMenu":
+                return role == WindowRole.BROWSER;
+            default:
+                return childrenEnabled;
+        }
+    }
+
+    private void syncCheckBoxMenuItemState(String action, javax.swing.JMenuItem item, ViewerController viewer2D) {
+        if (!(item instanceof javax.swing.JCheckBoxMenuItem cb) || action == null) {
+            return;
+        }
+        DCMView view = viewer2D != null ? viewer2D.getImageView() : null;
+        switch (action) {
+            case "useVOILUT":
+                cb.setSelected(com.oculus.jj.config.AppPreferences.isUseVOILUT());
+                break;
+            case "propagateSettings":
+                cb.setSelected(DCMView.propagateSettings);
+                break;
+            case "subCtrlOnOff":
+                if (subCtrlOnOffItem != null) {
+                    cb.setSelected(subCtrlOnOffItem.isSelected());
+                }
+                break;
+            case "subSharpen":
+                if (subSharpenItem != null) {
+                    cb.setSelected(subSharpenItem.isSelected());
+                }
+                break;
+            case "item12Bit":
+                if (view != null) {
+                    cb.setSelected(view.isLUT12Bit());
+                }
+                break;
+            case "roiInfoOnly":
+                cb.setSelected(com.oculus.jj.config.AppPreferences.isRoiInfoOnlyWhenSelected());
+                break;
+            default:
+                break;
+        }
+    }
+
+    private boolean hasDatabaseSelection() {
+        return databaseOutline != null
+                && databaseOutline.getSelectedItems() != null
+                && !databaseOutline.getSelectedItems().isEmpty();
+    }
+
+    private int getSelectedStudyCountInBrowser() {
+        if (databaseOutline == null || databaseOutline.getSelectedItems() == null) {
+            return 0;
+        }
+        java.util.Set<com.oculus.jj.model.DicomStudy> studies = new java.util.HashSet<>();
+        for (Object obj : databaseOutline.getSelectedItems()) {
+            if (obj instanceof com.oculus.jj.model.DicomStudy s) {
+                studies.add(s);
+            } else if (obj instanceof com.oculus.jj.model.DicomSeries ser && ser.getStudy() != null) {
+                studies.add(ser.getStudy());
+            }
+        }
+        return studies.size();
+    }
+
+    private boolean hasReportInSelectedBrowserStudy() {
+        if (databaseOutline == null) {
+            return false;
+        }
+        Object sel = databaseOutline.getSelectedItem();
+        com.oculus.jj.model.DicomStudy study = null;
+        if (sel instanceof com.oculus.jj.model.DicomStudy s) {
+            study = s;
+        } else if (sel instanceof com.oculus.jj.model.DicomSeries ser) {
+            study = ser.getStudy();
+        }
+        if (study == null) {
+            return false;
+        }
+        String url = study.getReportURL();
+        return url != null && !url.trim().isEmpty();
+    }
+
+    private boolean canDeleteSelectedAlbumInBrowser() {
+        if (albumTable == null) {
+            return false;
+        }
+        int row = albumTable.getSelectedRow();
+        List<com.oculus.jj.model.DicomAlbum> albums = getAlbumArray();
+        if (row <= 0 || albums == null || row >= albums.size()) {
+            return false;
+        }
+        com.oculus.jj.model.DicomAlbum album = albums.get(row);
+        return album != null && !"Database".equals(album.getName());
+    }
+
+    private java.util.List<com.oculus.jj.model.ROI> getSeriesROIsForView(DCMView view) {
+        java.util.List<com.oculus.jj.model.ROI> out = new java.util.ArrayList<>();
+        if (view == null || view.getDcmPixList() == null) {
+            return out;
+        }
+        java.util.Set<com.oculus.jj.model.ROI> seen =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (DicomPix pix : view.getDcmPixList()) {
+            if (pix == null || pix.getROIs() == null) {
+                continue;
+            }
+            for (com.oculus.jj.model.ROI roi : pix.getROIs()) {
+                if (roi != null && seen.add(roi)) {
+                    out.add(roi);
+                }
+            }
+        }
+        return out;
+    }
+
+    private java.util.List<com.oculus.jj.model.ROI> getSelectedROIsForView(DCMView view) {
+        java.util.List<com.oculus.jj.model.ROI> out = new java.util.ArrayList<>();
+        if (view == null) {
+            return out;
+        }
+        if (view.getSelectedRoi() != null) {
+            out.add(view.getSelectedRoi());
+        }
+        for (com.oculus.jj.model.ROI roi : getSeriesROIsForView(view)) {
+            if (roi != view.getSelectedRoi() && roi.isSelected()) {
+                out.add(roi);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * HOROS-20240407準拠: `- (BOOL)validateMenuItem:(NSMenuItem *)menuItem` 相当
+     * 各ウィンドウコントローラ (BrowserController / ViewerController / VRController /
+     * MPRController / CPRController / AppController) が First Responder Chain で
+     * 応答・検証するルールを忠実に再現する。
+     */
+    private boolean validateMenuItemForWindow(String action, javax.swing.JMenuItem item,
+            WindowRole role, java.awt.Window ownerWindow, ViewerController viewer2D) {
+        if (action == null) {
+            // 動的追加アイテム（3D Mode メニューや Recent Studies の履歴項目など）はデフォルト有効
+            return true;
+        }
+
+        // 常に無効なプレースホルダ項目
+        if ("recentEmpty".equals(action)
+                || "clutBarUnavailable".equals(action)
+                || "zoomParallel".equals(action)) {
+            return false;
+        }
+
+        // 全ウインドウ共通で有効なグローバル項目 (AppController.m / NSWindow 応答)
+        switch (action) {
+            case "showDatabase":
+            case "preferences":
+            case "closeWindow":
+            case "pageSetup":
+            case "queryDICOM":
+            case "autoQuery":
+            case "autoQueryRefresh":
+            case "abortStoreSCU":
+            case "networkLogs":
+            case "pacsQuerySettings":
+            case "customizeToolbar":
+            case "fullscreen":
+            case "pluginsManager":
+            case "minimize":
+            case "bringAllToFront":
+            case "shortcuts":
+            case "about":
+                return true;
+            default:
+                break;
+        }
+
+        // Window メニューの動的項目 (AppController.m validateMenuItem:)
+        boolean has2DViewers = !ViewerController.getDisplayed2DViewers().isEmpty();
+        boolean has3DViewers = Viewer3DController.getActiveInstance() != null;
+        switch (action) {
+            case "tile2D":
+                return has2DViewers;
+            case "tile3D":
+                return has3DViewers;
+            case "closeAllViewers":
+                return has2DViewers || has3DViewers;
+            case "resizeWindowItem":
+                // DCMView.m resizeWindow: は 2D Viewer のみ応答
+                return role == WindowRole.VIEWER_2D;
+            default:
+                break;
+        }
+
+        // ウインドウ種別ごとの Responder Chain + validateMenuItem: 判定
+        switch (role) {
+            case BROWSER: {
+                boolean hasSel = hasDatabaseSelection();
+                switch (action) {
+                    // File メニュー (BrowserController.m)
+                    case "drawerToggle":
+                    case "comparativeToggle":
+                    case "newDatabaseFolder":
+                    case "openDatabaseFolder":
+                    case "addAlbum":
+                    case "addSmartAlbum":
+                    case "saveAlbums":
+                    case "importAlbums":
+                    case "defaultAlbums":
+                    case "importFiles":
+                    case "importURL":
+                    case "importRawData":
+                    case "saveDBListAs":
+                    case "search":
+                    case "rebuildDatabase":
+                    case "rebuildSQL":
+                        return true;
+                    case "deleteAlbum":
+                        return canDeleteSelectedAlbumInBrowser();
+                    case "addSelectedStudiesToAlbum":
+                    case "openReport":
+                    case "export2PACS":
+                    case "exportMovie":
+                    case "exportJPEG":
+                    case "exportTIFF":
+                    case "exportDICOMFile":
+                    case "exportEmail":
+                    case "exportPhotos":
+                    case "burn":
+                    case "anonymize":
+                    case "copyToDBFolder":
+                    case "deleteExam":
+                    case "metaData":
+                    case "compressFiles":
+                    case "decompressFiles":
+                    case "rebuildThumbnails":
+                    case "print":
+                    case "dicomPrint":
+                    case "networkExport2PACS":
+                    case "querySelectedStudy":
+                    case "retrievePOD":
+                        return hasSel;
+                    case "deleteReport":
+                    case "convertToPDF":
+                    case "convertToDICOMSR":
+                        return hasReportInSelectedBrowserStudy();
+                    case "mergeStudies":
+                        return getSelectedStudyCountInBrowser() >= 2;
+                    case "exportRAW":
+                        // Export to Raw は ViewerController 専用
+                        return false;
+                    // Network メニュー
+                    case "refreshPOD":
+                        return true;
+                    // Edit メニュー
+                    case "copy":
+                        return hasSel;
+                    case "undo":
+                    case "redo":
+                    case "cut":
+                    case "paste":
+                    case "selectAll":
+                        return false;
+                    // Format > Font メニュー
+                    case "showFonts":
+                    case "showColors":
+                        return true;
+                    case "bold":
+                    case "italic":
+                    case "bigger":
+                    case "smaller":
+                        return false;
+                    // BrowserController は 2D Viewer / 3D Viewer / ROI メニューのセレクタに応答しないため全てグレーアウト
+                    default:
+                        return false;
+                }
+            }
+
+            case VIEWER_2D: {
+                DCMView view = viewer2D != null ? viewer2D.getImageView() : getActiveDCMViewForEdit();
+                boolean hasImage = view != null && view.getCurDCM() != null;
+                int sliceCount = (view != null && view.getDcmPixList() != null) ? view.getDcmPixList().size() : 0;
+                boolean isVolume = sliceCount >= 2;
+                boolean hasAnyROI = !getSeriesROIsForView(view).isEmpty();
+                boolean hasSelectedROI = !getSelectedROIsForView(view).isEmpty();
+                boolean multi2DViewers = ViewerController.getDisplayed2DViewers().size() >= 2;
+                boolean subActive = isVolume && subCtrlOnOffItem != null && subCtrlOnOffItem.isSelected();
+
+                switch (action) {
+                    // File メニュー: ViewerController で応答する項目のみ有効、Database専用項目はグレーアウト
+                    case "export2PACS":
+                    case "exportMovie":
+                    case "exportJPEG":
+                    case "exportRAW":
+                    case "exportTIFF":
+                    case "exportDICOMFile":
+                    case "exportEmail":
+                    case "exportPhotos":
+                    case "anonymize":
+                    case "metaData":
+                    case "print":
+                    case "dicomPrint":
+                    case "networkExport2PACS":
+                        return hasImage;
+                    case "drawerToggle":
+                    case "comparativeToggle":
+                    case "newDatabaseFolder":
+                    case "openDatabaseFolder":
+                    case "addAlbum":
+                    case "addSmartAlbum":
+                    case "addSelectedStudiesToAlbum":
+                    case "deleteAlbum":
+                    case "saveAlbums":
+                    case "importAlbums":
+                    case "defaultAlbums":
+                    case "openReport":
+                    case "deleteReport":
+                    case "convertToPDF":
+                    case "convertToDICOMSR":
+                    case "importFiles":
+                    case "importURL":
+                    case "importRawData":
+                    case "saveDBListAs":
+                    case "burn":
+                    case "copyToDBFolder":
+                    case "search":
+                    case "mergeStudies":
+                    case "deleteExam":
+                    case "compressFiles":
+                    case "decompressFiles":
+                    case "rebuildDatabase":
+                    case "rebuildSQL":
+                    case "rebuildThumbnails":
+                    case "querySelectedStudy":
+                    case "retrievePOD":
+                    case "refreshPOD":
+                        return false;
+
+                    // Edit メニュー (ViewerController / DCMView)
+                    case "undo":
+                    case "copy":
+                    case "paste":
+                        return hasImage;
+                    case "redo":
+                        return hasImage && annotationUndoManager != null && annotationUndoManager.canRedo();
+                    case "cut":
+                        return hasSelectedROI;
+                    case "selectAll":
+                        return hasAnyROI;
+
+                    // Format > Font メニュー
+                    case "showFonts":
+                    case "bold":
+                    case "italic":
+                    case "bigger":
+                    case "smaller":
+                    case "showColors":
+                        return hasImage;
+
+                    // 2D Viewer メニュー (ViewerController.m validateMenuItem:)
+                    case "nextSeries":
+                    case "previousSeries":
+                    case "nextPatient":
+                    case "previousPatient":
+                    case "seriesList":
+                    case "convertBWRGB":
+                    case "resetImageView":
+                    case "revertSeries":
+                    case "scale":
+                    case "orientation":
+                    case "calibrate":
+                    case "useVOILUT":
+                    case "displayOverlays":
+                    case "dicomMetaData":
+                    case "convertSUV":
+                    case "propagateSettings":
+                    case "dontPropagateWLWW":
+                    case "propagateInSeries":
+                    case "syncSeries":
+                    case "syncDifferent":
+                    case "keyImage":
+                    case "markAllKey":
+                    case "unmarkAllKey":
+                    case "saveDICOMSC":
+                    case "exportKeySC":
+                    case "findNextKey":
+                    case "findPrevKey":
+                    case "annotationsOpen":
+                    case "applyWindowProtocol":
+                    case "resetWLWW":
+                    case "applyCLUT":
+                    case "applyOpacity":
+                    case "applyConvolution":
+                    case "item12Bit":
+                    case "saveWorkspace":
+                    case "loadWorkspace":
+                    case "resetWorkspace":
+                        return hasImage;
+                    case "markROIsKey":
+                        return hasAnyROI;
+                    case "sortBy":
+                    case "threeDPanel":
+                    case "navigator":
+                    case "flipSeries":
+                    case "resample":
+                    case "subCtrlOnOff":
+                    case "subCtrlNewMask":
+                        return isVolume;
+                    case "subSharpen":
+                    case "subCtrlParam":
+                        return subActive;
+                    case "fuse":
+                    case "flattenFused":
+                        return multi2DViewers;
+
+                    // 3D Viewer メニュー:
+                    // HOROS ViewerController.m は MPR/CPR/3D 起動アクション (Group 1 & 2) のみ実装し、
+                    // 2スライス以上のボリュームデータのときのみ有効。
+                    // Group 3〜8 (Reset 3D, Coronal/Sagittal/Axial, FlyThru, Curved Path, Scissor, 3D Preset) は
+                    // VRController / CPRController のセレクタであり 2D Viewer ではグレーアウトされる。
+                    case "mprViewer":
+                    case "cprViewer":
+                    case "orthogonalMPR":
+                    case "mipViewer":
+                    case "vrViewer":
+                    case "surfaceRendering":
+                    case "endoscopy":
+                        return isVolume;
+                    case "reset3D":
+                    case "revert3D":
+                    case "coronal":
+                    case "leftSagittal":
+                    case "rightSagittal":
+                    case "axial":
+                    case "flyThruAdd":
+                    case "flyThruRemove":
+                    case "flyThruReset":
+                    case "curvedPathLoad":
+                    case "curvedPathSave":
+                    case "scissorSave":
+                    case "scissorLoad":
+                    case "scissorDelete":
+                    case "presetSelect":
+                    case "presetSave":
+                        return false;
+
+                    // ROI メニュー (ViewerController.m validateMenuItem:)
+                    case "importROI":
+                    case "roiDefaults":
+                    case "roiInfoOnly":
+                    case "roiMouseOver":
+                    case "roiNameOnly":
+                    case "roiCobb":
+                    case "roiGrow":
+                        return hasImage;
+                    case "saveSeriesROI":
+                    case "deleteAllROI":
+                    case "selectAllROI":
+                    case "deselectAllROI":
+                    case "roiManager":
+                    case "roiVolume":
+                    case "roiGen":
+                    case "roiDelGen":
+                    case "roiSel":
+                    case "roiBrush":
+                        return hasAnyROI;
+                    case "saveSelectedROI":
+                    case "deleteSameNameROI":
+                    case "roiInfo":
+                    case "roiRename":
+                    case "incThick":
+                    case "decThick":
+                    case "incFont":
+                    case "decFont":
+                    case "flipH":
+                    case "flipV":
+                    case "roiHist":
+                    case "roiLayer":
+                    case "roiErase":
+                    case "roiRestore":
+                    case "roiProp":
+                    case "roiPropSlab":
+                    case "roiGroup":
+                    case "roiUngroup":
+                    case "roiLock":
+                    case "roiUnlock":
+                    case "roiUnsel":
+                    case "roiSetPix":
+                    case "roiDilate":
+                    case "roiClose":
+                    case "roiOpen":
+                    case "roiConvert":
+                    case "roiMerge":
+                        return hasSelectedROI;
+                    default:
+                        return false;
+                }
+            }
+
+            case VIEWER_3D: {
+                // VRController.m / SRController.m / EndoscopyViewer.m
+                switch (action) {
+                    // File メニュー (3D Viewer で対応するエクスポート・印刷のみ有効)
+                    case "exportMovie":
+                    case "exportJPEG":
+                    case "exportTIFF":
+                    case "exportDICOMFile":
+                    case "exportEmail":
+                    case "exportPhotos":
+                    case "print":
+                    case "dicomPrint":
+                    case "copy":
+                        return true;
+                    // 2D Viewer メニューのうち WL/WW・CLUT・Opacity は 3D Viewer でも利用可能
+                    case "applyWindowProtocol":
+                    case "resetWLWW":
+                    case "applyCLUT":
+                    case "applyOpacity":
+                        return true;
+                    // 3D Viewer メニュー:
+                    // Group 1 & 2 (3D/MPR 起動項目) と Group 6 (Curved Path) は VRController ではグレーアウト。
+                    // Group 3, 4, 5, 7, 8 (3D操作・方向ビュー・FlyThru・Scissor・3Dプリセット) が有効。
+                    case "reset3D":
+                    case "revert3D":
+                    case "coronal":
+                    case "leftSagittal":
+                    case "rightSagittal":
+                    case "axial":
+                    case "flyThruAdd":
+                    case "flyThruRemove":
+                    case "flyThruReset":
+                    case "scissorSave":
+                    case "scissorLoad":
+                    case "scissorDelete":
+                    case "presetSelect":
+                    case "presetSave":
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            case MPR:
+            case CPR: {
+                // MPRController.m / OrthogonalMPRController.m / CPRController.m
+                boolean isCurved = (role == WindowRole.CPR)
+                        || (ownerWindow instanceof MPRController mpr
+                                && mpr.getLayoutType() == MPRController.LayoutType.CURVED_MPR);
+                boolean is3DMPR = (ownerWindow instanceof MPRController mpr
+                        && mpr.getLayoutType() == MPRController.LayoutType.THREE_D_MPR);
+                switch (action) {
+                    case "exportMovie":
+                    case "exportJPEG":
+                    case "exportTIFF":
+                    case "exportDICOMFile":
+                    case "exportEmail":
+                    case "exportPhotos":
+                    case "print":
+                    case "dicomPrint":
+                    case "copy":
+                    case "resetImageView":
+                    case "applyWindowProtocol":
+                    case "resetWLWW":
+                    case "applyCLUT":
+                    case "applyOpacity":
+                    case "reset3D":
+                    case "revert3D":
+                        return true;
+                    case "coronal":
+                    case "leftSagittal":
+                    case "rightSagittal":
+                    case "axial":
+                        return is3DMPR;
+                    case "curvedPathLoad":
+                    case "curvedPathSave":
+                        return isCurved;
+                    default:
+                        return false;
+                }
+            }
+
+            default:
+                return false;
+        }
     }
 
     private void showShortcutsDialog() {
@@ -11163,6 +12335,7 @@ public class BrowserController extends JFrame {
                 MenuResourceLoader.getString("convolution.add"));
         add.addActionListener(e -> showConvolutionDialog());
         convolutionMenu.add(add);
+        tagChildMenuItems(convolutionMenu, "applyConvolution");
     }
 
     /**

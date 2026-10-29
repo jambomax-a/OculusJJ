@@ -18,6 +18,10 @@ public class ToolbarPanel extends JFrame {
     private static final int FIXED_HEIGHT = 90; // ツールバー高さ（Math.maxで最小値確保）
     private static final int HIDDEN_HEIGHT = 15;
     private ViewerController viewer;
+
+    public ViewerController getViewer() {
+        return viewer;
+    }
     private JToolBar toolbar;
 
     public ToolbarPanel(ViewerController viewer) {
@@ -52,7 +56,7 @@ public class ToolbarPanel extends JFrame {
         // ===== Menu bar =====
         BrowserController browser = BrowserController.currentBrowser();
         if (browser != null && browser.getJMenuBar() != null) {
-            JMenuBar menuBar = ViewerController.replicateMenuBar(browser.getJMenuBar());
+            JMenuBar menuBar = ViewerController.replicateMenuBar(browser.getJMenuBar(), viewer);
             menuBar.setOpaque(true);
             menuBar.setBackground(new Color(240, 240, 240));
             menuBar.setForeground(Color.BLACK);

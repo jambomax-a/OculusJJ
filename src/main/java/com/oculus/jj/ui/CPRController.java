@@ -330,6 +330,12 @@ public class CPRController extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLayout(new BorderLayout());
 
+        // HOROS-20240407準拠: CPRウィンドウも独立したメニューバーを持ち、CPR専用のResponder Chain検証を行う
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null && browser.getJMenuBar() != null) {
+            setJMenuBar(ViewerController.replicateMenuBar(browser.getJMenuBar(), this));
+        }
+
         // 4ペインレイアウトの構築 (Horos CPR.xib / 添付画像 準拠)
         JPanel mainGrid = new JPanel(new GridLayout(2, 2, 2, 2));
         mainGrid.setBackground(Color.BLACK);
