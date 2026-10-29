@@ -49,6 +49,36 @@ public class QueryController extends JFrame {
         return instance;
     }
 
+    /**
+     * P-H PACS: 検索テキストを設定してクエリ実行（menu "Query Selected Patient from Q&R Window..." 用）
+     *
+     * @param text  検索テキスト（PatientName 等）
+     * @param tab   検索種別（0=PatientName, 1=PatientID, 2=AccessionNumber, ...）
+     */
+    public void setSearchTextAndQuery(String text, int tab) {
+        globalSearchField.setText(text != null ? text : "");
+        selectedSearchTabIndex = tab;
+        setVisible(true);
+        toFront();
+        performQuery();
+    }
+
+    public void refreshResults(Frame owner) {
+        if (owner != null) setLocationRelativeTo(owner);
+        setVisible(true);
+        toFront();
+        performQuery();
+    }
+
+    public boolean retrieveSelectedResults(Frame owner) {
+        if (resultsTable.getSelectedRowCount() == 0) return false;
+        if (owner != null) setLocationRelativeTo(owner);
+        setVisible(true);
+        toFront();
+        performRetrieve();
+        return true;
+    }
+
     private QueryController() {
         setTitle(LanguageManager.get("query.title", "DICOM Query/Retrieve"));
         setSize(1000, 750);

@@ -221,6 +221,57 @@ public class DicomService {
     }
 
     /**
+     * C-STORE SCU: 元の DICOM ファイルをリモートノードへ送信する。
+     */
+    public void store(DicomNode remoteNode, java.io.File file)
+            throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
+        if (remoteNode == null || file == null || !file.isFile()) {
+            throw new IOException("DICOM file or destination node is unavailable");
+        }
+
+        Attributes fileMeta;
+        Attributes dataset;
+        try (org.dcm4che3.io.DicomInputStream in = new org.dcm4che3.io.DicomInputStream(file)) {
+            fileMeta = in.readFileMetaInformation();
+            dataset = in.readDataset();
+        }
+        String cuid = fileMeta != null ? fileMeta.getString(Tag.MediaStorageSOPClassUID)
+                : dataset.getString(Tag.SOPClassUID);
+        String iuid = fileMeta != null ? fileMeta.getString(Tag.MediaStorageSOPInstanceUID)
+                : dataset.getString(Tag.SOPInstanceUID);
+        String tsuid = fileMeta != null ? fileMeta.getString(Tag.TransferSyntaxUID)
+                : UID.ExplicitVRLittleEndian;
+        if (cuid == null || iuid == null) {
+            throw new IOException("DICOM file is missing SOP Class or Instance UID: " + file.getName());
+        }
+        if (tsuid == null || tsuid.isEmpty()) {
+            tsuid = UID.ExplicitVRLittleEndian;
+        }
+
+        DicomNodeManager manager = DicomNodeManager.getInstance();
+        ae.setAETitle(manager.getLocalAET());
+        AAssociateRQ rq = new AAssociateRQ();
+        rq.setCalledAET(remoteNode.getAeTitle());
+        rq.addPresentationContext(new PresentationContext(1, cuid, tsuid));
+        Association association = ae.connect(
+                new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+        try {
+            org.dcm4che3.net.DimseRSP rsp = association.cstore(cuid, iuid, Priority.NORMAL,
+                    org.dcm4che3.net.DataWriterAdapter.forAttributes(dataset), tsuid);
+            rsp.next();
+            int status = rsp.getCommand().getInt(Tag.Status, -1);
+            if (status != org.dcm4che3.net.Status.Success) {
+                throw new IOException("C-STORE failed with status 0x" + Integer.toHexString(status)
+                        + " for " + file.getName());
+            }
+        } finally {
+            if (association.isReadyForDataTransfer()) {
+                association.release();
+            }
+        }
+    }
+
+    /**
      * C-GET 実行（HOROS-20240407準拠: C-MOVEの代替）
      */
     public void getC(DicomNode remoteNode, Attributes keys)

@@ -481,6 +481,7 @@
 
 **コンパイル成功** ✅
 
+---
 
 ---
 
@@ -556,5 +557,32 @@
 
 ### i18n
 - `menu_4d_*` / `4d.open.*` / `4d.reparse.*` / `4d.select.*` キー（en/ja 両方）を追加
+
+**コンパイル成功** ✅
+
+---
+
+## [2026-10-29 更新6] — P-H PACS（Query / Retrieve / C-STORE）
+
+### 実装した機能
+| 機能 | 実装内容 |
+|---|---|
+| **Export to DICOM Network Node** | アクティブシリーズの元 DICOM ファイルを重複除外し、送信先 `DicomNode` を選択して C-STORE SCU で送信。進捗・失敗ファイルを表示 |
+| **Query Selected Patient** | 選択中の Study/Series から Patient ID を取得し、Query/Retrieve ウィンドウの Patient ID 検索を自動実行 |
+| **Refresh PACS On-Demand Results** | Query/Retrieve ウィンドウで現在の検索条件を再実行 |
+| **Retrieve selected PACS studies** | Query/Retrieve 結果で選択中の Study を C-MOVE 取得 |
+| **Auto Query / Retrieve Window / Refresh** | 既存 Query/Retrieve ウィンドウの表示・再検索に接続 |
+
+### 追加 API
+- `DicomService.store(DicomNode, File)` — dcm4che C-STORE SCU（SOP Class/Instance UID と元 Transfer Syntax を使用）
+- `QueryController.setSearchTextAndQuery()` / `refreshResults()` / `retrieveSelectedResults()` — BrowserController から検索・更新・取得を呼び出す公開 API
+
+### i18n
+- `pacs.export.*` / `pacs.query.*` / `pacs.retrieve.*` を en/ja 両方に追加
+
+### 制約
+- C-STORE は元 DICOM ファイルを送るため、現在の画面上の画素処理（WL/WW や焼き込み）は送信データに反映しない
+- On-Demand Study の DB 永続化／リモート検索結果のローカル表示は未実装。Query/Retrieve 結果から直接 C-MOVE する経路を提供
+- 定期的な自動クエリのスケジュール実行と、進行中の受信 C-STORE の個別中断は未実装
 
 **コンパイル成功** ✅

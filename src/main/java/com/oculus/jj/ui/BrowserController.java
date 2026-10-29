@@ -7334,10 +7334,7 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 427行目
         javax.swing.JMenuItem autoQueryItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_network_auto_query"));
-        autoQueryItem.addActionListener(e -> {
-            JOptionPane.showMessageDialog(BrowserController.this, LanguageManager.get("net_autoquery_pending", "Auto-query scheduling pending"), LanguageManager.get("net_title", "Network"),
-                    JOptionPane.INFORMATION_MESSAGE);
-        });
+        autoQueryItem.addActionListener(e -> QueryController.getInstance().showQueryDialog(BrowserController.this));
         networkMenu.add(autoQueryItem);
 
         // Auto Query / Retrieve Refresh
@@ -7345,10 +7342,7 @@ public class BrowserController extends JFrame {
         javax.swing.JMenuItem autoQueryRefreshItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_network_auto_query_refresh"));
         autoQueryRefreshItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A, 0));
-        autoQueryRefreshItem.addActionListener(e -> {
-            JOptionPane.showMessageDialog(BrowserController.this, LanguageManager.get("net_autoquery_pending", "Auto-Query scheduling pending"), LanguageManager.get("net_title", "Network"),
-                    JOptionPane.INFORMATION_MESSAGE);
-        });
+        autoQueryRefreshItem.addActionListener(e -> QueryController.getInstance().refreshResults(BrowserController.this));
         networkMenu.add(autoQueryRefreshItem);
 
         networkMenu.addSeparator();
@@ -9770,6 +9764,25 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction)querySelectedStudy: (id)sender (18120行目)
      */
     public void querySelectedStudy(Object sender) {
+        Object selected = databaseOutline != null ? databaseOutline.getSelectedItem() : null;
+        com.oculus.jj.model.DicomStudy study = null;
+        if (selected instanceof com.oculus.jj.model.DicomStudy) {
+            study = (com.oculus.jj.model.DicomStudy) selected;
+        } else if (selected instanceof com.oculus.jj.model.DicomSeries) {
+            study = ((com.oculus.jj.model.DicomSeries) selected).getStudy();
+        }
+        if (study == null) {
+            infoFmt(LanguageManager.get("pacs.query.no_study", "Select a study or series first."),
+                    LanguageManager.get("net_title", "Network"));
+            return;
+        }
+        String patientID = study.getPatientID();
+        if (patientID == null || patientID.trim().isEmpty()) {
+            infoFmt(LanguageManager.get("pacs.query.no_patient_id", "The selected study has no Patient ID."),
+                    LanguageManager.get("net_title", "Network"));
+            return;
+        }
+        QueryController.getInstance().setSearchTextAndQuery(patientID.trim(), 1);
     }
 
     /**
@@ -9777,6 +9790,12 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: -(IBAction)retrieveSelectedPODStudies:(id) sender (9955行目)
      */
     public void retrieveSelectedPODStudies(Object sender) {
+        QueryController query = QueryController.getInstance();
+        if (!query.retrieveSelectedResults(BrowserController.this)) {
+            infoFmt(LanguageManager.get("pacs.retrieve.no_selection",
+                    "Select study results in the Query/Retrieve window first."),
+                    LanguageManager.get("net_title", "Network"));
+        }
     }
 
     /**
@@ -9785,6 +9804,7 @@ public class BrowserController extends JFrame {
      * (4721行目)
      */
     public void refreshPACSOnDemandResults(Object sender) {
+        QueryController.getInstance().refreshResults(BrowserController.this);
     }
 
     /**
@@ -14286,29 +14306,96 @@ public class BrowserController extends JFrame {
 
     /** Export to DICOM Network Node (PACS) */
     private void exportToPACS() {
-        javax.swing.JMenuItem sendItem = new javax.swing.JMenuItem(MenuResourceLoader.getString("file_send_to_node"));
-        sendItem.addActionListener(e -> {
-            DCMView view = getActiveDCMViewForEdit();
-            if (view == null || view.curDCM == null) {
-                JOptionPane.showMessageDialog(BrowserController.this, "No active viewer to export", "Export to PACS",
-                        JOptionPane.WARNING_MESSAGE);
-                return;
+        DCMView view = getActiveDCMViewForEdit();
+        if (view == null || view.curDCM == null) {
+            infoFmt(LanguageManager.get("pacs.export.no_view", "No active viewer to export."),
+                    LanguageManager.get("net_title", "Network"));
+            return;
+        }
+
+        List<com.oculus.jj.model.DicomNode> nodes = com.oculus.jj.model.DicomNodeManager.getInstance().getNodes();
+        if (nodes.isEmpty()) {
+            infoFmt(LanguageManager.get("pacs.export.no_nodes", "No DICOM destination nodes are configured."),
+                    LanguageManager.get("net_title", "Network"));
+            return;
+        }
+        Object destination = JOptionPane.showInputDialog(this,
+                LanguageManager.get("pacs.export.select_node", "Select a destination node:"),
+                LanguageManager.get("pacs.export.title", "Export to DICOM Network Node"),
+                JOptionPane.QUESTION_MESSAGE, null, nodes.toArray(), nodes.get(0));
+        if (!(destination instanceof com.oculus.jj.model.DicomNode)) return;
+        com.oculus.jj.model.DicomNode node = (com.oculus.jj.model.DicomNode) destination;
+
+        java.util.LinkedHashMap<String, java.io.File> filesByPath = new java.util.LinkedHashMap<>();
+        List<DicomPix> pixList = view.getDcmPixList();
+        if (pixList != null) {
+            for (DicomPix pix : pixList) {
+                if (pix == null) continue;
+                String path = pix.getSrcFile();
+                if ((path == null || path.isEmpty()) && pix.getImageObj() != null) {
+                    path = pix.getImageObj().completePath();
+                }
+                if (path == null || path.isEmpty()) continue;
+                java.io.File file = new java.io.File(path);
+                if (file.isFile()) filesByPath.putIfAbsent(file.getAbsolutePath(), file);
             }
-            PACSQuerySettingsDialog dialog = new PACSQuerySettingsDialog(BrowserController.this);
-            dialog.pack();
-            dialog.setLocationRelativeTo(BrowserController.this);
-            dialog.setVisible(true);
-        });
-        javax.swing.JMenuItem selectNodeItem = new javax.swing.JMenuItem(
-                MenuResourceLoader.getString("file_select_node"));
-        selectNodeItem.addActionListener(e -> {
-            JOptionPane.showMessageDialog(BrowserController.this, "Node selection pending", "Export to PACS",
-                    JOptionPane.INFORMATION_MESSAGE);
-        });
-        JPopupMenu popup = new JPopupMenu();
-        popup.add(sendItem);
-        popup.add(selectNodeItem);
-        popup.show(this, 0, this.getY());
+        }
+        if (filesByPath.isEmpty()) {
+            infoFmt(LanguageManager.get("pacs.export.no_files", "No local DICOM files are available in this viewer."),
+                    LanguageManager.get("pacs.export.title", "Export to DICOM Network Node"));
+            return;
+        }
+        List<java.io.File> files = new ArrayList<>(filesByPath.values());
+        int answer = JOptionPane.showConfirmDialog(this,
+                String.format(LanguageManager.get("pacs.export.confirm", "Send %d DICOM file(s) to %s?"),
+                        files.size(), node.getName()),
+                LanguageManager.get("pacs.export.title", "Export to DICOM Network Node"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (answer != JOptionPane.OK_OPTION) return;
+
+        javax.swing.ProgressMonitor progress = new javax.swing.ProgressMonitor(this,
+                LanguageManager.get("pacs.export.progress", "Sending DICOM files..."), "", 0, files.size());
+        progress.setMillisToDecideToPopup(0);
+        new javax.swing.SwingWorker<Integer, Integer>() {
+            private final List<String> failures = new ArrayList<>();
+
+            @Override
+            protected Integer doInBackground() {
+                int sent = 0;
+                for (int i = 0; i < files.size() && !progress.isCanceled(); i++) {
+                    java.io.File file = files.get(i);
+                    publish(i);
+                    try {
+                        com.oculus.jj.model.DicomService.getInstance().store(node, file);
+                        sent++;
+                    } catch (Exception ex) {
+                        failures.add(file.getName() + ": " + ex.getMessage());
+                    }
+                }
+                return sent;
+            }
+
+            @Override
+            protected void process(List<Integer> indexes) {
+                if (indexes.isEmpty()) return;
+                int index = indexes.get(indexes.size() - 1);
+                progress.setNote(files.get(index).getName());
+                progress.setProgress(index + 1);
+            }
+
+            @Override
+            protected void done() {
+                progress.close();
+                try {
+                    String message = String.format(LanguageManager.get("pacs.export.done", "Sent %d of %d DICOM file(s)."),
+                            get(), files.size());
+                    if (!failures.isEmpty()) message += "\n" + String.join("\n", failures);
+                    infoFmt(message, LanguageManager.get("pacs.export.title", "Export to DICOM Network Node"));
+                } catch (Exception ex) {
+                    infoFmt(String.valueOf(ex.getMessage()), LanguageManager.get("pacs.export.fail", "DICOM send failed"));
+                }
+            }
+        }.execute();
     }
 
     /** Export to Movie dialog */

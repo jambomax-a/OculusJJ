@@ -799,9 +799,9 @@ public class DicomStudy {
 
     /**
      * 遠隔かどうか
+     * HOROS-20240407準拠: DicomStudy.isDistant
      */
     public boolean isDistant() {
-        // TODO: 実装
         return false;
     }
 
