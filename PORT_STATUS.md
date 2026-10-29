@@ -1,6 +1,6 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-10-27 (P-C減算 / P-B ROI群 / P-Eウィンドウ / P-Dデータベース / P-Fレポート / P-G 4Dシリーズ 実装済みの反映) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)  
+> **更新日:** 2026-10-29 (P-C〜P-I 実装更新) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
 > **Javaソースファイル数:** 113 classes (`src/main/java/`)  
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
@@ -492,13 +492,13 @@
 |---|---|---|
 | **New Database Folder...** | `createDatabaseFolder:` (1860行) | フォルダ選択→名前入力→`OSIRIX_DATA_DIR_NAME`付きフォルダ作成 |
 | **Open Database Folder...** | `openDatabase:` (1843行) | フォルダ選択→`DicomDatabase.databaseAtPath()`→`setActiveLocalDatabase` |
-| **Create default albums...** | `defaultAlbums:` (1379行) | Favorites / Recently Used / Screen Captures を重複チェック付きで作成 |
+| **Create default albums...** | `defaultAlbums:` (1379行) | Favorites / Recently Used / Screen Captures を重複チェック付きで作成・保存・一覧更新 |
 | **Rebuild SQL Index File...** | `rebuildSQLFile:` (2530行) | 確認ダイアログ→`DicomDatabase.save()` |
 | **Rebuild Selected Thumbnails** | `rebuildThumbnails:` (9985行) | `DicomPix.invalidateThumbnail()`（新規追加）で全サムネイルを無効化 |
 | **Page Setup...** | (xib 381行) | `java.awt.print.PrinterJob.printDialog()` |
 | **Add an album / smart album** | `addAlbum:`/`addSmartAlbum:` | 名前（＋smartはpredicate）入力→`DicomAlbum`作成→`save()` |
-| **Save albums... / Import albums...** | `saveAlbums:`(10811)/`addAlbums:`(10834) | `save()`／テキストファイル（1行1件、`名前|predicate`形式）から読み込み |
-| **Delete selected album** | `removeAlbum:` | `getAlbums().remove(target)`＋`save()` |
+| **Save albums... / Import albums...** | `saveAlbums:`(10811)/`addAlbums:`(10834) | HOROS互換 plist `.albums` を保存/読込（JSONと旧行形式も読込可） |
+| **Delete selected album** | `removeAlbum:` | `DicomDatabase.removeAlbum(target)`＋SQLite保存、Database項目は削除不可 |
 
 ### 新規追加API
 - `DicomPix.invalidateThumbnail()` — サムネイルキャッシュ無効化（再構築用）
@@ -586,3 +586,24 @@
 - 定期的な自動クエリのスケジュール実行と、進行中の受信 C-STORE の個別中断は未実装
 
 **コンパイル成功** ✅
+
+---
+
+## [2026-10-29 更新7] — P-I アルバム管理・永続化
+
+### 修正した不具合と追加機能
+- **アルバム削除:** `getAlbums()` はコピーを返すため、コピーの `remove()` はDBに反映されていなかった。`DicomDatabase.removeAlbum()` に変更し、削除後に一覧更新。
+- **SQLite永続化:** `save()` が Study だけを保存し、`Album` / `AlbumStudy` を保存していなかった。アルバム定義、smart predicate、Study membershipをトランザクションで保存。削除されたアルバムもDBから除去。
+- **Study追加:** 空だった `addStudies()` を実装。選択 Study / Series / Image をアルバムに追加し、Study保存後に関連テーブルへ記録。
+- **アーカイブ:** 空だった `saveAlbumsToPath/loadAlbumsFromPath` を実装。HOROS互換の plist XML `.albums` を保存・読込し、従来のJSONと行形式もインポート可能。
+- **互換 API / smart albums:** `albums()` の名前順取得、`addDefaultAlbums()` の重複防止保存、`predicateForSmartAlbumFilter()` を実装。`$TODAY/$YESTERDAY/$LASTWEEK` 等の日付マクロを RuleEngine で解決。
+- **UI:** Add selected studies to album... を追加。smart album の predicate 評価、Database/アルバム別件数計算、Create default albums と追加/削除/インポート後の保存・一覧更新を実装。
+- **i18n:** アルバムへの Study 追加と削除確認の文言を en/ja に追加。
+
+### 保留
+- `mergeStudies` は HOROS で DICOM ファイルヘッダーまで変更する不可逆処理のため未実装。
+- `delItem` はファイル・AlbumStudy関連を安全に整理する削除経路が未整備のため未実装。
+
+### 検証
+- `./gradlew compileJava` 成功
+- SQLite再起動を含む動作確認/PACSと同様の実環境テストは未実施（後続テスト対象）

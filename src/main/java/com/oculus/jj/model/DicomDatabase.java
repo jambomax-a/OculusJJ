@@ -157,6 +157,7 @@ public class DicomDatabase {
         // HOROS-20240407準拠: アルバムが空の場合はデフォルトアルバムを作成
         if (albums.isEmpty()) {
             createDefaultAlbums();
+            save();
         }
     }
 
@@ -1379,32 +1380,123 @@ public class DicomDatabase {
             return false;
         }
 
-        if (studiesToSave == null || studiesToSave.isEmpty()) {
-            return true;
+        if (studiesToSave != null && !studiesToSave.isEmpty()) {
+            try {
+                sqliteConnection.setAutoCommit(false);
+                for (DicomStudy study : studiesToSave) {
+                    saveStudy(study);
+                }
+                sqliteConnection.commit();
+                sqliteConnection.setAutoCommit(true);
+            } catch (SQLException e) {
+                try {
+                    sqliteConnection.rollback();
+                    sqliteConnection.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+                return false;
+            }
         }
+        return saveAlbumsToDatabase();
+    }
 
-        // System.out.println(">>> SQL Commit/Save (Write) [" + sqliteDatabasePath + "]
-        // items: " + studiesToSave.size());
-
+    private boolean saveAlbumsToDatabase() {
         try {
-            // HOROS-20240407準拠: トランザクションを使用して高速化
             sqliteConnection.setAutoCommit(false);
+            java.util.Set<Integer> retainedAlbumIds = new java.util.HashSet<>();
+            synchronized (albums) {
+                for (DicomAlbum album : albums) {
+                    if (album.getName() == null || album.getName().trim().isEmpty()) continue;
+                    Integer albumId = album.getIndex();
+                    if (albumId == null) {
+                        try (PreparedStatement find = sqliteConnection.prepareStatement(
+                                "SELECT id FROM Album WHERE name = ?")) {
+                            find.setString(1, album.getName());
+                            try (ResultSet rs = find.executeQuery()) {
+                                if (rs.next()) albumId = rs.getInt(1);
+                            }
+                        }
+                    }
 
-            for (DicomStudy study : studiesToSave) {
-                saveStudy(study);
+                    boolean smart = Boolean.TRUE.equals(album.isSmartAlbum());
+                    if (albumId == null) {
+                        try (PreparedStatement insert = sqliteConnection.prepareStatement(
+                                "INSERT INTO Album (name, smartAlbum, predicate, dateAdded) VALUES (?, ?, ?, ?)",
+                                Statement.RETURN_GENERATED_KEYS)) {
+                            insert.setString(1, album.getName());
+                            insert.setInt(2, smart ? 1 : 0);
+                            insert.setString(3, smart ? album.getPredicateString() : null);
+                            insert.setString(4, LocalDateTime.now().toString());
+                            insert.executeUpdate();
+                            try (ResultSet keys = insert.getGeneratedKeys()) {
+                                if (keys.next()) albumId = keys.getInt(1);
+                            }
+                        }
+                    } else {
+                        try (PreparedStatement update = sqliteConnection.prepareStatement(
+                                "UPDATE Album SET name = ?, smartAlbum = ?, predicate = ? WHERE id = ?")) {
+                            update.setString(1, album.getName());
+                            update.setInt(2, smart ? 1 : 0);
+                            update.setString(3, smart ? album.getPredicateString() : null);
+                            update.setInt(4, albumId);
+                            update.executeUpdate();
+                        }
+                    }
+                    if (albumId == null) throw new SQLException("Could not assign album database ID");
+                    album.setIndex(albumId);
+                    retainedAlbumIds.add(albumId);
+
+                    try (PreparedStatement delete = sqliteConnection.prepareStatement(
+                            "DELETE FROM AlbumStudy WHERE albumId = ?")) {
+                        delete.setInt(1, albumId);
+                        delete.executeUpdate();
+                    }
+                    if (!smart) {
+                        try (PreparedStatement link = sqliteConnection.prepareStatement(
+                                "INSERT OR IGNORE INTO AlbumStudy (albumId, studyId) VALUES (?, ?)")) {
+                            for (DicomStudy study : album.getStudies()) {
+                                if (study.getStudyInstanceUID() == null) continue;
+                                int studyId = getStudyDbId(study.getStudyInstanceUID());
+                                if (studyId < 0) continue;
+                                link.setInt(1, albumId);
+                                link.setInt(2, studyId);
+                                link.addBatch();
+                            }
+                            link.executeBatch();
+                        }
+                    }
+                }
             }
 
+            List<Integer> staleAlbumIds = new ArrayList<>();
+            try (Statement query = sqliteConnection.createStatement();
+                    ResultSet rs = query.executeQuery("SELECT id FROM Album")) {
+                while (rs.next()) {
+                    int id = rs.getInt(1);
+                    if (!retainedAlbumIds.contains(id)) staleAlbumIds.add(id);
+                }
+            }
+            try (PreparedStatement deleteLinks = sqliteConnection.prepareStatement(
+                    "DELETE FROM AlbumStudy WHERE albumId = ?");
+                    PreparedStatement deleteAlbum = sqliteConnection.prepareStatement(
+                            "DELETE FROM Album WHERE id = ?")) {
+                for (Integer id : staleAlbumIds) {
+                    deleteLinks.setInt(1, id);
+                    deleteLinks.addBatch();
+                    deleteAlbum.setInt(1, id);
+                    deleteAlbum.addBatch();
+                }
+                deleteLinks.executeBatch();
+                deleteAlbum.executeBatch();
+            }
             sqliteConnection.commit();
             sqliteConnection.setAutoCommit(true);
-
             return true;
         } catch (SQLException e) {
-
             try {
                 sqliteConnection.rollback();
                 sqliteConnection.setAutoCommit(true);
-            } catch (SQLException e2) {
-
+            } catch (SQLException ignored) {
             }
             return false;
         }
@@ -1817,38 +1909,338 @@ public class DicomDatabase {
      * デフォルトアルバムを追加
      */
     public void addDefaultAlbums() {
+        String[][] defaults = {
+                { "Today", "date >= $TODAY" },
+                { "Yesterday", "date >= $YESTERDAY AND date < $TODAY" },
+                { "Last Week", "date >= $LASTWEEK" }
+        };
+        synchronized (albums) {
+            for (String[] descriptor : defaults) {
+                boolean exists = false;
+                for (DicomAlbum album : albums) {
+                    if (descriptor[0].equalsIgnoreCase(album.getName())) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) albums.add(new DicomAlbum(descriptor[0], descriptor[1]));
+            }
+        }
+        if (!save()) throw new IllegalStateException("Failed to save default albums");
     }
 
     /**
      * アルバム配列を取得
      */
     public List<Object> albums() {
-        return new java.util.ArrayList<>();
+        List<DicomAlbum> sorted = getAlbums();
+        sorted.sort(DicomAlbum::compareTo);
+        return new ArrayList<>(sorted);
     }
 
     /**
      * スマートアルバムフィルターの述語を作成
      */
     public static Object predicateForSmartAlbumFilter(String string) {
-        return null;
+        AlbumRuleEngine.RuleSet rules = AlbumRuleEngine.parsePredicate(string);
+        return (java.util.function.Predicate<DicomStudy>) rules::evaluate;
     }
 
     /**
      * アルバムをパスに保存
      */
     public void saveAlbumsToPath(String path) {
+        if (path == null || path.trim().isEmpty()) {
+            throw new IllegalArgumentException("Album archive path is empty");
+        }
+        if (!save()) {
+            throw new IllegalStateException("Failed to save database before exporting albums");
+        }
+
+        List<Map<String, Object>> archive = new ArrayList<>();
+        synchronized (albums) {
+            for (DicomAlbum album : albums) {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("name", album.getName());
+                boolean smart = Boolean.TRUE.equals(album.isSmartAlbum());
+                entry.put("smartAlbum", smart);
+                if (smart) {
+                    entry.put("predicateString", album.getPredicateString());
+                } else {
+                    List<String> studyUIDs = new ArrayList<>();
+                    for (DicomStudy study : album.getStudies()) {
+                        if (study.getStudyInstanceUID() != null) {
+                            studyUIDs.add(study.getStudyInstanceUID());
+                        }
+                    }
+                    entry.put("studies", studyUIDs);
+                }
+                archive.add(entry);
+            }
+        }
+
+        java.nio.file.Path target = java.nio.file.Paths.get(path).toAbsolutePath();
+        java.nio.file.Path parent = target.getParent();
+        java.nio.file.Path temp = null;
+        try {
+            if (parent != null) java.nio.file.Files.createDirectories(parent);
+            temp = java.nio.file.Files.createTempFile(parent, "albums-", ".tmp");
+            javax.xml.stream.XMLStreamWriter xml = javax.xml.stream.XMLOutputFactory.newFactory()
+                    .createXMLStreamWriter(java.nio.file.Files.newOutputStream(temp), "UTF-8");
+            xml.writeStartDocument("UTF-8", "1.0");
+            xml.writeStartElement("plist");
+            xml.writeAttribute("version", "1.0");
+            xml.writeStartElement("array");
+            for (Map<String, Object> entry : archive) {
+                xml.writeStartElement("dict");
+                writePlistString(xml, "name", String.valueOf(entry.get("name")));
+                xml.writeStartElement("key"); xml.writeCharacters("smartAlbum"); xml.writeEndElement();
+                xml.writeEmptyElement(Boolean.TRUE.equals(entry.get("smartAlbum")) ? "true" : "false");
+                if (Boolean.TRUE.equals(entry.get("smartAlbum"))) {
+                    writePlistString(xml, "predicateString", (String) entry.get("predicateString"));
+                } else {
+                    xml.writeStartElement("key"); xml.writeCharacters("studies"); xml.writeEndElement();
+                    xml.writeStartElement("array");
+                    @SuppressWarnings("unchecked")
+                    List<String> studyUIDs = (List<String>) entry.get("studies");
+                    for (String uid : studyUIDs) {
+                        xml.writeStartElement("dict");
+                        writePlistString(xml, "studyInstanceUID", uid);
+                        xml.writeEndElement();
+                    }
+                    xml.writeEndElement();
+                }
+                xml.writeEndElement();
+            }
+            xml.writeEndElement();
+            xml.writeEndElement();
+            xml.writeEndDocument();
+            xml.close();
+            try {
+                java.nio.file.Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
+                java.nio.file.Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to export albums to " + target, ex);
+        } finally {
+            if (temp != null) {
+                try { java.nio.file.Files.deleteIfExists(temp); } catch (java.io.IOException ignored) { }
+            }
+        }
     }
 
     /**
      * アルバムをパスから読み込み
      */
     public void loadAlbumsFromPath(String path) {
+        if (path == null || path.trim().isEmpty()) {
+            throw new IllegalArgumentException("Album archive path is empty");
+        }
+        java.io.File file = new java.io.File(path);
+        if (!file.isFile()) {
+            throw new IllegalArgumentException("Album archive does not exist: " + path);
+        }
+
+        List<Map<String, Object>> imported = new ArrayList<>();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(file);
+            com.fasterxml.jackson.databind.JsonNode entries = root.isArray() ? root : root.path("albums");
+            if (entries.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode node : entries) {
+                    if (!node.hasNonNull("name") || node.path("name").asText().trim().isEmpty()) continue;
+                    Map<String, Object> entry = new HashMap<>();
+                    entry.put("name", node.path("name").asText().trim());
+                    entry.put("smartAlbum", node.path("smartAlbum").asBoolean(false));
+                    if (node.hasNonNull("predicateString")) {
+                        entry.put("predicateString", node.path("predicateString").asText());
+                    }
+                    List<String> studyUIDs = new ArrayList<>();
+                    if (node.path("studies").isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode study : node.path("studies")) {
+                            String uid = study.isTextual() ? study.asText() : study.path("studyInstanceUID").asText();
+                            if (!uid.isEmpty()) studyUIDs.add(uid);
+                        }
+                    }
+                    entry.put("studies", studyUIDs);
+                    imported.add(entry);
+                }
+            }
+        } catch (Exception jsonException) {
+            try {
+                readPlistAlbums(file, imported);
+            } catch (Exception plistException) {
+                // Legacy OculusJJ archive: one album per line, optional name|predicate.
+                try (java.io.BufferedReader reader = java.nio.file.Files.newBufferedReader(file.toPath(),
+                        java.nio.charset.StandardCharsets.UTF_8)) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#")) continue;
+                        int separator = line.indexOf('|');
+                        Map<String, Object> entry = new HashMap<>();
+                        entry.put("name", (separator >= 0 ? line.substring(0, separator) : line).trim());
+                        entry.put("smartAlbum", separator >= 0 && separator < line.length() - 1);
+                        if (separator >= 0) entry.put("predicateString", line.substring(separator + 1).trim());
+                        entry.put("studies", new ArrayList<String>());
+                        if (!((String) entry.get("name")).isEmpty()) imported.add(entry);
+                    }
+                } catch (java.io.IOException ex) {
+                    throw new IllegalArgumentException("Unsupported album archive: " + path, jsonException);
+                }
+            }
+        }
+
+        boolean changed = false;
+        synchronized (albums) {
+            for (Map<String, Object> entry : imported) {
+                String name = (String) entry.get("name");
+                DicomAlbum album = null;
+                for (DicomAlbum existing : albums) {
+                    if (existing.getName() != null && existing.getName().equalsIgnoreCase(name)) {
+                        album = existing;
+                        break;
+                    }
+                }
+                boolean smart = Boolean.TRUE.equals(entry.get("smartAlbum"));
+                if (album == null) {
+                    album = smart
+                            ? new DicomAlbum(name, (String) entry.get("predicateString"))
+                            : new DicomAlbum(name);
+                    albums.add(album);
+                    changed = true;
+                }
+                if (!smart) {
+                    @SuppressWarnings("unchecked")
+                    List<String> studyUIDs = (List<String>) entry.get("studies");
+                    for (String uid : studyUIDs) {
+                        DicomStudy study = getStudyByUID(uid);
+                        if (study != null && album.getStudies().add(study)) changed = true;
+                    }
+                }
+            }
+        }
+        if (changed && !save()) {
+            throw new IllegalStateException("Failed to save imported albums");
+        }
+    }
+
+    private static void writePlistString(javax.xml.stream.XMLStreamWriter xml, String key, String value)
+            throws javax.xml.stream.XMLStreamException {
+        if (value == null) return;
+        xml.writeStartElement("key"); xml.writeCharacters(key); xml.writeEndElement();
+        xml.writeStartElement("string"); xml.writeCharacters(value); xml.writeEndElement();
+    }
+
+    private static void readPlistAlbums(java.io.File file, List<Map<String, Object>> imported) throws Exception {
+        javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+        javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+        builder.setEntityResolver((publicId, systemId) -> new org.xml.sax.InputSource(new java.io.StringReader("")));
+        org.w3c.dom.Document document = builder.parse(file);
+        org.w3c.dom.NodeList arrays = document.getElementsByTagName("array");
+        if (arrays.getLength() == 0) throw new IllegalArgumentException("No album array in plist");
+        org.w3c.dom.Element rootArray = (org.w3c.dom.Element) arrays.item(0);
+        for (org.w3c.dom.Node node = rootArray.getFirstChild(); node != null; node = node.getNextSibling()) {
+            if (!(node instanceof org.w3c.dom.Element) || !"dict".equals(node.getNodeName())) continue;
+            Map<String, Object> entry = new HashMap<>();
+            List<String> studyUIDs = new ArrayList<>();
+            org.w3c.dom.Node child = node.getFirstChild();
+            while (child != null) {
+                if (child instanceof org.w3c.dom.Element && "key".equals(child.getNodeName())) {
+                    String key = child.getTextContent();
+                    org.w3c.dom.Node value = child.getNextSibling();
+                    while (value != null && !(value instanceof org.w3c.dom.Element)) value = value.getNextSibling();
+                    if (value == null) break;
+                    if ("name".equals(key) && "string".equals(value.getNodeName())) {
+                        entry.put("name", value.getTextContent().trim());
+                    } else if ("smartAlbum".equals(key)) {
+                        entry.put("smartAlbum", "true".equals(value.getNodeName()));
+                    } else if ("predicateString".equals(key) && "string".equals(value.getNodeName())) {
+                        entry.put("predicateString", value.getTextContent());
+                    } else if ("studies".equals(key) && "array".equals(value.getNodeName())) {
+                        readPlistStudyUIDs((org.w3c.dom.Element) value, studyUIDs);
+                    }
+                    child = value.getNextSibling();
+                } else {
+                    child = child.getNextSibling();
+                }
+            }
+            if (entry.get("name") instanceof String && !((String) entry.get("name")).isEmpty()) {
+                entry.putIfAbsent("smartAlbum", false);
+                entry.put("studies", studyUIDs);
+                imported.add(entry);
+            }
+        }
+        if (imported.isEmpty()) throw new IllegalArgumentException("No albums in plist");
+    }
+
+    private static void readPlistStudyUIDs(org.w3c.dom.Element array, List<String> studyUIDs) {
+        for (org.w3c.dom.Node node = array.getFirstChild(); node != null; node = node.getNextSibling()) {
+            if (!(node instanceof org.w3c.dom.Element)) continue;
+            if ("string".equals(node.getNodeName())) {
+                studyUIDs.add(node.getTextContent());
+            } else if ("dict".equals(node.getNodeName())) {
+                org.w3c.dom.Node child = node.getFirstChild();
+                while (child != null) {
+                    if (child instanceof org.w3c.dom.Element && "key".equals(child.getNodeName())
+                            && "studyInstanceUID".equals(child.getTextContent())) {
+                        org.w3c.dom.Node value = child.getNextSibling();
+                        while (value != null && !(value instanceof org.w3c.dom.Element)) value = value.getNextSibling();
+                        if (value != null && "string".equals(value.getNodeName())) studyUIDs.add(value.getTextContent());
+                        break;
+                    }
+                    child = child.getNextSibling();
+                }
+            }
+        }
     }
 
     /**
      * スタディをアルバムに追加
      */
     public void addStudies(List<Object> dicomStudies, Object dicomAlbum) {
+        if (dicomStudies == null || dicomStudies.isEmpty() || !(dicomAlbum instanceof DicomAlbum)) return;
+        DicomAlbum target = (DicomAlbum) dicomAlbum;
+        List<DicomStudy> selectedStudies = new ArrayList<>();
+        for (Object item : dicomStudies) {
+            DicomStudy study = null;
+            if (item instanceof DicomStudy) {
+                study = (DicomStudy) item;
+            } else if (item instanceof DicomSeries) {
+                study = ((DicomSeries) item).getStudy();
+            } else if (item instanceof DicomImage) {
+                DicomSeries series = ((DicomImage) item).getSeries();
+                if (series != null) study = series.getStudy();
+            }
+            if (study != null && !selectedStudies.contains(study)) selectedStudies.add(study);
+        }
+        if (selectedStudies.isEmpty()) return;
+
+        boolean albumExists;
+        synchronized (albums) {
+            albumExists = albums.contains(target);
+            if (!albumExists) {
+                for (DicomAlbum album : albums) {
+                    if (album.getName() != null && album.getName().equals(target.getName())) {
+                        target = album;
+                        albumExists = true;
+                        break;
+                    }
+                }
+            }
+            if (!albumExists) return;
+            for (DicomStudy study : selectedStudies) target.addStudiesObject(study);
+        }
+        if (!save(selectedStudies) || !save()) {
+            throw new IllegalStateException("Failed to save album Study membership");
+        }
     }
 
     /**

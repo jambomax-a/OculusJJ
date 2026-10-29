@@ -106,9 +106,40 @@ public class AlbumRuleEngine {
     // --- Parser ---
     public static RuleSet parsePredicate(String ps) {
         if (ps == null || ps.trim().isEmpty()) return new RuleSet();
-        RuleSet rs = new RuleSet(); try { for (String p : splitByOr(ps.trim())) {
-            RuleBlock b = parseConditionGroup(p.trim());
-            if (!b.conditions.isEmpty() || !b.subBlocks.isEmpty()) rs.blocks.add(b); } } catch (Exception ignored) {} return rs;
+        String expression = resolveDateMacros(ps.trim());
+        RuleSet rules = new RuleSet();
+        try {
+            for (String part : splitByOr(expression)) {
+                RuleBlock block = parseConditionGroup(part.trim());
+                if (!block.conditions.isEmpty() || !block.subBlocks.isEmpty()) {
+                    rules.blocks.add(block);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return rules;
+    }
+
+    private static String resolveDateMacros(String expression) {
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter
+                .ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        Map<String, LocalDateTime> values = new LinkedHashMap<>();
+        values.put("NSDATE_TODAY", today.atStartOfDay());
+        values.put("TODAY", today.atStartOfDay());
+        values.put("NSDATE_YESTERDAY", today.minusDays(1).atStartOfDay());
+        values.put("YESTERDAY", today.minusDays(1).atStartOfDay());
+        values.put("LASTWEEK", today.minusDays(7).atStartOfDay());
+        values.put("LASTHOUR", now.minusHours(1));
+        values.put("LAST6HOURS", now.minusHours(6));
+        values.put("LAST12HOURS", now.minusHours(12));
+        for (Map.Entry<String, LocalDateTime> entry : values.entrySet()) {
+            String macro = "\\$" + java.util.regex.Pattern.quote(entry.getKey());
+            expression = expression.replaceAll("(?i)" + macro,
+                    java.util.regex.Matcher.quoteReplacement("'" + formatter.format(entry.getValue()) + "'"));
+        }
+        return expression;
     }
 
     private static List<String> splitByOr(String s) {

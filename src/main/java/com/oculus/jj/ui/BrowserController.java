@@ -115,6 +115,7 @@ public class BrowserController extends JFrame {
 
     // HOROS-20240407準拠: IBOutlet NSTableView *albumTable; (133行目)
     private AlbumTableView albumTable;
+    private volatile int allStudiesAlbumCount;
 
     // HOROS-20240407準拠: IBOutlet NSTableView *_sourcesTableView; (138行目)
     private javax.swing.JTable sourcesTableView;
@@ -2429,6 +2430,9 @@ public class BrowserController extends JFrame {
                             } catch (Exception e) {
                                 e.printStackTrace();
                             }
+                        } else if (Boolean.TRUE.equals(selectedAlbum.isSmartAlbum())) {
+                            List<com.oculus.jj.model.DicomStudy> matching = selectedAlbum.evaluate(database.getAllStudies());
+                            if (matching != null) outlineViewArray.addAll(matching);
                         } else if (selectedAlbum.getStudies() != null) {
                             // HOROS-20240407準拠: 通常のアルバムの場合はアルバムのスタディを表示
                             outlineViewArray.addAll(selectedAlbum.getStudies());
@@ -3645,6 +3649,7 @@ public class BrowserController extends JFrame {
         }
         db.addAlbum(new com.oculus.jj.model.DicomAlbum(name.trim()));
         db.save();
+        refreshAlbums();
         infoFmt(name.trim(), LanguageManager.get("db.album.add.done", "Album added"));
     }
 
@@ -3669,7 +3674,45 @@ public class BrowserController extends JFrame {
         if (predicate == null) predicate = "";
         db.addAlbum(new com.oculus.jj.model.DicomAlbum(name.trim(), predicate));
         db.save();
+        refreshAlbums();
         infoFmt(name.trim(), LanguageManager.get("db.album.smart.done", "Smart album added"));
+    }
+
+    public void addSelectedStudiesToAlbum(Object sender) {
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        List<Object> selected = databaseOutline != null ? databaseOutline.getSelectedItems()
+                : java.util.Collections.emptyList();
+        if (db == null || selected.isEmpty()) {
+            infoFmt(LanguageManager.get("db.album.add_studies.none", "Select one or more studies or series first."),
+                    LanguageManager.get("db.album.add_studies.title", "Add Studies to Album"));
+            return;
+        }
+        List<com.oculus.jj.model.DicomAlbum> candidates = new ArrayList<>();
+        for (com.oculus.jj.model.DicomAlbum album : db.getAlbums()) {
+            if (album != null && !Boolean.TRUE.equals(album.isSmartAlbum())
+                    && album.getName() != null && !"Database".equals(album.getName())) {
+                candidates.add(album);
+            }
+        }
+        if (candidates.isEmpty()) {
+            infoFmt(LanguageManager.get("db.album.add_studies.no_albums", "Create a regular album first."),
+                    LanguageManager.get("db.album.add_studies.title", "Add Studies to Album"));
+            return;
+        }
+        Object target = JOptionPane.showInputDialog(this,
+                LanguageManager.get("db.album.add_studies.select", "Choose an album:"),
+                LanguageManager.get("db.album.add_studies.title", "Add Studies to Album"),
+                JOptionPane.QUESTION_MESSAGE, null, candidates.toArray(), candidates.get(0));
+        if (!(target instanceof com.oculus.jj.model.DicomAlbum)) return;
+        try {
+            db.addStudies(selected, target);
+            refreshAlbums();
+            infoFmt(String.valueOf(selected.size()),
+                    LanguageManager.get("db.album.add_studies.done", "Selected items added to album."));
+        } catch (Exception ex) {
+            infoFmt(String.valueOf(ex.getMessage()),
+                    LanguageManager.get("db.album.add_studies.fail", "Failed to add studies to album."));
+        }
     }
 
     /**
@@ -3690,9 +3733,10 @@ public class BrowserController extends JFrame {
                     LanguageManager.get("db.album.remove.title", "Delete Album"));
             return;
         }
-        java.util.List<com.oculus.jj.model.DicomAlbum> albums = db.getAlbums();
-        if (albums != null && albums.remove(target)) {
+        if (db.getAlbums().contains(target)) {
+            db.removeAlbum(target);
             db.save();
+            refreshAlbums();
             infoFmt(target.getName(), LanguageManager.get("db.album.remove.done", "Album deleted"));
         }
     }
@@ -6758,10 +6802,16 @@ public class BrowserController extends JFrame {
         ThreadsManager.defaultManager().addThreadAndStart(currentThread);
 
         try {
-            // HOROS-20240407準拠: DicomDatabase* idatabase = [self.database
-            // independentDatabase];
-            // ここで時間のかかる計算を行う（現在はプレースホルダー）
-            Thread.sleep(100); // 少し待機してスレッド感を出す
+            if (database != null) {
+                List<com.oculus.jj.model.DicomStudy> allStudies = database.getAllStudies();
+                allStudiesAlbumCount = allStudies.size();
+                for (com.oculus.jj.model.DicomAlbum album : database.getAlbums()) {
+                    int count = Boolean.TRUE.equals(album.isSmartAlbum())
+                            ? album.evaluate(allStudies).size()
+                            : album.getStudies().size();
+                    album.setNumberOfStudies(count);
+                }
+            }
 
         } catch (Exception e) {
             // エラーは無視
@@ -6797,7 +6847,7 @@ public class BrowserController extends JFrame {
         // arrayByAddingObjectsFromArray:[self albumsInDatabase]]
         com.oculus.jj.model.DicomAlbum databaseAlbum = new com.oculus.jj.model.DicomAlbum("Database");
         databaseAlbum.setSmartAlbum(false);
-        // Databaseアルバムは全スタディを含む（numberOfStudiesは後で計算）
+        databaseAlbum.setNumberOfStudies(allStudiesAlbumCount);
         result.add(databaseAlbum);
 
         // HOROS-20240407準拠: その後にデータベースのアルバムを追加
@@ -6976,13 +7026,26 @@ public class BrowserController extends JFrame {
         addSmartAlbumItem.addActionListener(e -> addSmartAlbum(null));
         albumsMenu.add(addSmartAlbumItem);
 
+        javax.swing.JMenuItem addSelectedStudiesItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_file_add_selected_to_album", "Add selected studies to album..."));
+        addSelectedStudiesItem.addActionListener(e -> addSelectedStudiesToAlbum(null));
+        albumsMenu.add(addSelectedStudiesItem);
+
         // Delete selected album
         // HOROS-20240407準拠: MainMenu.xib 121行目
         javax.swing.JMenuItem deleteAlbumItem = new javax.swing.JMenuItem(LanguageManager.get("menu_file_delete_album", "Delete selected album"));
         deleteAlbumItem.addActionListener(e -> {
             int selectedRow = albumTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                // deleteAlbum処理
+            List<com.oculus.jj.model.DicomAlbum> albums = getAlbumArray();
+            if (selectedRow >= 0 && selectedRow < albums.size()) {
+                com.oculus.jj.model.DicomAlbum selectedAlbum = albums.get(selectedRow);
+                if (selectedAlbum == null || "Database".equals(selectedAlbum.getName())) return;
+                int answer = JOptionPane.showConfirmDialog(BrowserController.this,
+                        String.format(LanguageManager.get("db.album.remove.confirm",
+                                "Delete album '%s'?"), selectedAlbum.getName()),
+                        LanguageManager.get("db.album.remove.title", "Delete Album"),
+                        JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                if (answer == JOptionPane.YES_OPTION) removeAlbum(selectedAlbum);
             }
         });
         albumsMenu.add(deleteAlbumItem);
@@ -8949,10 +9012,21 @@ public class BrowserController extends JFrame {
                     LanguageManager.get("db.album.save.title", "Save Albums"));
             return;
         }
-        boolean ok = db.save();
-        infoFmt(LanguageManager.get(ok ? "db.album.save.ok" : "db.album.save.fail",
-                ok ? "Albums saved." : "Save failed."),
-                LanguageManager.get("db.album.save.title", "Save Albums"));
+        javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+        fc.setDialogTitle(LanguageManager.get("db.album.save.title", "Save Albums"));
+        fc.setSelectedFile(new java.io.File("DatabaseAlbums.albums"));
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("OculusJJ albums (*.albums)", "albums"));
+        if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
+        java.io.File file = fc.getSelectedFile();
+        if (!file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".albums")) {
+            file = new java.io.File(file.getAbsolutePath() + ".albums");
+        }
+        try {
+            db.saveAlbumsToPath(file.getAbsolutePath());
+            infoFmt(file.getAbsolutePath(), LanguageManager.get("db.album.save.ok", "Albums saved."));
+        } catch (Exception ex) {
+            infoFmt(String.valueOf(ex.getMessage()), LanguageManager.get("db.album.save.fail", "Save failed."));
+        }
     }
 
     /**
@@ -8969,32 +9043,16 @@ public class BrowserController extends JFrame {
         }
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setDialogTitle(LanguageManager.get("db.album.import.title", "Import Albums"));
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("OculusJJ albums (*.albums)", "albums"));
         if (fc.showDialog(this, LanguageManager.get("db.album.import.select", "Open")) != javax.swing.JFileChooser.APPROVE_OPTION) {
             return;
         }
         java.io.File f = fc.getSelectedFile();
         try {
-            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(f));
-            int added = 0;
-            String line;
-            while ((line = r.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                String name = line;
-                String pred = null;
-                int idx = line.indexOf('|');
-                if (idx > 0) {
-                    name = line.substring(0, idx).trim();
-                    pred = line.substring(idx + 1).trim();
-                }
-                if (pred != null && !pred.isEmpty())
-                    db.addAlbum(new com.oculus.jj.model.DicomAlbum(name, pred));
-                else
-                    db.addAlbum(new com.oculus.jj.model.DicomAlbum(name));
-                added++;
-            }
-            r.close();
-            db.save();
+            int before = db.getAlbums().size();
+            db.loadAlbumsFromPath(f.getAbsolutePath());
+            int added = Math.max(0, db.getAlbums().size() - before);
+            refreshAlbums();
             infoFmt(String.format(LanguageManager.get("db.album.import.done", "Imported {0} album(s)."), added),
                     LanguageManager.get("db.album.import.title", "Import Albums"));
         } catch (Exception ex) {
@@ -9690,6 +9748,10 @@ public class BrowserController extends JFrame {
                     // 単一アルバムの失敗はスキップ
                 }
             }
+        }
+        if (added > 0) {
+            db.save();
+            refreshAlbums();
         }
         infoFmt(String.format(LanguageManager.get("db.default_albums.done", "Created {0} default album(s)."), added),
                 LanguageManager.get("db.default_albums.title", "Create Default Albums"));
