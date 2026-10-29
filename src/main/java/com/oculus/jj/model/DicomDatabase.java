@@ -363,6 +363,28 @@ public class DicomDatabase {
         return null;
     }
 
+    public boolean addRemoteStudy(DicomStudy remoteStudy) {
+        if (remoteStudy == null || remoteStudy.getStudyInstanceUID() == null
+                || remoteStudy.getStudyInstanceUID().isBlank() || remoteStudy.getSourceNodeName() == null
+                || remoteStudy.getSourceNodeName().isBlank()) return false;
+        synchronized (studies) {
+            DicomStudy existing = getStudyByUID(remoteStudy.getStudyInstanceUID());
+            if (existing != null) {
+                return existing.isDistant()
+                        && remoteStudy.getSourceNodeName().equals(existing.getSourceNodeName());
+            }
+            studies.add(remoteStudy);
+        }
+        if (!save(java.util.Collections.singletonList(remoteStudy))) {
+            synchronized (studies) {
+                studies.remove(remoteStudy);
+            }
+            return false;
+        }
+        notifyDatabaseChanged();
+        return true;
+    }
+
     /**
      * スタディリストを取得
      * HOROS-20240407準拠
@@ -512,6 +534,7 @@ public class DicomDatabase {
                             performingPhysician TEXT,
                             institutionName TEXT,
                             studyID TEXT,
+                            sourceNodeName TEXT,
                             hidden INTEGER DEFAULT 0
                         )
                     """);
@@ -667,6 +690,16 @@ public class DicomDatabase {
 
                         // e.getMessage());
                     }
+                }
+            }
+
+            boolean hasSourceNodeColumn = false;
+            try (ResultSet rs = sqliteConnection.getMetaData().getColumns(null, null, "Study", "sourceNodeName")) {
+                hasSourceNodeColumn = rs.next();
+            }
+            if (!hasSourceNodeColumn) {
+                try (Statement stmt = sqliteConnection.createStatement()) {
+                    stmt.execute("ALTER TABLE Study ADD COLUMN sourceNodeName TEXT");
                 }
             }
         } catch (Exception e) {
@@ -911,6 +944,11 @@ public class DicomDatabase {
                 study.setPerformingPhysician(rs.getString("performingPhysician"));
                 study.setInstitutionName(rs.getString("institutionName"));
                 study.setStudyID(rs.getString("studyID"));
+                try {
+                    study.setSourceNodeName(rs.getString("sourceNodeName"));
+                } catch (SQLException ignored) {
+                    study.setSourceNodeName(null);
+                }
 
                 // HOROS-20240407準拠: studyNameを読み込む
                 study.setStudyName(rs.getString("studyName"));
@@ -1525,8 +1563,8 @@ public class DicomDatabase {
                         (id, studyInstanceUID, name, patientID, patientUID, patientBirthDate, patientSex,
                          studyName, modality, date, dateAdded,
                          numberOfImages, comment, accessionNumber, referringPhysician,
-                         performingPhysician, institutionName, studyID, hidden)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         performingPhysician, institutionName, studyID, sourceNodeName, hidden)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """;
         } else {
             sql = """
@@ -1534,8 +1572,8 @@ public class DicomDatabase {
                         (studyInstanceUID, name, patientID, patientUID, patientBirthDate, patientSex,
                          studyName, modality, date, dateAdded,
                          numberOfImages, comment, accessionNumber, referringPhysician,
-                         performingPhysician, institutionName, studyID, hidden)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         performingPhysician, institutionName, studyID, sourceNodeName, hidden)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """;
         }
 
@@ -1561,6 +1599,7 @@ public class DicomDatabase {
             pstmt.setString(idx++, study.getPerformingPhysician());
             pstmt.setString(idx++, study.getInstitutionName());
             pstmt.setString(idx++, study.getStudyID());
+            pstmt.setString(idx++, study.getSourceNodeName());
             pstmt.setInt(idx++, study.isHidden() ? 1 : 0);
 
             pstmt.executeUpdate();
@@ -2291,6 +2330,102 @@ public class DicomDatabase {
             }
         } catch (SQLException e) {
             logger.warn("Failed to delete study {}", study.getStudyInstanceUID(), e);
+            return false;
+        }
+    }
+
+    public boolean mergeStudiesDatabaseOnly(DicomStudy destination, List<DicomStudy> selectedStudies) {
+        if (destination == null || selectedStudies == null || selectedStudies.size() < 2
+                || sqliteConnection == null || destination.isDistant()) return false;
+        List<DicomStudy> sources = new ArrayList<>();
+        for (DicomStudy study : selectedStudies) {
+            if (study == null || study == destination || study.isDistant()) continue;
+            if (!sources.contains(study)) sources.add(study);
+        }
+        if (sources.isEmpty()) return false;
+
+        loadSeriesForStudyIfNeeded(destination);
+        for (DicomStudy source : sources) loadSeriesForStudyIfNeeded(source);
+
+        try {
+            int destinationId = getStudyDbId(destination.getStudyInstanceUID());
+            if (destinationId <= 0) return false;
+            Map<DicomStudy, Integer> sourceIds = new HashMap<>();
+            for (DicomStudy source : sources) {
+                int sourceId = getStudyDbId(source.getStudyInstanceUID());
+                if (sourceId <= 0) return false;
+                sourceIds.put(source, sourceId);
+            }
+
+            sqliteConnection.setAutoCommit(false);
+            try {
+                for (Integer sourceId : sourceIds.values()) {
+                    try (PreparedStatement mergeAlbums = sqliteConnection.prepareStatement(
+                            "INSERT OR IGNORE INTO AlbumStudy (albumId, studyId) SELECT albumId, ? FROM AlbumStudy WHERE studyId = ?")) {
+                        mergeAlbums.setInt(1, destinationId);
+                        mergeAlbums.setInt(2, sourceId);
+                        mergeAlbums.executeUpdate();
+                    }
+                    try (PreparedStatement removeSourceAlbums = sqliteConnection.prepareStatement(
+                            "DELETE FROM AlbumStudy WHERE studyId = ?")) {
+                        removeSourceAlbums.setInt(1, sourceId);
+                        removeSourceAlbums.executeUpdate();
+                    }
+                    try (PreparedStatement reparent = sqliteConnection.prepareStatement(
+                            "UPDATE Series SET studyId = ? WHERE studyId = ?")) {
+                        reparent.setInt(1, destinationId);
+                        reparent.setInt(2, sourceId);
+                        reparent.executeUpdate();
+                    }
+                    try (PreparedStatement delete = sqliteConnection.prepareStatement("DELETE FROM Study WHERE id = ?")) {
+                        delete.setInt(1, sourceId);
+                        delete.executeUpdate();
+                    }
+                }
+                try (PreparedStatement updateCount = sqliteConnection.prepareStatement(
+                        "UPDATE Study SET numberOfImages = COALESCE((SELECT SUM(numberOfImages) FROM Series WHERE studyId = ?), 0) WHERE id = ?")) {
+                    updateCount.setInt(1, destinationId);
+                    updateCount.setInt(2, destinationId);
+                    updateCount.executeUpdate();
+                }
+                sqliteConnection.commit();
+            } catch (SQLException ex) {
+                sqliteConnection.rollback();
+                throw ex;
+            } finally {
+                sqliteConnection.setAutoCommit(true);
+            }
+
+            synchronized (studies) {
+                for (DicomStudy source : sources) {
+                    if (source.getSeries() != null) {
+                        for (DicomSeries series : new ArrayList<>(source.getSeries())) {
+                            source.removeSeriesObject(series);
+                            destination.addSeriesObject(series);
+                            series.setStudy(destination);
+                        }
+                    }
+                    studies.remove(source);
+                }
+                int totalImages = 0;
+                if (destination.getSeries() != null) {
+                    for (DicomSeries series : destination.getSeries()) {
+                        totalImages += series.getNumberOfImages() != null ? series.getNumberOfImages() : 0;
+                    }
+                }
+                destination.setNumberOfImages(totalImages);
+            }
+            synchronized (albums) {
+                for (DicomAlbum album : albums) {
+                    for (DicomStudy source : sources) {
+                        if (album.getStudies().remove(source)) album.addStudiesObject(destination);
+                    }
+                }
+            }
+            notifyDatabaseChanged();
+            return true;
+        } catch (SQLException e) {
+            logger.warn("Failed to merge studies into {}", destination.getStudyInstanceUID(), e);
             return false;
         }
     }

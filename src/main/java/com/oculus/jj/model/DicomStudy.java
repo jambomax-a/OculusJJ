@@ -57,6 +57,7 @@ public class DicomStudy {
     private String performingPhysician;
     private String referringPhysician;
     private String reportURL;
+    private String sourceNodeName;
     private Integer stateText;
     private String studyInstanceUID;
     private String studyName;
@@ -802,7 +803,15 @@ public class DicomStudy {
      * HOROS-20240407準拠: DicomStudy.isDistant
      */
     public boolean isDistant() {
-        return false;
+        return sourceNodeName != null && !sourceNodeName.isBlank();
+    }
+
+    public String getSourceNodeName() {
+        return sourceNodeName;
+    }
+
+    public void setSourceNodeName(String sourceNodeName) {
+        this.sourceNodeName = sourceNodeName;
     }
 
     /**

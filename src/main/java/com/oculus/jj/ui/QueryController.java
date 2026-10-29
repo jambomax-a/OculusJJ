@@ -39,6 +39,10 @@ public class QueryController extends JFrame {
     private DefaultTableModel tableModel;
     private JButton queryButton, queryPatientButton, retrieveButton, verifyButton, settingsButton;
     private JComboBox<String> retrieveToCombo;
+        private javax.swing.Timer autoQueryTimer;
+        private boolean automaticQueryInProgress;
+        private final java.util.prefs.Preferences autoQueryPrefs = java.util.prefs.Preferences
+            .userNodeForPackage(QueryController.class);
 
     private static QueryController instance = null;
 
@@ -70,13 +74,128 @@ public class QueryController extends JFrame {
         performQuery();
     }
 
+    public void configureAutoQuery(Frame owner) {
+        int savedInterval = Math.max(1, Math.min(1440, autoQueryPrefs.getInt("autoQuery.intervalMinutes", 5)));
+        javax.swing.JCheckBox enabled = new javax.swing.JCheckBox(
+                LanguageManager.get("query.auto.enable", "Run automatic Query/Retrieve"),
+                autoQueryPrefs.getBoolean("autoQuery.enabled", false));
+        javax.swing.JSpinner interval = new javax.swing.JSpinner(
+                new javax.swing.SpinnerNumberModel(savedInterval, 1, 1440, 1));
+        javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.GridLayout(0, 1, 4, 4));
+        panel.add(enabled);
+        javax.swing.JPanel intervalRow = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0));
+        intervalRow.add(new javax.swing.JLabel(LanguageManager.get("query.auto.interval", "Refresh interval (minutes):")));
+        intervalRow.add(interval);
+        panel.add(intervalRow);
+        int answer = javax.swing.JOptionPane.showConfirmDialog(owner, panel,
+                LanguageManager.get("query.auto.title", "Automatic Query/Retrieve"),
+                javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.QUESTION_MESSAGE);
+        if (answer != javax.swing.JOptionPane.OK_OPTION) return;
+
+        int minutes = ((Number) interval.getValue()).intValue();
+        boolean shouldRun = enabled.isSelected();
+        autoQueryPrefs.putInt("autoQuery.intervalMinutes", minutes);
+        autoQueryPrefs.putBoolean("autoQuery.enabled", shouldRun);
+        if (shouldRun) {
+            startAutoQueryTimer(minutes);
+            showQueryDialog(owner);
+            automaticQueryInProgress = true;
+            performQuery();
+        } else {
+            stopAutoQueryTimer();
+            showQueryDialog(owner);
+        }
+    }
+
+    public static void resumeSavedAutoQuery(Frame owner) {
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(QueryController.class);
+        if (!prefs.getBoolean("autoQuery.enabled", false)) return;
+        QueryController controller = getInstance();
+        controller.startAutoQueryTimer(Math.max(1, Math.min(1440, prefs.getInt("autoQuery.intervalMinutes", 5))));
+        controller.refreshNodes();
+        controller.automaticQueryInProgress = true;
+        controller.performQuery();
+    }
+
+    private void startAutoQueryTimer(int minutes) {
+        stopAutoQueryTimer();
+        autoQueryTimer = new javax.swing.Timer(minutes * 60_000, e -> {
+            if (queryButton.isEnabled() && nodeList.getSelectedValue() != null) {
+                automaticQueryInProgress = true;
+                performQuery();
+            }
+        });
+        autoQueryTimer.setRepeats(true);
+        autoQueryTimer.start();
+    }
+
+    private void stopAutoQueryTimer() {
+        if (autoQueryTimer != null) {
+            autoQueryTimer.stop();
+            autoQueryTimer = null;
+        }
+    }
+
     public boolean retrieveSelectedResults(Frame owner) {
-        if (resultsTable.getSelectedRowCount() == 0) return false;
+        if (!isVisible() || resultsTable.getSelectedRowCount() == 0) return false;
         if (owner != null) setLocationRelativeTo(owner);
         setVisible(true);
         toFront();
         performRetrieve();
         return true;
+    }
+
+    private void addSelectedResultsToLocalDatabase() {
+        int[] selectedRows = resultsTable.getSelectedRows();
+        if (selectedRows.length == 0) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("query.select_studies", "Select study/studies first."));
+            return;
+        }
+        DicomNode sourceNode = nodeList.getSelectedValue();
+        if (sourceNode == null) return;
+        DicomDatabase localDatabase = DicomDatabase.activeLocalDatabase();
+        if (localDatabase == null) localDatabase = DicomDatabase.defaultDatabase();
+
+        int added = 0;
+        for (int selectedRow : selectedRows) {
+            int row = resultsTable.convertRowIndexToModel(selectedRow);
+            com.oculus.jj.model.DicomStudy remote = new com.oculus.jj.model.DicomStudy();
+            String patientName = stringAt(row, 0);
+            remote.setName(patientName);
+            remote.setPatientName(patientName);
+            remote.setPatientID(stringAt(row, 1));
+            remote.setStudyName(stringAt(row, 3));
+            remote.setModality(stringAt(row, 4));
+            remote.setAccessionNumber(stringAt(row, 9));
+            remote.setStudyInstanceUID(stringAt(row, 10));
+            remote.setSourceNodeName(sourceNode.getName());
+            try {
+                remote.setNumberOfImages(Integer.parseInt(stringAt(row, 5)));
+            } catch (NumberFormatException ignored) {
+                remote.setNumberOfImages(0);
+            }
+            String studyDate = stringAt(row, 6);
+            if (studyDate.matches("\\d{8}")) {
+                try {
+                    remote.setDate(java.time.LocalDate.parse(studyDate,
+                            java.time.format.DateTimeFormatter.BASIC_ISO_DATE).atStartOfDay());
+                } catch (java.time.DateTimeException ignored) {
+                }
+            }
+            if (localDatabase.addRemoteStudy(remote)) added++;
+        }
+
+        BrowserController browser = BrowserController.currentBrowser();
+        if (browser != null) browser.refreshDatabase(null);
+        JOptionPane.showMessageDialog(this,
+                String.format(LanguageManager.get("query.add_local.done", "Added %d remote study/studies to the local database."), added),
+                LanguageManager.get("query.add_local.title", "Add to Local Database"), JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private String stringAt(int row, int column) {
+        Object value = tableModel.getValueAt(row, column);
+        return value != null ? value.toString().trim() : "";
     }
 
     private QueryController() {
@@ -193,18 +312,21 @@ public class QueryController extends JFrame {
         queryButton = new JButton(LanguageManager.get("query.btn.query", "Query"));
         queryPatientButton = new JButton(LanguageManager.get("query.btn.querypatient", "Query Patient"));
         retrieveButton = new JButton(LanguageManager.get("query.btn.retrieve", "Retrieve"));
+        JButton addToLocalButton = new JButton(LanguageManager.get("query.btn.add_local", "Add to Local DB"));
         verifyButton = new JButton(LanguageManager.get("query.btn.verify", "Verify"));
         settingsButton = new JButton(LanguageManager.get("query.btn.settings", "Settings"));
 
         queryButton.addActionListener(e -> performQuery());
         queryPatientButton.addActionListener(e -> performQuery());
         retrieveButton.addActionListener(e -> performRetrieve());
+        addToLocalButton.addActionListener(e -> addSelectedResultsToLocalDatabase());
         verifyButton.addActionListener(e -> performVerify());
         settingsButton.addActionListener(e -> PreferencesController.getInstance().setVisible(true));
 
         toolbar.add(queryButton);
         toolbar.add(queryPatientButton);
         toolbar.add(retrieveButton);
+        toolbar.add(addToLocalButton);
         toolbar.add(verifyButton);
         toolbar.add(settingsButton);
 
@@ -387,9 +509,15 @@ public class QueryController extends JFrame {
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
-                    JOptionPane.showMessageDialog(QueryController.this, LanguageManager.get("query.failed", "Query failed: ") + e.getMessage());
+                    if (automaticQueryInProgress) {
+                        resultsTable.setToolTipText(LanguageManager.get("query.auto.last_failed", "Last automatic query failed:") + " " + e.getMessage());
+                    } else {
+                        JOptionPane.showMessageDialog(QueryController.this,
+                                LanguageManager.get("query.failed", "Query failed: ") + e.getMessage());
+                    }
                 } finally {
                     queryButton.setEnabled(true);
+                    automaticQueryInProgress = false;
                 }
             }
         };

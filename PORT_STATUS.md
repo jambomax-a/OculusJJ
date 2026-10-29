@@ -570,20 +570,26 @@
 | **Export to DICOM Network Node** | アクティブシリーズの元 DICOM ファイルを重複除外し、送信先 `DicomNode` を選択して C-STORE SCU で送信。進捗・失敗ファイルを表示 |
 | **Query Selected Patient** | 選択中の Study/Series から Patient ID を取得し、Query/Retrieve ウィンドウの Patient ID 検索を自動実行 |
 | **Refresh PACS On-Demand Results** | Query/Retrieve ウィンドウで現在の検索条件を再実行 |
-| **Retrieve selected PACS studies** | Query/Retrieve 結果で選択中の Study を C-MOVE 取得 |
-| **Auto Query / Retrieve Window / Refresh** | 既存 Query/Retrieve ウィンドウの表示・再検索に接続 |
+| **Retrieve selected PACS studies** | Query/Retrieve 結果、またはブラウザ内のremote Studyを取得元ノードへC-MOVE |
+| **Add to Local DB** | Query結果からremote Study metadataを保存し、source nodeをDBに保持。ブラウザ表示と後続C-MOVEに対応 |
+| **Auto Query / Retrieve Window / Refresh** | 設定した分間隔で自動再検索（ウィンドウ非表示時も実行、Preferencesに永続化し起動時に復元） |
+| **Abort Incoming DICOM Processes** | ローカルAET宛の受信中 Association のみ確認後に abort（送信側SCUは対象外） |
 
 ### 追加 API
 - `DicomService.store(DicomNode, File)` — dcm4che C-STORE SCU（SOP Class/Instance UID と元 Transfer Syntax を使用）
+- `DicomService.abortIncomingAssociations()` — `Device.listOpenAssociations()` から受信 Association を識別し中断
+- `DicomDatabase.addRemoteStudy()` — UID重複を避けてremote Study metadata/source nodeを保存。`Study.sourceNodeName`列をmigrationし、既存Studyは上書きしない
+- `QueryController.resumeSavedAutoQuery()` — 保存済み自動検索設定をBrowserController起動時に再開
 - `QueryController.setSearchTextAndQuery()` / `refreshResults()` / `retrieveSelectedResults()` — BrowserController から検索・更新・取得を呼び出す公開 API
+- `QueryController.configureAutoQuery()` — 実行状態と1〜1440分の間隔をPreferencesに保存し、Swing Timerで再検索
 
 ### i18n
-- `pacs.export.*` / `pacs.query.*` / `pacs.retrieve.*` を en/ja 両方に追加
+- `pacs.export.*` / `pacs.query.*` / `pacs.retrieve.*` / `pacs.abort.*` / `query.auto.*` / `query.add_local.*` を en/ja 両方に追加
 
 ### 制約
 - C-STORE は元 DICOM ファイルを送るため、現在の画面上の画素処理（WL/WW や焼き込み）は送信データに反映しない
-- On-Demand Study の DB 永続化／リモート検索結果のローカル表示は未実装。Query/Retrieve 結果から直接 C-MOVE する経路を提供
-- 定期的な自動クエリのスケジュール実行と、進行中の受信 C-STORE の個別中断は未実装
+- Add to Local DB はStudy metadataのみを保存し、画像本体はC-MOVE後に取り込む
+- 実PACS/DB統合動作はWindows側で確認
 
 **コンパイル成功** ✅
 
@@ -600,9 +606,9 @@
 - **UI:** Add selected studies to album... を追加。smart album の predicate 評価、Database/アルバム別件数計算、Create default albums と追加/削除/インポート後の保存・一覧更新を実装。
 - **i18n:** アルバムへの Study 追加と削除確認の文言を en/ja に追加。
 - **Delete selected items:** 通常アルバムからの除外、またはStudy/SeriesレコードのDB削除を選択可能にした。ファイルは保持する旨を確認表示し、Study削除では `AlbumStudy` を含むSQLトランザクションで整理。
+- **Merge Studies (Database only):** SeriesのStudy関連、AlbumStudy所属、Study/Image件数をトランザクションで統合。DICOMファイルは変更しないため、元Study Instance UIDの再取り込み時には分離される可能性を確認表示。
 
 ### 保留
-- `mergeStudies` は HOROS で DICOM ファイルヘッダーまで変更する不可逆処理のため未実装（誤操作時に破損しないよう明示案内を表示）。
 - DB削除後も元DICOMファイルはディスクに残す仕様。OS Trash への移動・ファイル物理削除は未実装。
 
 ### 検証

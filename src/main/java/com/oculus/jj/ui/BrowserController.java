@@ -339,6 +339,7 @@ public class BrowserController extends JFrame {
                 refreshDatabase(this);
             });
         }
+        SwingUtilities.invokeLater(() -> QueryController.resumeSavedAutoQuery(this));
     }
 
     /**
@@ -7397,7 +7398,11 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: MainMenu.xib 427行目
         javax.swing.JMenuItem autoQueryItem = new javax.swing.JMenuItem(
                 MenuResourceLoader.getString("menu_network_auto_query"));
-        autoQueryItem.addActionListener(e -> QueryController.getInstance().showQueryDialog(BrowserController.this));
+        autoQueryItem.addActionListener(e -> {
+            QueryController query = QueryController.getInstance();
+            query.refreshNodes();
+            query.configureAutoQuery(BrowserController.this);
+        });
         networkMenu.add(autoQueryItem);
 
         // Auto Query / Retrieve Refresh
@@ -7434,8 +7439,15 @@ public class BrowserController extends JFrame {
         abortStoreSCUItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_A,
                 java.awt.event.InputEvent.ALT_DOWN_MASK));
         abortStoreSCUItem.addActionListener(e -> {
-            JOptionPane.showMessageDialog(BrowserController.this, LanguageManager.get("net_abort_pending", "Abort incoming DICOM processes pending"), LanguageManager.get("net_title", "Network"),
-                    JOptionPane.INFORMATION_MESSAGE);
+            int answer = JOptionPane.showConfirmDialog(BrowserController.this,
+                LanguageManager.get("pacs.abort.confirm",
+                    "Abort active incoming DICOM transfers? These transfers cannot be resumed."),
+                LanguageManager.get("net_title", "Network"), JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            if (answer != JOptionPane.YES_OPTION) return;
+            int aborted = com.oculus.jj.model.DicomService.getInstance().abortIncomingAssociations();
+            infoFmt(String.format(LanguageManager.get("pacs.abort.done", "Aborted %d incoming association(s)."), aborted),
+                LanguageManager.get("net_title", "Network"));
         });
         networkMenu.add(abortStoreSCUItem);
 
@@ -9673,9 +9685,42 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) mergeStudies:(id) sender (5501行目)
      */
     public void mergeStudies(Object sender) {
-        infoFmt(LanguageManager.get("db.merge.unsupported",
-            "Study merging is disabled because it may rewrite DICOM identities and files. Use the PACS/metadata workflow instead."),
-            LanguageManager.get("db.merge.title", "Merge Studies"));
+        if (database == null || databaseOutline == null) {
+            infoFmt(LanguageManager.get("db.merge.no_db", "No active database."),
+                    LanguageManager.get("db.merge.title", "Merge Studies"));
+            return;
+        }
+        List<Object> selected = databaseOutline.getSelectedItems();
+        List<com.oculus.jj.model.DicomStudy> studies = new ArrayList<>();
+        for (Object item : selected) {
+            if (item instanceof com.oculus.jj.model.DicomStudy) {
+                com.oculus.jj.model.DicomStudy study = (com.oculus.jj.model.DicomStudy) item;
+                if (!studies.contains(study)) studies.add(study);
+            }
+        }
+        if (studies.size() < 2) {
+            infoFmt(LanguageManager.get("db.merge.no_selection", "Select at least two studies to merge."),
+                    LanguageManager.get("db.merge.title", "Merge Studies"));
+            return;
+        }
+        com.oculus.jj.model.DicomStudy destination = studies.get(0);
+        String warning = String.format(LanguageManager.get("db.merge.files_warning",
+                "Merge %d studies into '%s' in the database only? Source DICOM files are not changed; their original Study Instance UIDs remain, so reimport may recreate the old studies."),
+                studies.size(), destination.getName());
+        int answer = JOptionPane.showConfirmDialog(this, warning,
+                LanguageManager.get("db.merge.title", "Merge Studies"),
+                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (answer != JOptionPane.YES_OPTION) return;
+        if (!database.mergeStudiesDatabaseOnly(destination, studies)) {
+            infoFmt(LanguageManager.get("db.merge.failed", "The database-only merge failed."),
+                    LanguageManager.get("db.merge.title", "Merge Studies"));
+            return;
+        }
+        refreshDatabase(null);
+        refreshAlbums();
+        if (databaseOutline != null) databaseOutline.selectStudy(destination);
+        infoFmt(String.format(LanguageManager.get("db.merge.done", "Merged %d source study/studies into the destination."),
+            studies.size() - 1), LanguageManager.get("db.merge.title", "Merge Studies"));
     }
 
     /**
@@ -9932,11 +9977,67 @@ public class BrowserController extends JFrame {
      */
     public void retrieveSelectedPODStudies(Object sender) {
         QueryController query = QueryController.getInstance();
-        if (!query.retrieveSelectedResults(BrowserController.this)) {
-            infoFmt(LanguageManager.get("pacs.retrieve.no_selection",
-                    "Select study results in the Query/Retrieve window first."),
-                    LanguageManager.get("net_title", "Network"));
+        if (query.retrieveSelectedResults(BrowserController.this)) return;
+
+        List<com.oculus.jj.model.DicomStudy> remoteStudies = new ArrayList<>();
+        if (databaseOutline != null) {
+            for (Object item : databaseOutline.getSelectedItems()) {
+                com.oculus.jj.model.DicomStudy study = null;
+                if (item instanceof com.oculus.jj.model.DicomStudy) study = (com.oculus.jj.model.DicomStudy) item;
+                else if (item instanceof com.oculus.jj.model.DicomSeries) study = ((com.oculus.jj.model.DicomSeries) item).getStudy();
+                if (study != null && study.isDistant()) remoteStudies.add(study);
+            }
         }
+        if (remoteStudies.isEmpty()) {
+            infoFmt(LanguageManager.get("pacs.retrieve.no_selection",
+                    "Select results in Query/Retrieve or a stored remote study first."),
+                    LanguageManager.get("net_title", "Network"));
+            return;
+        }
+
+        List<com.oculus.jj.model.DicomNode> nodes = com.oculus.jj.model.DicomNodeManager.getInstance().getNodes();
+        new javax.swing.SwingWorker<Integer, Void>() {
+            private final List<String> failures = new ArrayList<>();
+
+            @Override
+            protected Integer doInBackground() {
+                int retrieved = 0;
+                for (com.oculus.jj.model.DicomStudy study : remoteStudies) {
+                    com.oculus.jj.model.DicomNode node = null;
+                    for (com.oculus.jj.model.DicomNode candidate : nodes) {
+                        if (candidate.getName() != null && candidate.getName().equals(study.getSourceNodeName())) {
+                            node = candidate;
+                            break;
+                        }
+                    }
+                    if (node == null) {
+                        failures.add(study.getName() + ": " + LanguageManager.get("pacs.retrieve.node_missing", "source node not found"));
+                        continue;
+                    }
+                    try {
+                        com.oculus.jj.model.DicomService.getInstance().move(node, study.getStudyInstanceUID());
+                        retrieved++;
+                    } catch (Exception ex) {
+                        failures.add(study.getName() + ": " + ex.getMessage());
+                    }
+                }
+                return retrieved;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    int retrieved = get();
+                    if (databaseOutline != null) databaseOutline.reloadData();
+                    refreshDatabase(null);
+                    String message = String.format(LanguageManager.get("pacs.retrieve.done", "Retrieved %d study/studies."), retrieved);
+                    if (!failures.isEmpty()) message += "\n" + String.join("\n", failures);
+                    infoFmt(message, LanguageManager.get("net_title", "Network"));
+                } catch (Exception ex) {
+                    infoFmt(String.valueOf(ex.getMessage()), LanguageManager.get("pacs.retrieve.failed", "Retrieve failed"));
+                }
+            }
+        }.execute();
     }
 
     /**

@@ -74,6 +74,19 @@ public class DicomService {
         // // logger.info("DICOM Listener stopped");
     }
 
+    /** Abort active inbound associations addressed to the local AE. */
+    public int abortIncomingAssociations() {
+        String localAET = DicomNodeManager.getInstance().getLocalAET();
+        int aborted = 0;
+        for (Association association : device.listOpenAssociations()) {
+            if (localAET.equals(association.getCalledAET())) {
+                association.abort();
+                aborted++;
+            }
+        }
+        return aborted;
+    }
+
     /**
      * C-ECHO 実行
      */
