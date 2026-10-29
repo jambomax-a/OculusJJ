@@ -2247,53 +2247,51 @@ public class DicomDatabase {
      * Studyを削除
      * HOROS-20240407準拠
      */
-    public void deleteStudy(DicomStudy study) {
+    public boolean deleteStudy(DicomStudy study) {
         if (study == null || sqliteConnection == null) {
-            return;
+            return false;
         }
-
         try {
-            // まずStudyのIDを取得
-            String selectSql = "SELECT id FROM Study WHERE studyInstanceUID = ?";
-            int studyDbId = -1;
-            try (PreparedStatement pstmt = sqliteConnection.prepareStatement(selectSql)) {
-                pstmt.setString(1, study.getStudyInstanceUID());
-                ResultSet rs = pstmt.executeQuery();
-                if (rs.next()) {
-                    studyDbId = rs.getInt("id");
+            sqliteConnection.setAutoCommit(false);
+            try {
+                int studyDbId = getStudyDbId(study.getStudyInstanceUID());
+                if (studyDbId > 0) {
+                    try (PreparedStatement pstmt = sqliteConnection.prepareStatement(
+                            "DELETE FROM AlbumStudy WHERE studyId = ?")) {
+                        pstmt.setInt(1, studyDbId);
+                        pstmt.executeUpdate();
+                    }
+                    try (PreparedStatement pstmt = sqliteConnection.prepareStatement(
+                            "DELETE FROM Image WHERE seriesId IN (SELECT id FROM Series WHERE studyId = ?)")) {
+                        pstmt.setInt(1, studyDbId);
+                        pstmt.executeUpdate();
+                    }
+                    try (PreparedStatement pstmt = sqliteConnection.prepareStatement("DELETE FROM Series WHERE studyId = ?")) {
+                        pstmt.setInt(1, studyDbId);
+                        pstmt.executeUpdate();
+                    }
+                    try (PreparedStatement pstmt = sqliteConnection.prepareStatement("DELETE FROM Study WHERE id = ?")) {
+                        pstmt.setInt(1, studyDbId);
+                        pstmt.executeUpdate();
+                    }
                 }
+                sqliteConnection.commit();
+                synchronized (studies) {
+                    studies.remove(study);
+                }
+                synchronized (albums) {
+                    for (DicomAlbum album : albums) album.removeStudiesObject(study);
+                }
+                return true;
+            } catch (SQLException ex) {
+                sqliteConnection.rollback();
+                throw ex;
+            } finally {
+                sqliteConnection.setAutoCommit(true);
             }
-
-            if (studyDbId > 0) {
-                // Seriesに属するImageを削除
-                String deleteImagesSql = "DELETE FROM Image WHERE seriesId IN (SELECT id FROM Series WHERE studyId = ?)";
-                try (PreparedStatement pstmt = sqliteConnection.prepareStatement(deleteImagesSql)) {
-                    pstmt.setInt(1, studyDbId);
-                    pstmt.executeUpdate();
-                }
-
-                // Seriesを削除
-                String deleteSeriesSql = "DELETE FROM Series WHERE studyId = ?";
-                try (PreparedStatement pstmt = sqliteConnection.prepareStatement(deleteSeriesSql)) {
-                    pstmt.setInt(1, studyDbId);
-                    pstmt.executeUpdate();
-                }
-
-                // Studyを削除
-                String deleteStudySql = "DELETE FROM Study WHERE id = ?";
-                try (PreparedStatement pstmt = sqliteConnection.prepareStatement(deleteStudySql)) {
-                    pstmt.setInt(1, studyDbId);
-                    pstmt.executeUpdate();
-                }
-            }
-
-            // メモリからも削除
-            synchronized (studies) {
-                studies.remove(study);
-            }
-
         } catch (SQLException e) {
-
+            logger.warn("Failed to delete study {}", study.getStudyInstanceUID(), e);
+            return false;
         }
     }
 
@@ -2301,12 +2299,13 @@ public class DicomDatabase {
      * Seriesを削除
      * HOROS-20240407準拠
      */
-    public void deleteSeries(DicomSeries series) {
+    public boolean deleteSeries(DicomSeries series) {
         if (series == null || sqliteConnection == null) {
-            return;
+            return false;
         }
 
         try {
+            sqliteConnection.setAutoCommit(false);
             // まずSeriesのIDを取得
             String selectSql = "SELECT id FROM Series WHERE seriesInstanceUID = ?";
             int seriesDbId = -1;
@@ -2334,15 +2333,24 @@ public class DicomDatabase {
                 }
             }
 
-            // メモリからも削除
+            sqliteConnection.commit();
             DicomStudy study = series.getStudy();
             if (study != null && study.getSeries() != null) {
                 study.getSeries().remove(series);
             }
-
+            return true;
         } catch (SQLException e) {
-
-            // e);
+            try {
+                sqliteConnection.rollback();
+            } catch (SQLException ignored) {
+            }
+            logger.warn("Failed to delete series {}", series.getSeriesInstanceUID(), e);
+            return false;
+        } finally {
+            try {
+                sqliteConnection.setAutoCommit(true);
+            } catch (SQLException ignored) {
+            }
         }
     }
 

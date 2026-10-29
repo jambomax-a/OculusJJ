@@ -599,10 +599,11 @@
 - **互換 API / smart albums:** `albums()` の名前順取得、`addDefaultAlbums()` の重複防止保存、`predicateForSmartAlbumFilter()` を実装。`$TODAY/$YESTERDAY/$LASTWEEK` 等の日付マクロを RuleEngine で解決。
 - **UI:** Add selected studies to album... を追加。smart album の predicate 評価、Database/アルバム別件数計算、Create default albums と追加/削除/インポート後の保存・一覧更新を実装。
 - **i18n:** アルバムへの Study 追加と削除確認の文言を en/ja に追加。
+- **Delete selected items:** 通常アルバムからの除外、またはStudy/SeriesレコードのDB削除を選択可能にした。ファイルは保持する旨を確認表示し、Study削除では `AlbumStudy` を含むSQLトランザクションで整理。
 
 ### 保留
-- `mergeStudies` は HOROS で DICOM ファイルヘッダーまで変更する不可逆処理のため未実装。
-- `delItem` はファイル・AlbumStudy関連を安全に整理する削除経路が未整備のため未実装。
+- `mergeStudies` は HOROS で DICOM ファイルヘッダーまで変更する不可逆処理のため未実装（誤操作時に破損しないよう明示案内を表示）。
+- DB削除後も元DICOMファイルはディスクに残す仕様。OS Trash への移動・ファイル物理削除は未実装。
 
 ### 検証
 - `./gradlew compileJava` 成功

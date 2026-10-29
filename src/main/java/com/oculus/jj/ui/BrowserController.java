@@ -9673,6 +9673,9 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) mergeStudies:(id) sender (5501行目)
      */
     public void mergeStudies(Object sender) {
+        infoFmt(LanguageManager.get("db.merge.unsupported",
+            "Study merging is disabled because it may rewrite DICOM identities and files. Use the PACS/metadata workflow instead."),
+            LanguageManager.get("db.merge.title", "Merge Studies"));
     }
 
     /**
@@ -9680,6 +9683,82 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction)delItem: (id)sender (5999行目)
      */
     public void delItem(Object sender) {
+        if (database == null || databaseOutline == null) {
+            infoFmt(LanguageManager.get("db.delete.no_db", "No active database."),
+                    LanguageManager.get("db.delete.title", "Delete Items"));
+            return;
+        }
+        List<Object> selected = databaseOutline.getSelectedItems();
+        if (selected.isEmpty()) {
+            infoFmt(LanguageManager.get("db.delete.no_selection", "Select one or more studies or series first."),
+                    LanguageManager.get("db.delete.title", "Delete Items"));
+            return;
+        }
+
+        List<com.oculus.jj.model.DicomStudy> studies = new ArrayList<>();
+        List<com.oculus.jj.model.DicomSeries> seriesList = new ArrayList<>();
+        for (Object item : selected) {
+            if (item instanceof com.oculus.jj.model.DicomStudy) {
+                studies.add((com.oculus.jj.model.DicomStudy) item);
+            } else if (item instanceof com.oculus.jj.model.DicomSeries) {
+                seriesList.add((com.oculus.jj.model.DicomSeries) item);
+            }
+        }
+        if (studies.isEmpty() && seriesList.isEmpty()) {
+            infoFmt(LanguageManager.get("db.delete.unsupported", "The selected rows cannot be deleted."),
+                    LanguageManager.get("db.delete.title", "Delete Items"));
+            return;
+        }
+
+        List<com.oculus.jj.model.DicomAlbum> albumArray = getAlbumArray();
+        int albumRow = albumTable != null ? albumTable.getSelectedRow() : -1;
+        com.oculus.jj.model.DicomAlbum currentAlbum = albumRow >= 0 && albumRow < albumArray.size()
+                ? albumArray.get(albumRow) : null;
+        boolean canRemoveFromAlbum = studies.size() > 0 && seriesList.isEmpty() && currentAlbum != null
+                && !"Database".equals(currentAlbum.getName())
+                && !Boolean.TRUE.equals(currentAlbum.isSmartAlbum());
+
+        String deleteFromDatabase = LanguageManager.get("db.delete.database_only", "Delete database records (keep DICOM files)");
+        String removeFromAlbum = LanguageManager.get("db.delete.remove_album", "Remove from current album");
+        String cancel = LanguageManager.get("common.cancel", "Cancel");
+        Object[] options = canRemoveFromAlbum
+                ? new Object[] { removeFromAlbum, deleteFromDatabase, cancel }
+                : new Object[] { deleteFromDatabase, cancel };
+        String detail = String.format(LanguageManager.get("db.delete.confirm",
+                "Delete %d study/study record(s)? Original DICOM files will remain on disk."), selected.size());
+        int choice = JOptionPane.showOptionDialog(this, detail,
+                LanguageManager.get("db.delete.title", "Delete Items"), JOptionPane.DEFAULT_OPTION,
+                JOptionPane.WARNING_MESSAGE, null, options, options[options.length - 1]);
+        if (choice < 0 || options[choice].equals(cancel)) return;
+
+        if (canRemoveFromAlbum && options[choice].equals(removeFromAlbum)) {
+            for (com.oculus.jj.model.DicomStudy study : studies) currentAlbum.removeStudiesObject(study);
+            if (!database.save()) {
+                infoFmt(LanguageManager.get("db.delete.failed", "Failed to update the album."),
+                        LanguageManager.get("db.delete.title", "Delete Items"));
+                return;
+            }
+        } else {
+            boolean deleted = true;
+            for (com.oculus.jj.model.DicomStudy study : studies) deleted &= database.deleteStudy(study);
+            for (com.oculus.jj.model.DicomSeries series : seriesList) deleted &= database.deleteSeries(series);
+            if (!deleted) {
+                outlineViewRefresh();
+                refreshAlbums();
+                infoFmt(LanguageManager.get("db.delete.failed", "Failed to update the database."),
+                        LanguageManager.get("db.delete.title", "Delete Items"));
+                return;
+            }
+            if (!database.save()) {
+                infoFmt(LanguageManager.get("db.delete.failed", "Failed to update the database."),
+                        LanguageManager.get("db.delete.title", "Delete Items"));
+                return;
+            }
+        }
+        outlineViewRefresh();
+        refreshAlbums();
+        infoFmt(String.format(LanguageManager.get("db.delete.done", "Removed %d selected row(s)."), selected.size()),
+            LanguageManager.get("db.delete.title", "Delete Items"));
     }
 
     /**
