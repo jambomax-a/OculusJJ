@@ -480,8 +480,11 @@
 - `ViewerController.tileWindows()` / `tile3DWindows()` は既存の実装をそのまま利用（スクエアグリッド配置）
 
 **コンパイル成功** ✅
+**コンパイル成功** ✅
 
 ---
+
+
 
 ---
 
@@ -614,3 +617,16 @@
 ### 検証
 - `./gradlew compileJava` 成功
 - SQLite再起動を含む動作確認/PACSと同様の実環境テストは未実施（後続テスト対象）
+
+**コンパイル成功** ✅
+
+---
+
+## [2026-10-29 更新8] — 2D Viewerメニュー順序
+
+- 共有スクリーンショットの並びに合わせ、Series List / BW-RGB / Reset-Revert / Scale-Sort-Orientation / Calibrate・3D・Navigator / DICOM操作 / Propagate・Sync / Key Image / Subtraction / Annotations / WL&WW / CLUT / CLUT Bar / Opacity / Convolution の順に再構成。
+- Series List は既存サムネイルパネルの表示設定、Annotations はROIパネルへ接続。
+- CLUT Barと「平行面のみズーム伝播」は実挙動が未実装のため、項目位置のみ合わせて無効表示。
+- 追加機能（Apply Window Protocol、Resample、12-bit、Workspace）は基準項目の後に配置。
+
+**コンパイル成功** ✅

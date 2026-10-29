@@ -7809,7 +7809,7 @@ public class BrowserController extends JFrame {
         // Apply CLUT
         // HOROS-20240407準拠: - (IBAction) applyCLUT (2D Viewer)
         javax.swing.JMenu clutMenu = new javax.swing.JMenu(
-                MenuResourceLoader.getString("menu_viewer_2d_apply_clut"));
+            LanguageManager.get("menu_2d_color_lut", "Color Look Up Table"));
         for (String preset : DicomPix.CLUT_PRESETS) {
             final String name = preset;
             javax.swing.JMenuItem it = new javax.swing.JMenuItem(name);
@@ -7826,7 +7826,7 @@ public class BrowserController extends JFrame {
         // Apply Opacity
         // HOROS-20240407準拠: - (IBAction) applyOpacity (2D Viewer)
         javax.swing.JMenu opacityMenu = new javax.swing.JMenu(
-                MenuResourceLoader.getString("menu_viewer_2d_apply_opacity"));
+            LanguageManager.get("menu_2d_opacity", "Opacity"));
         int[] opacityPercents = { 100, 75, 50, 25 };
         for (int p : opacityPercents) {
             final int pp = p;
@@ -8319,6 +8319,101 @@ public class BrowserController extends JFrame {
                 java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
         findPrevKeyItem.addActionListener(e -> findNextPreviousKeyImage(-1));
         viewer2DMenu.add(findPrevKeyItem);
+
+        javax.swing.JCheckBoxMenuItem seriesListItem = new javax.swing.JCheckBoxMenuItem(
+            LanguageManager.get("menu_2d_series_list", "Series List"),
+            java.util.prefs.Preferences.userNodeForPackage(ThumbnailsListPanel.class)
+                .getBoolean("SeriesListVisible", true));
+        seriesListItem.addActionListener(e -> {
+            List<ViewerController> viewers = ViewerController.getDisplayedViewers();
+            if (!viewers.isEmpty()) viewers.get(viewers.size() - 1).setSeriesListVisible(seriesListItem.isSelected());
+        });
+
+        javax.swing.JMenu annotationsMenu = new javax.swing.JMenu(
+            LanguageManager.get("menu_2d_annotations", "Annotations"));
+        javax.swing.JMenuItem openAnnotationsItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_2d_annotations_open", "Open ROI Annotations Panel"));
+        openAnnotationsItem.addActionListener(e -> AnnotationsPanel.toggle(this, getActiveDCMViewForEdit()));
+        annotationsMenu.add(openAnnotationsItem);
+
+        javax.swing.JMenu windowWidthLevelMenu = new javax.swing.JMenu(
+            LanguageManager.get("menu_2d_window_width_level", "Window Width & Level"));
+        windowWidthLevelMenu.add(applyWindowProtocolItem);
+        javax.swing.JMenuItem resetWLWWItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_2d_reset_wlww", "Reset Window Width & Level"));
+        resetWLWWItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null && view.getCurDCM() != null) {
+            view.getCurDCM().resetWLWW();
+            view.repaint();
+            }
+        });
+        windowWidthLevelMenu.add(resetWLWWItem);
+
+        javax.swing.JMenu clutBarMenu = new javax.swing.JMenu(
+            LanguageManager.get("menu_2d_clut_bar", "Color Look Up Table Bar"));
+        javax.swing.JMenuItem clutBarUnavailableItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_2d_clut_bar_unavailable", "Color bar display is not available yet"));
+        clutBarUnavailableItem.setEnabled(false);
+        clutBarMenu.add(clutBarUnavailableItem);
+
+        javax.swing.JCheckBoxMenuItem zoomParallelItem = new javax.swing.JCheckBoxMenuItem(
+            LanguageManager.get("menu_2d_propagate_zoom_parallel",
+                "Propagate Zoom Level Only if Planes are Parallel"));
+        zoomParallelItem.setEnabled(false);
+
+        // HOROS 2D Viewer order from MainMenu.xib; keep port-specific tools after the reference items.
+        viewer2DMenu.removeAll();
+        viewer2DMenu.add(nextSeriesItem);
+        viewer2DMenu.add(previousSeriesItem);
+        viewer2DMenu.add(nextPatientItem);
+        viewer2DMenu.add(previousPatientItem);
+        viewer2DMenu.addSeparator();
+        viewer2DMenu.add(seriesListItem);
+        viewer2DMenu.addSeparator();
+        viewer2DMenu.add(convertBWRGBMenu);
+        viewer2DMenu.add(resetImageViewItem);
+        viewer2DMenu.add(revertSeriesItem);
+        viewer2DMenu.add(scaleMenu);
+        viewer2DMenu.add(sortByMenu);
+        viewer2DMenu.add(orientationMenu);
+        viewer2DMenu.add(calibrateItem);
+        viewer2DMenu.add(threeDPanelItem);
+        viewer2DMenu.add(navigatorItem);
+        viewer2DMenu.add(flipSeriesItem);
+        viewer2DMenu.add(useVOILUTItem);
+        viewer2DMenu.add(displayOverlaysItem);
+        viewer2DMenu.add(dicomMetaDataItem);
+        viewer2DMenu.add(convertSUVItem);
+        viewer2DMenu.add(fuseItem);
+        viewer2DMenu.add(flattenFusedItem);
+        viewer2DMenu.addSeparator();
+        viewer2DMenu.add(propagateSettingsItem);
+        viewer2DMenu.add(dontPropagateWLWWItem);
+        viewer2DMenu.add(propagateInSeriesItem);
+        viewer2DMenu.add(zoomParallelItem);
+        viewer2DMenu.add(syncSeriesMenu);
+        viewer2DMenu.add(syncDifferentItem);
+        viewer2DMenu.addSeparator();
+        viewer2DMenu.add(keyImageItem);
+        viewer2DMenu.add(markAllKeyItem);
+        viewer2DMenu.add(unmarkAllKeyItem);
+        viewer2DMenu.add(markROIsKeyItem);
+        viewer2DMenu.add(saveDICOMSCItem);
+        viewer2DMenu.add(findNextKeyItem);
+        viewer2DMenu.add(findPrevKeyItem);
+        viewer2DMenu.addSeparator();
+        viewer2DMenu.add(subtractionMenu);
+        viewer2DMenu.add(annotationsMenu);
+        viewer2DMenu.add(windowWidthLevelMenu);
+        viewer2DMenu.add(clutMenu);
+        viewer2DMenu.add(clutBarMenu);
+        viewer2DMenu.add(opacityMenu);
+        viewer2DMenu.add(convolutionMenu);
+        viewer2DMenu.addSeparator();
+        viewer2DMenu.add(resampleItem);
+        viewer2DMenu.add(item12Bit);
+        viewer2DMenu.add(workspaceMenu);
 
         // 注: 2D Viewerメニューには他にも多くの項目がありますが、主要な項目のみ実装しています
         // 残りの項目（Subtraction、Annotations、Window Width & Level、Color Look Up Table、Image

@@ -990,6 +990,16 @@ public class ViewerController extends JFrame {
         loadSeriesRelative(-1);
     }
 
+    public void setSeriesListVisible(boolean visible) {
+        java.util.prefs.Preferences.userNodeForPackage(ThumbnailsListPanel.class)
+                .putBoolean("SeriesListVisible", visible);
+        ThumbnailsListPanel panel = ThumbnailsListPanel.getInstanceForScreenIndex(0);
+        if (panel != null) {
+            panel.setThumbnailsView(visible ? previewMatrixScrollView : null, this);
+            if (visible) panel.setVisible(true);
+        }
+    }
+
     /**
      * 次のシリーズへ移動
      * HOROS-20240407準拠: ViewerController.m 12465行目 - loadSeriesDown
