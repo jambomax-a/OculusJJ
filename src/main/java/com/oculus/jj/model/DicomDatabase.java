@@ -154,10 +154,20 @@ public class DicomDatabase {
         // HOROS-20240407準拠: データベースからデータを読み込む
         loadFromDatabase();
 
+        String patientUidMigrationKey = patientUidMigrationKey(this.dataBaseDirPath);
+        if (!com.oculus.jj.config.AppPreferences.getBool(patientUidMigrationKey, false)
+                && recomputePatientUIDsInContext(this)) {
+            com.oculus.jj.config.AppPreferences.setBool(patientUidMigrationKey, true);
+        }
+
         // HOROS-20240407準拠: アルバムが空の場合はデフォルトアルバムを作成
         if (albums.isEmpty()) {
             createDefaultAlbums();
             save();
+        }
+        if (com.oculus.jj.config.AppPreferences.getBool("database.autoCleanEnabled", false)
+                || com.oculus.jj.config.AppPreferences.getBool("database.deleteEntireAtStartup", false)) {
+            runDatabaseAutoCleaning(true);
         }
     }
 
@@ -204,7 +214,32 @@ public class DicomDatabase {
     /**
      * コンテキスト内の患者UIDを再計算
      */
-    public static void recomputePatientUIDsInContext(Object context) {
+    public static boolean recomputePatientUIDsInContext(Object context) {
+        DicomDatabase db = context instanceof DicomDatabase ? (DicomDatabase) context : activeLocalDatabase();
+        if (db == null) return false;
+        synchronized (db.studies) {
+            for (DicomStudy study : db.studies) {
+                if (study == null) continue;
+                Date birthDate = study.getDateOfBirth() == null ? null
+                        : Date.from(study.getDateOfBirth().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+                study.setPatientUID(db.calculatePatientUID(study.getPatientName(), study.getPatientID(), birthDate));
+            }
+            boolean saved = db.save();
+            if (saved) db.notifyDatabaseChanged();
+            return saved;
+        }
+    }
+
+    private static String patientUidMigrationKey(String path) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(String.valueOf(path).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder key = new StringBuilder("database.patientUIDSchema.v2.");
+            for (int i = 0; i < 8; i++) key.append(String.format(java.util.Locale.ROOT, "%02x", digest[i]));
+            return key.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     /**
@@ -359,6 +394,20 @@ public class DicomDatabase {
                     return s;
                 }
             }
+        }
+        return null;
+    }
+
+    public DicomImage findImageByUIDs(String studyUID, String seriesUID, String sopInstanceUID) {
+        if (studyUID == null || seriesUID == null || sopInstanceUID == null) return null;
+        DicomStudy study = getStudyByUID(studyUID);
+        if (study == null || study.isDistant()) return null;
+        DicomSeries series = study.getSeriesByUID(seriesUID);
+        if (series == null) return null;
+        loadImagesForSeriesIfNeeded(series);
+        if (series.getImages() == null) return null;
+        for (DicomImage image : series.getImages()) {
+            if (image != null && sopInstanceUID.equals(image.getSopInstanceUID())) return image;
         }
         return null;
     }
@@ -2334,6 +2383,134 @@ public class DicomDatabase {
         }
     }
 
+    public int runDatabaseAutoCleaning(boolean startup) {
+        if (startup && !baseDirPath.equals(defaultBaseDirPath())) return 0;
+        boolean deleteEntire = startup && com.oculus.jj.config.AppPreferences.getBool("database.deleteEntireAtStartup", false);
+        if (!deleteEntire && !com.oculus.jj.config.AppPreferences.getBool("database.autoCleanEnabled", false)) return 0;
+
+        boolean filterByAcquisition = com.oculus.jj.config.AppPreferences.getBool("database.cleanAcqOlder", false);
+        boolean filterByLastOpened = com.oculus.jj.config.AppPreferences.getBool("database.cleanNotOpened", false);
+        boolean filterByComments = com.oculus.jj.config.AppPreferences.getBool("database.cleanCommentEnabled", false);
+        boolean filterByDiskSpace = com.oculus.jj.config.AppPreferences.getBool("database.cleanDiskSpaceEnabled", true);
+        if (!deleteEntire && !filterByAcquisition && !filterByLastOpened && !filterByComments && !filterByDiskSpace) return 0;
+
+        long minimumFreeBytes = diskSpaceThresholdBytes();
+        if (!deleteEntire && filterByDiskSpace && getUsableSpaceBytes() >= minimumFreeBytes) return 0;
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        java.time.LocalDateTime acquisitionCutoff = now.minus(agePeriod("database.cleanAcqAge"));
+        java.time.LocalDateTime lastOpenedCutoff = now.minus(agePeriod("database.cleanNotOpenedAge"));
+        List<DicomStudy> candidates = new ArrayList<>();
+        synchronized (studies) {
+            for (DicomStudy study : studies) {
+                if (study == null || study.isDistant()) continue;
+                if (!deleteEntire && !studyMatchesAutoClean(study, filterByAcquisition, acquisitionCutoff,
+                        filterByLastOpened, lastOpenedCutoff, filterByComments)) continue;
+                if (!deleteEntire && com.oculus.jj.config.AppPreferences.getBool("database.keepStudiesWithComments", true)
+                        && hasStudyComments(study)) continue;
+                if (!deleteEntire && com.oculus.jj.config.AppPreferences.getBool("database.keepStudiesInAlbum", true)
+                        && belongsToRegularAlbum(study)) continue;
+                candidates.add(study);
+            }
+        }
+        candidates.sort(autoCleanComparator(com.oculus.jj.config.AppPreferences.getInt("database.cleanPolicy", 1)));
+
+        int deleted = 0;
+        boolean deleteLinkedOriginal = com.oculus.jj.config.AppPreferences.getBool("database.deleteLinkedOriginal", false);
+        for (DicomStudy study : candidates) {
+            if (!deleteEntire && filterByDiskSpace && getUsableSpaceBytes() >= minimumFreeBytes) break;
+            List<java.nio.file.Path> filesToDelete = filesToDeleteForStudy(study, deleteLinkedOriginal);
+            if (!deleteStudy(study)) continue;
+            deleted++;
+            for (java.nio.file.Path path : filesToDelete) {
+                try { java.nio.file.Files.deleteIfExists(path); }
+                catch (Exception ex) { logger.warn("Could not remove cleaned DICOM file {}", path, ex); }
+            }
+        }
+        if (deleted > 0) notifyDatabaseChanged();
+        return deleted;
+    }
+
+    private boolean studyMatchesAutoClean(DicomStudy study, boolean byAcquisition,
+            java.time.LocalDateTime acquisitionCutoff, boolean byLastOpened,
+            java.time.LocalDateTime lastOpenedCutoff, boolean byComments) {
+        if (byAcquisition && (study.getDate() == null || !study.getDate().isBefore(acquisitionCutoff))) return false;
+        if (byLastOpened && (study.getDateOpened() != null && !study.getDateOpened().isBefore(lastOpenedCutoff))) return false;
+        if (byComments) {
+            String comments = String.join(" ", safeComment(study.getComment()), safeComment(study.getComment2()),
+                    safeComment(study.getComment3()), safeComment(study.getComment4()));
+            String filter = com.oculus.jj.config.AppPreferences.getStr("database.cleanCommentText", "").trim();
+            if (filter.isEmpty()) return false;
+            boolean contains = comments.toLowerCase(java.util.Locale.ROOT).contains(filter.toLowerCase(java.util.Locale.ROOT));
+            boolean shouldContain = com.oculus.jj.config.AppPreferences.getInt("database.cleanCommentMode", 0) == 0;
+            if (contains != shouldContain) return false;
+        }
+        return true;
+    }
+
+    private static String safeComment(String value) { return value == null ? "" : value; }
+
+    private boolean hasStudyComments(DicomStudy study) {
+        return !safeComment(study.getComment()).isBlank() || !safeComment(study.getComment2()).isBlank()
+                || !safeComment(study.getComment3()).isBlank() || !safeComment(study.getComment4()).isBlank();
+    }
+
+    private boolean belongsToRegularAlbum(DicomStudy study) {
+        for (DicomAlbum album : getAlbums()) {
+            if (album != null && !Boolean.TRUE.equals(album.isSmartAlbum())
+                    && album.getStudies() != null && album.getStudies().contains(study)) return true;
+        }
+        return false;
+    }
+
+    private java.time.Period agePeriod(String key) {
+        return switch (Math.max(0, Math.min(4, com.oculus.jj.config.AppPreferences.getInt(key, 0)))) {
+            case 1 -> java.time.Period.ofMonths(6);
+            case 2 -> java.time.Period.ofYears(1);
+            case 3 -> java.time.Period.ofYears(2);
+            case 4 -> java.time.Period.ofYears(5);
+            default -> java.time.Period.ofMonths(3);
+        };
+    }
+
+    private long diskSpaceThresholdBytes() {
+        int index = Math.max(0, Math.min(3, com.oculus.jj.config.AppPreferences.getInt("database.cleanDiskSpace", 0)));
+        long gigabytes = switch (index) { case 1 -> 2; case 2 -> 5; case 3 -> 10; default -> 1; };
+        return gigabytes * 1024L * 1024L * 1024L;
+    }
+
+    private long getUsableSpaceBytes() {
+        return new File(getDataDirPath()).getUsableSpace();
+    }
+
+    private java.util.Comparator<DicomStudy> autoCleanComparator(int policy) {
+        return java.util.Comparator.comparing(study -> switch (policy) {
+            case 0 -> study.getDate();
+            case 2 -> study.getDateOpened();
+            default -> study.getDateAdded();
+        }, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()));
+    }
+
+    private List<java.nio.file.Path> filesToDeleteForStudy(DicomStudy study, boolean deleteLinkedOriginal) {
+        List<java.nio.file.Path> files = new ArrayList<>();
+        java.nio.file.Path managedRoot = java.nio.file.Path.of(getDataDirPath()).toAbsolutePath().normalize();
+        if (study.getSeries() == null) return files;
+        for (DicomSeries series : study.getSeries()) {
+            if (series == null) continue;
+            loadImagesForSeriesIfNeeded(series);
+            if (series.getImages() == null) continue;
+            for (DicomImage image : series.getImages()) {
+                if (image == null || image.completePath() == null) continue;
+                try {
+                    java.nio.file.Path path = java.nio.file.Path.of(image.completePath()).toRealPath();
+                    boolean managed = Boolean.TRUE.equals(image.getInDatabaseFolder()) && path.startsWith(managedRoot);
+                    if (managed || deleteLinkedOriginal && !managed) files.add(path);
+                } catch (Exception ignored) { }
+            }
+        }
+        return files;
+    }
+
     public boolean mergeStudiesDatabaseOnly(DicomStudy destination, List<DicomStudy> selectedStudies) {
         if (destination == null || selectedStudies == null || selectedStudies.size() < 2
                 || sqliteConnection == null || destination.isDistant()) return false;
@@ -3572,15 +3749,39 @@ public class DicomDatabase {
      * patientBirthDateから計算)
      */
     private String calculatePatientUID(String patientName, String patientID, Date patientBirthDate) {
-        // HOROS-20240407準拠: patientUIDはpatientName, patientID, patientBirthDateから計算される
-        // 簡易実装: patientIDが存在する場合はそれを使用、なければpatientNameを使用
-        if (patientID != null && !patientID.trim().isEmpty()) {
-            return "PATIENT_" + patientID;
-        } else if (patientName != null && !patientName.trim().isEmpty()) {
-            return "PATIENT_" + patientName;
-        } else {
-            return "PATIENT_UNKNOWN";
+        return createPatientUID(patientName, patientID, patientBirthDate,
+            com.oculus.jj.config.AppPreferences.getBool("database.uidPatientId", true),
+            com.oculus.jj.config.AppPreferences.getBool("database.uidBirthDate", true),
+            com.oculus.jj.config.AppPreferences.getBool("database.uidName", true));
         }
+
+        static String createPatientUID(String patientName, String patientID, Date patientBirthDate,
+            boolean useId, boolean useBirthDate, boolean useName) {
+        java.util.List<String> components = new java.util.ArrayList<>();
+        if (useId) components.add("ID=" + normalizeUIDComponent(patientID));
+        if (useBirthDate) {
+            String birth = patientBirthDate == null ? "" : new java.text.SimpleDateFormat("yyyyMMdd").format(patientBirthDate);
+            components.add("DOB=" + birth);
+        }
+        if (useName) components.add("NAME=" + normalizeUIDComponent(patientName));
+        if (components.isEmpty() || components.stream().allMatch(s -> s.endsWith("="))) return "PATIENT_UNKNOWN";
+
+        if (useId && !useBirthDate && !useName && patientID != null && !patientID.trim().isEmpty()) {
+            return "PATIENT_" + patientID.trim();
+        }
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(String.join("|", components).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder uid = new StringBuilder("PATIENT_");
+            for (int i = 0; i < 16; i++) uid.append(String.format(java.util.Locale.ROOT, "%02x", digest[i]));
+            return uid.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private static String normalizeUIDComponent(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " ").toUpperCase(java.util.Locale.ROOT);
     }
 
     /**
@@ -4218,8 +4419,14 @@ public class DicomDatabase {
 
                             // HOROS-20240407準拠: if( copyFiles) (2647行目)
                             if (copyFiles) {
-                                // HOROS-20240407準拠: ファイルコピー処理 (2649-2701行目)
-                                // 現時点では、copyFiles=falseの場合のみ実装
+                                java.io.File file = new java.io.File(srcPath);
+                                if (file.exists() && file.isFile()) {
+                                    try {
+                                        copiedFiles.add(copyImportedFile(srcPath));
+                                    } catch (Exception ex) {
+                                        logger.warn("Failed to copy imported file into database: {}", srcPath, ex);
+                                    }
+                                }
                             } else {
                                 // HOROS-20240407準拠: copyFiles=falseの場合 (2703-2730行目)
                                 java.io.File file = new java.io.File(srcPath);
@@ -4296,6 +4503,9 @@ public class DicomDatabase {
                                     // // finalCopiedFiles.size());
                                     final List<Object> finalObjects = idatabase.addFilesAtPaths(finalCopiedFiles, true,
                                             onlyDICOM, true, false, true, true);
+                                    if (finalObjects != null && !finalObjects.isEmpty()) {
+                                        routeImportedImages(finalObjects);
+                                    }
 
                                     // // finalObjects != null ? finalObjects.size() : 0);
 
@@ -4441,6 +4651,121 @@ public class DicomDatabase {
         } catch (Exception e) {
             // エラーは無視するか、適切にログ出力を行う（コンソールへの直接出力は避ける）
         }
+    }
+
+    private String copyImportedFile(String sourcePath) throws java.io.IOException {
+        java.nio.file.Path source = java.nio.file.Path.of(sourcePath).toRealPath();
+        java.nio.file.Path databaseRoot = java.nio.file.Path.of(dataDirPath()).toAbsolutePath().normalize();
+        if (source.startsWith(databaseRoot)) return source.toString();
+
+        String parent = source.getParent() == null ? "root" : source.getParent().toString();
+        byte[] digest;
+        try {
+            digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(parent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new java.io.IOException("SHA-256 is unavailable", e);
+        }
+        StringBuilder folderKey = new StringBuilder();
+        for (int i = 0; i < 8; i++) folderKey.append(String.format(java.util.Locale.ROOT, "%02x", digest[i]));
+        java.nio.file.Path destinationDirectory = databaseRoot.resolve("Imported").resolve(folderKey.toString());
+        java.nio.file.Files.createDirectories(destinationDirectory);
+
+        String fileName = source.getFileName().toString();
+        String stem = fileName;
+        String extension = "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot > 0) {
+            stem = fileName.substring(0, dot);
+            extension = fileName.substring(dot);
+        }
+        java.nio.file.Path destination = destinationDirectory.resolve(fileName);
+        int suffix = 1;
+        while (java.nio.file.Files.exists(destination)) {
+            if (java.nio.file.Files.isSameFile(source, destination)) return destination.toString();
+            destination = destinationDirectory.resolve(stem + "-" + suffix++ + extension);
+        }
+        java.nio.file.Files.copy(source, destination, java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
+        return destination.toString();
+    }
+
+    private void routeImportedImages(List<Object> importedObjects) {
+        if (!com.oculus.jj.config.AppPreferences.getBool("routing.active", false)) return;
+        String rulesJson = com.oculus.jj.config.AppPreferences.getStr("routing.rules", "");
+        if (rulesJson.isBlank()) return;
+
+        String[][] rules;
+        try {
+            rules = new com.fasterxml.jackson.databind.ObjectMapper().readValue(rulesJson, String[][].class);
+        } catch (Exception ex) {
+            logger.warn("Cannot parse automatic routing rules", ex);
+            return;
+        }
+        List<DicomNode> nodes = DicomNodeManager.getInstance().getNodes();
+        List<String> failures = new ArrayList<>();
+        for (Object object : importedObjects) {
+            if (!(object instanceof DicomImage image)) continue;
+            String path = image.completePath();
+            if (path == null || path.isBlank()) continue;
+            for (String[] rule : rules) {
+                if (rule.length < 4 || !Boolean.parseBoolean(rule[0]) || !matchesRoutingFilter(rule[1], image)) continue;
+                DicomNode destination = nodes.stream().filter(node -> routingDestinationMatches(rule[2], node))
+                        .findFirst().orElse(null);
+                if (destination == null) {
+                    failures.add("No DICOM node matches routing destination: " + rule[2]);
+                    continue;
+                }
+                try {
+                    com.oculus.jj.model.DicomService.getInstance().store(destination, new File(path));
+                } catch (Exception ex) {
+                    failures.add(destination.getName() + ": " + ex.getMessage());
+                }
+            }
+        }
+        if (!failures.isEmpty() && com.oculus.jj.config.AppPreferences.getBool("routing.showError", true)) {
+            String message = String.join("\n", failures);
+            javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(null, message,
+                    "AutoRouting", javax.swing.JOptionPane.ERROR_MESSAGE));
+        }
+    }
+
+    private boolean routingDestinationMatches(String target, DicomNode node) {
+        if (target == null || node == null) return false;
+        String normalized = target.trim();
+        return normalized.equalsIgnoreCase(node.getName()) || normalized.equalsIgnoreCase(node.getAeTitle())
+                || normalized.equalsIgnoreCase(node.getAddress() + ":" + node.getPort());
+    }
+
+    private boolean matchesRoutingFilter(String filter, DicomImage image) {
+        if (filter == null || filter.isBlank() || "*".equals(filter.trim())) return true;
+        for (String condition : filter.split("[;,&]")) {
+            String[] pair = condition.trim().split("=", 2);
+            if (pair.length != 2) return false;
+            String actual = switch (pair[0].trim().toLowerCase(java.util.Locale.ROOT)) {
+                case "modality" -> image.getModality();
+                case "patientid" -> image.getPatientID();
+                case "studydescription" -> image.getStudyDescription();
+                case "seriesdescription" -> image.getSeriesDescription();
+                case "accessionnumber" -> image.getAccessionNumber();
+                case "studyuid" -> image.getStudyInstanceUID();
+                default -> null;
+            };
+            if (actual == null || !routingValueMatches(actual, pair[1].trim())) return false;
+        }
+        return true;
+    }
+
+    static boolean routingValueMatches(String actual, String expected) {
+        String value = actual.toLowerCase(java.util.Locale.ROOT);
+        String pattern = expected.toLowerCase(java.util.Locale.ROOT);
+        if (!pattern.contains("*")) return value.equals(pattern);
+        StringBuilder regex = new StringBuilder("^");
+        for (int i = 0; i < pattern.length(); i++) {
+            char character = pattern.charAt(i);
+            regex.append(character == '*' ? ".*" : java.util.regex.Pattern.quote(String.valueOf(character)));
+        }
+        regex.append('$');
+        return value.matches(regex.toString());
     }
 
     // ========== エンティティ関連メソッド ==========

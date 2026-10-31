@@ -26,6 +26,9 @@ import org.dcm4che3.data.Tag;
  */
 public class QueryController extends JFrame {
 
+    private record SmartAlbumRule(boolean enabled, String name, boolean autoRetrieve, String date, String modality) {}
+    private record SmartAlbumResult(Attributes attributes, boolean autoRetrieve) {}
+
     private JList<DicomNode> nodeList;
     private JTextField globalSearchField;
     private int selectedSearchTabIndex = 0;
@@ -41,6 +44,7 @@ public class QueryController extends JFrame {
     private JComboBox<String> retrieveToCombo;
         private javax.swing.Timer autoQueryTimer;
         private boolean automaticQueryInProgress;
+        private final java.util.Set<String> autoRetrieveInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
         private final java.util.prefs.Preferences autoQueryPrefs = java.util.prefs.Preferences
             .userNodeForPackage(QueryController.class);
 
@@ -67,11 +71,220 @@ public class QueryController extends JFrame {
         performQuery();
     }
 
+    public void setToolbarSearchAndQuery(String text, int toolbarType) {
+        int queryType = switch (toolbarType) {
+            case 1 -> 0; // Patient Name
+            case 2 -> 7; // Study Date
+            case 3 -> 2; // Accession Number
+            case 4 -> 8; // Modality
+            case 5 -> 9; // Series Description
+            case 6 -> 6; // Institution
+            default -> -1; // Search across supported study-level fields
+        };
+        setSearchTextAndQuery(text, queryType);
+    }
+
     public void refreshResults(Frame owner) {
         if (owner != null) setLocationRelativeTo(owner);
         setVisible(true);
         toFront();
         performQuery();
+    }
+
+    public void refreshOnDemandResults(Frame owner) {
+        if (owner != null) setLocationRelativeTo(owner);
+        setVisible(true);
+        toFront();
+        if (!com.oculus.jj.config.AppPreferences.getBool("ondemand.active", false)
+                || !com.oculus.jj.config.AppPreferences.getBool("ondemand.smartAlbumSearchEnabled", false)) {
+            performQuery();
+            return;
+        }
+        performSmartAlbumQueries();
+    }
+
+    private List<SmartAlbumRule> loadSmartAlbumRules() {
+        String json = com.oculus.jj.config.AppPreferences.getStr("ondemand.smartAlbums", "");
+        String[][] defaults = {
+                {"true", "Just Acquired (last hour)", "false", "Last hour", ""},
+                {"false", "Just Added (last hour)", "false", "Any date", ""},
+                {"false", "Just Opened", "false", "Any date", ""},
+                {"true", "Today CR", "true", "Today", "CR"},
+                {"true", "Today CT", "true", "Today", "CT"},
+                {"true", "Today MG", "true", "Today", "MG"}};
+        try {
+            String[][] rows = json.isBlank() ? defaults
+                    : new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, String[][].class);
+            List<SmartAlbumRule> rules = new ArrayList<>();
+            for (String[] row : rows) {
+                if (row.length == 5) {
+                    rules.add(new SmartAlbumRule(Boolean.parseBoolean(row[0]), row[1], Boolean.parseBoolean(row[2]), row[3], row[4]));
+                } else if (row.length == 4) {
+                    boolean enabled = row[0].startsWith("Today") || row[0].startsWith("Just Acquired");
+                    rules.add(new SmartAlbumRule(enabled, row[0], Boolean.parseBoolean(row[1]), row[2], row[3]));
+                }
+            }
+            return rules;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private void performSmartAlbumQueries() {
+        DicomNode node = nodeList.getSelectedValue();
+        if (node == null) {
+            refreshNodes();
+            node = nodeList.getSelectedValue();
+        }
+        if (node == null) {
+            JOptionPane.showMessageDialog(this, LanguageManager.get("query.select_server", "Select a source server."));
+            return;
+        }
+        final DicomNode source = node;
+        List<SmartAlbumRule> rules = loadSmartAlbumRules();
+        if (rules.stream().noneMatch(SmartAlbumRule::enabled)) {
+            tableModel.setRowCount(0);
+            return;
+        }
+        queryButton.setEnabled(false);
+        tableModel.setRowCount(0);
+        new SwingWorker<List<SmartAlbumResult>, Void>() {
+            private final List<String> failures = new ArrayList<>();
+
+            @Override protected List<SmartAlbumResult> doInBackground() {
+                java.util.Map<String, SmartAlbumResult> unique = new java.util.LinkedHashMap<>();
+                for (SmartAlbumRule rule : rules) {
+                    if (!rule.enabled()) continue;
+                    if ((rule.name().startsWith("Just Added") || rule.name().startsWith("Just Opened"))
+                            && "Any date".equals(rule.date()) && rule.modality().isBlank()) continue;
+                    Attributes keys = createSmartAlbumKeys(rule);
+                    try {
+                        for (Attributes result : DicomService.getInstance().find(source, keys)) {
+                            if ("Last hour".equals(rule.date()) && !isStudyWithinLastHour(result)) continue;
+                            String uid = result.getString(0x0020000D, "").trim();
+                            if (!uid.isEmpty()) {
+                                SmartAlbumResult previous = unique.get(uid);
+                                unique.put(uid, new SmartAlbumResult(result,
+                                        rule.autoRetrieve() || (previous != null && previous.autoRetrieve())));
+                            }
+                        }
+                    } catch (Exception ex) {
+                        failures.add(rule.name() + ": " + ex.getMessage());
+                    }
+                }
+                return new ArrayList<>(unique.values());
+            }
+
+            @Override protected void done() {
+                try {
+                    List<SmartAlbumResult> results = get();
+                    List<String> retrieveUIDs = new ArrayList<>();
+                    DicomDatabase local = DicomDatabase.activeLocalDatabase();
+                    if (local == null) local = DicomDatabase.defaultDatabase();
+                    for (SmartAlbumResult smartResult : results) {
+                        Attributes attr = smartResult.attributes();
+                        Vector<String> row = new Vector<>();
+                        row.add(attr.getString(0x00100010, ""));
+                        row.add(attr.getString(0x00100020, ""));
+                        row.add(attr.getString(0x00100030, ""));
+                        row.add(attr.getString(0x00081030, ""));
+                        row.add(attr.getString(0x00080061, ""));
+                        row.add(attr.getString(0x00201206, "0"));
+                        row.add(attr.getString(0x00080020, ""));
+                        row.add(attr.getString(0x00080030, ""));
+                        row.add(source.getAeTitle());
+                        row.add(attr.getString(0x00080050, ""));
+                        String uid = attr.getString(0x0020000D, "");
+                        row.add(uid);
+                        tableModel.addRow(row);
+
+                        if (smartResult.autoRetrieve() && local != null) {
+                            int remoteCount = attr.getInt(0x00201206, 0);
+                            DicomStudy localStudy = local.getStudyByUID(uid);
+                            int localCount = localStudy == null || localStudy.getNumberOfImages() == null
+                                    ? 0 : localStudy.getNumberOfImages();
+                            if (remoteCount > localCount && autoRetrieveInFlight.add(uid)) retrieveUIDs.add(uid);
+                        }
+                    }
+                    resultsTable.repaint();
+                    if (!retrieveUIDs.isEmpty()) retrieveSmartAlbumResults(source, retrieveUIDs);
+                } catch (Exception ex) {
+                    resultsTable.setToolTipText(ex.getMessage());
+                } finally {
+                    queryButton.setEnabled(true);
+                    if (!failures.isEmpty()) resultsTable.setToolTipText(String.join("\n", failures));
+                }
+            }
+        }.execute();
+    }
+
+    private Attributes createSmartAlbumKeys(SmartAlbumRule rule) {
+        Attributes keys = new Attributes();
+        keys.setString(0x00080052, org.dcm4che3.data.VR.CS, "STUDY");
+        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyyMMdd");
+        Calendar calendar = Calendar.getInstance();
+        switch (rule.date()) {
+            case "Today", "Last hour" -> keys.setString(0x00080020, org.dcm4che3.data.VR.DA, dateFormat.format(calendar.getTime()));
+            case "Yesterday" -> {
+                calendar.add(Calendar.DATE, -1);
+                keys.setString(0x00080020, org.dcm4che3.data.VR.DA, dateFormat.format(calendar.getTime()));
+            }
+            case "Last week" -> {
+                String end = dateFormat.format(calendar.getTime());
+                calendar.add(Calendar.DATE, -7);
+                keys.setString(0x00080020, org.dcm4che3.data.VR.DA, dateFormat.format(calendar.getTime()) + "-" + end);
+            }
+            default -> { }
+        }
+        if (!rule.modality().isBlank()) keys.setString(0x00080061, org.dcm4che3.data.VR.CS, rule.modality());
+        keys.setString(0x00100010, org.dcm4che3.data.VR.PN, "");
+        keys.setString(0x00100020, org.dcm4che3.data.VR.LO, "");
+        keys.setString(0x00100030, org.dcm4che3.data.VR.DA, "");
+        keys.setString(0x00081030, org.dcm4che3.data.VR.LO, "");
+        if (!keys.contains(0x00080061)) keys.setString(0x00080061, org.dcm4che3.data.VR.CS, "");
+        keys.setString(0x00201206, org.dcm4che3.data.VR.IS, "");
+        keys.setString(0x00080020, org.dcm4che3.data.VR.DA, keys.getString(0x00080020, ""));
+        keys.setString(0x00080030, org.dcm4che3.data.VR.TM, "");
+        keys.setString(0x00080050, org.dcm4che3.data.VR.SH, "");
+        keys.setString(0x0020000D, org.dcm4che3.data.VR.UI, "");
+        return keys;
+    }
+
+    private boolean isStudyWithinLastHour(Attributes result) {
+        String studyDate = result.getString(0x00080020, "");
+        String studyTime = result.getString(0x00080030, "");
+        if (studyDate.length() != 8 || studyTime.length() < 2) return false;
+        try {
+            java.time.LocalDate date = java.time.LocalDate.parse(studyDate, java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+            String timeDigits = studyTime.replaceAll("[^0-9].*$", "");
+            timeDigits = (timeDigits + "000000").substring(0, 6);
+            java.time.LocalTime time = java.time.LocalTime.of(Integer.parseInt(timeDigits.substring(0, 2)),
+                    Integer.parseInt(timeDigits.substring(2, 4)), Integer.parseInt(timeDigits.substring(4, 6)));
+            java.time.LocalDateTime studyDateTime = java.time.LocalDateTime.of(date, time);
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            return !studyDateTime.isAfter(now) && !studyDateTime.isBefore(now.minusHours(1));
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private void retrieveSmartAlbumResults(DicomNode node, List<String> uids) {
+        new SwingWorker<Void, Void>() {
+            private final List<String> failures = new ArrayList<>();
+
+            @Override protected Void doInBackground() {
+                for (String uid : uids) {
+                    try { DicomService.getInstance().move(node, uid); }
+                    catch (Exception ex) { failures.add(uid + ": " + ex.getMessage()); }
+                    finally { autoRetrieveInFlight.remove(uid); }
+                }
+                return null;
+            }
+            @Override protected void done() {
+                if (!failures.isEmpty()) resultsTable.setToolTipText(String.join("\n", failures));
+                resultsTable.repaint();
+            }
+        }.execute();
     }
 
     public void configureAutoQuery(Frame owner) {
@@ -432,6 +645,15 @@ public class QueryController extends JFrame {
                 case 6:
                     keys.setString(0x00080080, org.dcm4che3.data.VR.LO, "*" + searchText + "*"); // InstitutionName
                     break;
+                case 7:
+                    keys.setString(0x00080020, org.dcm4che3.data.VR.DA, searchText); // StudyDate
+                    break;
+                case 8:
+                    keys.setString(0x00080061, org.dcm4che3.data.VR.CS, searchText); // ModalitiesInStudy
+                    break;
+                case 9:
+                    keys.setString(0x00081030, org.dcm4che3.data.VR.LO, "*" + searchText + "*"); // StudyDescription
+                    break;
             }
         }
 
@@ -439,20 +661,20 @@ public class QueryController extends JFrame {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
         Calendar cal = Calendar.getInstance();
         if (todayBtn.isSelected()) {
-            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime())); // StudyDateAndTime
+            keys.setString(0x00080020, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime())); // StudyDate
         } else if (yesterdayBtn.isSelected()) {
             cal.add(Calendar.DATE, -1);
-            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime())); // StudyDateAndTime
+            keys.setString(0x00080020, org.dcm4che3.data.VR.DA, sdf.format(cal.getTime())); // StudyDate
         } else if (last7DaysBtn.isSelected()) {
             String end = sdf.format(cal.getTime());
             cal.add(Calendar.DATE, -7);
             String start = sdf.format(cal.getTime());
-            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, start + "-" + end); // StudyDateAndTime (last 7 days)
+            keys.setString(0x00080020, org.dcm4che3.data.VR.DA, start + "-" + end); // StudyDate (last 7 days)
         } else if (lastMonthBtn.isSelected()) {
             String end = sdf.format(cal.getTime());
             cal.add(Calendar.MONTH, -1);
             String start = sdf.format(cal.getTime());
-            keys.setString(0x00080021, org.dcm4che3.data.VR.DA, start + "-" + end); // StudyDateAndTime (last month)
+            keys.setString(0x00080020, org.dcm4che3.data.VR.DA, start + "-" + end); // StudyDate (last month)
         }
 
         // Modality Filter
@@ -465,19 +687,19 @@ public class QueryController extends JFrame {
             }
         }
         if (mods.length() > 0) {
-            keys.setString(0x0008103F, org.dcm4che3.data.VR.CS, mods.toString()); // ModalitiesInStudy
+            keys.setString(0x00080061, org.dcm4che3.data.VR.CS, mods.toString()); // ModalitiesInStudy
         }
 
         // Return keys
-        keys.setString(0x00100010, org.dcm4che3.data.VR.PN, ""); // PatientName
-        keys.setString(0x00100020, org.dcm4che3.data.VR.LO, ""); // PatientID
-        keys.setString(0x00100030, org.dcm4che3.data.VR.DA, ""); // PatientBirthDate
-        keys.setString(0x00080020, org.dcm4che3.data.VR.DA, ""); // StudyDate
-        keys.setString(0x00081030, org.dcm4che3.data.VR.LO, ""); // StudyDescription
-        keys.setString(0x0008103F, org.dcm4che3.data.VR.CS, ""); // ModalitiesInStudy
-        keys.setString(0x00080050, org.dcm4che3.data.VR.SH, ""); // AccessionNumber
-        keys.setString(0x00201206, org.dcm4che3.data.VR.IS, ""); // NumberOfStudyRelatedInstances
-        keys.setString(0x0020000D, org.dcm4che3.data.VR.UI, ""); // StudyInstanceUID
+        if (!keys.contains(0x00100010)) keys.setString(0x00100010, org.dcm4che3.data.VR.PN, ""); // PatientName
+        if (!keys.contains(0x00100020)) keys.setString(0x00100020, org.dcm4che3.data.VR.LO, ""); // PatientID
+        if (!keys.contains(0x00100030)) keys.setString(0x00100030, org.dcm4che3.data.VR.DA, ""); // PatientBirthDate
+        if (!keys.contains(0x00080020)) keys.setString(0x00080020, org.dcm4che3.data.VR.DA, ""); // StudyDate
+        if (!keys.contains(0x00081030)) keys.setString(0x00081030, org.dcm4che3.data.VR.LO, ""); // StudyDescription
+        if (!keys.contains(0x00080061)) keys.setString(0x00080061, org.dcm4che3.data.VR.CS, ""); // ModalitiesInStudy
+        if (!keys.contains(0x00080050)) keys.setString(0x00080050, org.dcm4che3.data.VR.SH, ""); // AccessionNumber
+        if (!keys.contains(0x00201206)) keys.setString(0x00201206, org.dcm4che3.data.VR.IS, ""); // NumberOfStudyRelatedInstances
+        if (!keys.contains(0x0020000D)) keys.setString(0x0020000D, org.dcm4che3.data.VR.UI, ""); // StudyInstanceUID
 
         queryButton.setEnabled(false);
         tableModel.setRowCount(0);
@@ -485,6 +707,7 @@ public class QueryController extends JFrame {
         SwingWorker<List<Attributes>, Void> worker = new SwingWorker<List<Attributes>, Void>() {
             @Override
             protected List<Attributes> doInBackground() throws Exception {
+                if (tabIndex == -1 && !searchText.isEmpty()) return findAcrossFields(node, keys, searchText);
                 return DicomService.getInstance().find(node, keys);
             }
 
@@ -498,7 +721,7 @@ public class QueryController extends JFrame {
                         row.add(attr.getString(0x00100020, "")); // PatientID
                         row.add(attr.getString(0x00100030, "")); // PatientBirthDate
                         row.add(attr.getString(0x00081030, "")); // StudyDescription
-                        row.add(attr.getString(0x0008103F, "")); // ModalitiesInStudy
+                        row.add(attr.getString(0x00080061, "")); // ModalitiesInStudy
                         row.add(attr.getString(0x00201206, "0")); // NumberOfStudyRelatedInstances
                         row.add(attr.getString(0x00080020, "")); // StudyDate
                         row.add(attr.getString(0x00080030, "")); // StudyTime
@@ -507,6 +730,7 @@ public class QueryController extends JFrame {
                         row.add(attr.getString(0x0020000D, "")); // StudyInstanceUID
                         tableModel.addRow(row);
                     }
+                    retrievePartiallyLocalOnDemandStudies(node, results);
                 } catch (Exception e) {
                     e.printStackTrace();
                     if (automaticQueryInProgress) {
@@ -519,6 +743,76 @@ public class QueryController extends JFrame {
                     queryButton.setEnabled(true);
                     automaticQueryInProgress = false;
                 }
+            }
+        };
+        worker.execute();
+    }
+
+    private List<Attributes> findAcrossFields(DicomNode node, Attributes baseKeys, String searchText) throws Exception {
+        int[] tags = {0x00100010, 0x00100020, 0x00080050, 0x00081030, 0x00080090, 0x00080080};
+        org.dcm4che3.data.VR[] vrs = {org.dcm4che3.data.VR.PN, org.dcm4che3.data.VR.LO,
+                org.dcm4che3.data.VR.SH, org.dcm4che3.data.VR.LO, org.dcm4che3.data.VR.PN, org.dcm4che3.data.VR.LO};
+        java.util.Map<String, Attributes> unique = new java.util.LinkedHashMap<>();
+        Exception lastFailure = null;
+        for (int i = 0; i < tags.length; i++) {
+            Attributes query = new Attributes(baseKeys);
+            query.setString(tags[i], vrs[i], "*" + searchText + "*");
+            try {
+                for (Attributes result : DicomService.getInstance().find(node, query)) {
+                    String uid = result.getString(0x0020000D, "").trim();
+                    if (!uid.isEmpty()) unique.putIfAbsent(uid, result);
+                }
+            } catch (Exception ex) {
+                lastFailure = ex;
+            }
+        }
+        if (unique.isEmpty() && lastFailure != null) throw lastFailure;
+        return new ArrayList<>(unique.values());
+    }
+
+    private void retrievePartiallyLocalOnDemandStudies(DicomNode source, List<Attributes> results) {
+        if (!com.oculus.jj.config.AppPreferences.getBool("ondemand.active", false)
+                || !com.oculus.jj.config.AppPreferences.getBool("ondemand.autoRetrievePartialLocal", true)
+                || source == null || results == null || results.isEmpty()) return;
+
+        DicomDatabase localDatabase = DicomDatabase.activeLocalDatabase();
+        if (localDatabase == null) localDatabase = DicomDatabase.defaultDatabase();
+        if (localDatabase == null) return;
+
+        List<String> studyUIDs = new ArrayList<>();
+        for (Attributes result : results) {
+            String uid = result.getString(0x0020000D, "").trim();
+            if (uid.isEmpty()) continue;
+            int remoteCount = result.getInt(0x00201206, 0);
+            DicomStudy local = localDatabase.getStudyByUID(uid);
+            if (local == null) continue;
+            int localCount = local.getNumberOfImages() == null ? 0 : local.getNumberOfImages();
+            if (remoteCount > localCount && localCount > 0 && autoRetrieveInFlight.add(uid)) studyUIDs.add(uid);
+        }
+        if (studyUIDs.isEmpty()) return;
+
+        SwingWorker<Integer, String> worker = new SwingWorker<>() {
+            private final List<String> failures = new ArrayList<>();
+
+            @Override protected Integer doInBackground() {
+                int retrieved = 0;
+                for (String uid : studyUIDs) {
+                    if (isCancelled()) break;
+                    try {
+                        DicomService.getInstance().move(source, uid);
+                        retrieved++;
+                    } catch (Exception ex) {
+                        failures.add(uid + ": " + ex.getMessage());
+                    } finally {
+                        autoRetrieveInFlight.remove(uid);
+                    }
+                }
+                return retrieved;
+            }
+
+            @Override protected void done() {
+                resultsTable.repaint();
+                if (!failures.isEmpty()) resultsTable.setToolTipText(String.join("\n", failures));
             }
         };
         worker.execute();

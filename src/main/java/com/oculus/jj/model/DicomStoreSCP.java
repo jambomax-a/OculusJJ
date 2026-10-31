@@ -13,6 +13,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 /**
  * DicomStoreSCP - DICOM C-STORE SCP (Listener)
@@ -65,8 +69,14 @@ public class DicomStoreSCP extends BasicCStoreSCP {
         // UIDベースの名前には拡張子がないため、.dcm を付与（DICOMファイル保存に必要）
         String safeFilename = ensureDcmExtension(rawFilename);
         File file = new File(storageDir, safeFilename);
+        if (file.exists() && !com.oculus.jj.config.AppPreferences.getBool("listener.replaceExisting", false)) {
+            data.copyTo(OutputStream.nullOutputStream());
+            rsp.setInt(0x00080160, VR.US, Status.Success);
+            return;
+        }
+        File temporary = new File(storageDir, safeFilename + ".part-" + UUID.randomUUID());
         try {
-            try (DicomOutputStream out = new DicomOutputStream(file)) {
+            try (DicomOutputStream out = new DicomOutputStream(temporary)) {
                 Attributes fmi = as.createFileMetaInformation(iuid, cuid, tsuid);
                 if (fmi != null) {
                     out.writeFileMetaInformation(fmi);
@@ -76,6 +86,11 @@ public class DicomStoreSCP extends BasicCStoreSCP {
                     data.copyTo(out);
                 }
             }
+            try {
+                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
             javax.swing.SwingUtilities.invokeLater(() -> {
                 DicomDatabase db = DicomDatabase.activeLocalDatabase();
                 if (db != null) {
@@ -84,6 +99,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
             });
             rsp.setInt(0x00080160, VR.US, Status.Success); // Status
         } catch (Exception e) {
+            try { Files.deleteIfExists(temporary.toPath()); } catch (Exception ignored) { }
             rsp.setInt(0x00080160, VR.US, Status.ProcessingFailure); // Status
         }
     }

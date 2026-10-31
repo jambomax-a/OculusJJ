@@ -28,6 +28,9 @@ public class DicomMetadataDialog extends JFrame {
     private JLabel infoLabel;
     private final String dicomFilePath;
     private final List<DicomTagEntry> allEntries = new ArrayList<>();
+    private final List<DicomTagEntry> visibleEntries = new ArrayList<>();
+    private Attributes dataset;
+    private Attributes fileMetaInformation;
 
     public static class DicomTagEntry {
         public final int level;
@@ -35,7 +38,11 @@ public class DicomMetadataDialog extends JFrame {
         public final String name;
         public final String vr;
         public final String length;
-        public final String value;
+        public String value;
+        private Attributes owner;
+        private int tag;
+        private VR vrType;
+        private boolean editableValue;
 
         public DicomTagEntry(int level, String tagStr, String name, String vr, String length, String value) {
             this.level = level;
@@ -113,7 +120,15 @@ public class DicomMetadataDialog extends JFrame {
 
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // 読み取り専用
+                return column == 4 && row >= 0 && row < visibleEntries.size()
+                        && com.oculus.jj.config.AppPreferences.getBool("general.allowDicomEditing", false)
+                        && visibleEntries.get(row).editableValue;
+            }
+
+            @Override
+            public void setValueAt(Object value, int row, int column) {
+                if (column != 4 || row < 0 || row >= visibleEntries.size()) return;
+                if (saveEditedValue(visibleEntries.get(row), String.valueOf(value))) loadMetadata();
             }
         };
 
@@ -162,6 +177,8 @@ public class DicomMetadataDialog extends JFrame {
                 // FMIがない場合はスキップしてそのままデータセットを試行
             }
             Attributes attrs = dis.readDataset();
+            dataset = attrs;
+            fileMetaInformation = dis.getFileMetaInformation();
             allEntries.clear();
 
             // ファイルメタ情報(FMI)のパース（もしあれば最初に追加）
@@ -229,14 +246,21 @@ public class DicomMetadataDialog extends JFrame {
                         }
                     }
 
+                    boolean truncated = valueStr != null && valueStr.length() > 250;
                     if (vr == VR.OB || vr == VR.OW || vr == VR.OF || vr == VR.OD) {
                         valueStr = "[Binary Pixel/Overlay/etc Data]";
-                    } else if (valueStr != null && valueStr.length() > 250) {
+                    } else if (truncated) {
                         valueStr = valueStr.substring(0, 250) + "... (truncated)";
                     }
 
-                    allEntries.add(
-                            new DicomTagEntry(level, tagStr, name, vrStr, lenStr, valueStr != null ? valueStr : ""));
+                    DicomTagEntry entry = new DicomTagEntry(level, tagStr, name, vrStr, lenStr, valueStr != null ? valueStr : "");
+                    entry.owner = attrs;
+                    entry.tag = tag;
+                    entry.vrType = vr;
+                        boolean identityTag = tag == 0x00080016 || tag == 0x00080018
+                            || tag == 0x0020000D || tag == 0x0020000E;
+                        entry.editableValue = (tag >>> 16) != 0x0002 && !identityTag && !truncated && isEditableVR(vr);
+                    allEntries.add(entry);
                 }
             } catch (Exception e) {
                 valueStr = "[Error: " + e.getMessage() + "]";
@@ -247,6 +271,7 @@ public class DicomMetadataDialog extends JFrame {
 
     private void updateTableData() {
         tableModel.setRowCount(0);
+        visibleEntries.clear();
         for (DicomTagEntry entry : allEntries) {
             String indent = "";
             if (entry.level > 0) {
@@ -259,6 +284,7 @@ public class DicomMetadataDialog extends JFrame {
                     entry.length,
                     entry.value
             });
+                    visibleEntries.add(entry);
         }
     }
 
@@ -270,6 +296,7 @@ public class DicomMetadataDialog extends JFrame {
         }
 
         tableModel.setRowCount(0);
+    visibleEntries.clear();
         for (DicomTagEntry entry : allEntries) {
             boolean matches = entry.tagStr.toLowerCase().contains(filterText)
                     || entry.name.toLowerCase().contains(filterText)
@@ -288,7 +315,42 @@ public class DicomMetadataDialog extends JFrame {
                         entry.length,
                         entry.value
                 });
+                visibleEntries.add(entry);
             }
+        }
+    }
+
+    private boolean isEditableVR(VR vr) {
+        return vr == VR.AE || vr == VR.AS || vr == VR.CS || vr == VR.DA || vr == VR.DS
+                || vr == VR.DT || vr == VR.IS || vr == VR.LO || vr == VR.LT || vr == VR.PN
+                || vr == VR.SH || vr == VR.ST || vr == VR.TM || vr == VR.UC || vr == VR.UI
+                || vr == VR.UR || vr == VR.UT || vr == VR.SS || vr == VR.US || vr == VR.SL
+                || vr == VR.UL || vr == VR.FL || vr == VR.FD;
+    }
+
+    private boolean saveEditedValue(DicomTagEntry entry, String newValue) {
+        String oldValue = entry.owner.getString(entry.tag, "");
+        File source = new File(dicomFilePath);
+        File temporary = new File(source.getParentFile(), source.getName() + ".metadata.tmp");
+        try {
+            if (fileMetaInformation == null) throw new java.io.IOException("Cannot safely edit a DICOM file without File Meta Information.");
+            entry.owner.setString(entry.tag, entry.vrType, newValue);
+            try (org.dcm4che3.io.DicomOutputStream out = new org.dcm4che3.io.DicomOutputStream(temporary)) {
+                out.writeDataset(fileMetaInformation, dataset);
+                out.finish();
+            }
+            try {
+                java.nio.file.Files.move(temporary.toPath(), source.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ex) {
+                java.nio.file.Files.move(temporary.toPath(), source.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            return true;
+        } catch (Exception ex) {
+            entry.owner.setString(entry.tag, entry.vrType, oldValue);
+            try { java.nio.file.Files.deleteIfExists(temporary.toPath()); } catch (Exception ignored) { }
+            JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("meta.error", "Error"), JOptionPane.ERROR_MESSAGE);
+            return false;
         }
     }
 

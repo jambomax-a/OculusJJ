@@ -86,6 +86,8 @@ public class Viewer3DController extends JFrame {
     private int gpuActivationToken = 0;
     private Point lastMousePos;
     private KeyEventDispatcher keyboardShortcutDispatcher;
+    private long lastUserInteractionMillis = System.currentTimeMillis();
+    private Timer autoRotateTimer;
 
     private void selectTool(Tool3D tool) {
         this.currentTool = tool;
@@ -104,6 +106,7 @@ public class Viewer3DController extends JFrame {
     private final MouseAdapter glMouseHandler = new MouseAdapter() {
         @Override
         public void mousePressed(MouseEvent e) {
+            noteUserInteraction();
             lastMousePos = e.getPoint();
             requestFocusInWindow();
 
@@ -274,6 +277,7 @@ public class Viewer3DController extends JFrame {
 
         @Override
         public void mouseDragged(MouseEvent e) {
+            noteUserInteraction();
             if (lastMousePos == null) {
                 return;
             }
@@ -349,11 +353,13 @@ public class Viewer3DController extends JFrame {
 
         @Override
         public void mouseMoved(MouseEvent e) {
+            noteUserInteraction();
             updateInfoLabel(e.getX(), e.getY());
         }
     };
 
     private final MouseWheelListener glMouseWheelHandler = e -> {
+        noteUserInteraction();
         zoom *= (1.0 - e.getWheelRotation() * 0.1);
         if (zoom < 0.1)
             zoom = 0.1;
@@ -384,6 +390,7 @@ public class Viewer3DController extends JFrame {
 
         // initializeData(); // Don't call here, we will do it asynchronously
         initializeUI();
+        applyDefaultViewSize();
 
         // ウィンドウクローズ時にメモリを解放 (HOROS-20240407準拠: リソース管理を徹底)
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -402,11 +409,46 @@ public class Viewer3DController extends JFrame {
 
         // Asynchronously prepare data and launch GPU renderer
         startAsyncGPUInitialization();
+        startAutoRotateTimer();
+    }
+
+    private void applyDefaultViewSize() {
+        java.awt.Rectangle bounds = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getMaximumWindowBounds();
+        switch (com.oculus.jj.config.AppPreferences.getInt("3d.viewSize", 0)) {
+            case 1 -> { setSize(512, 512); setLocationRelativeTo(null); }
+            case 2 -> setBounds(bounds);
+            case 3 -> { setSize(768, 768); setLocationRelativeTo(null); }
+            default -> {
+                int side = Math.min(bounds.width, bounds.height);
+                setBounds(bounds.x + (bounds.width - side) / 2, bounds.y + (bounds.height - side) / 2, side, side);
+            }
+        }
+    }
+
+    private void startAutoRotateTimer() {
+        if (!com.oculus.jj.config.AppPreferences.getBool("3d.autoRotate", true)
+                || !("MIP".equalsIgnoreCase(mode) || "VR".equalsIgnoreCase(mode))) return;
+        autoRotateTimer = new Timer(40, e -> {
+            if (!isVisible() || System.currentTimeMillis() - lastUserInteractionMillis < 180_000L) return;
+            rotateY += 0.01;
+            if (glViewer != null) glViewer.setRotation((float) rotateX, (float) rotateY);
+            repaint();
+        });
+        autoRotateTimer.start();
+    }
+
+    private void noteUserInteraction() {
+        lastUserInteractionMillis = System.currentTimeMillis();
     }
 
     private void cleanup() {
         // System.out.println("Cleaning up 3D Viewer resources...");
         stopRenderLoop();
+        if (autoRotateTimer != null) {
+            autoRotateTimer.stop();
+            autoRotateTimer = null;
+        }
         if (keyboardShortcutDispatcher != null) {
             KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(keyboardShortcutDispatcher);
             keyboardShortcutDispatcher = null;
@@ -1343,7 +1385,8 @@ public class Viewer3DController extends JFrame {
         JPanel groupShading = createToolbarGroup(com.oculus.jj.utils.LanguageManager.get("vr.group.shading"),
                 contentShading);
 
-        JCheckBox chkShading = new JCheckBox(com.oculus.jj.utils.LanguageManager.get("vr.shading"), true);
+        JCheckBox chkShading = new JCheckBox(com.oculus.jj.utils.LanguageManager.get("vr.shading"),
+            com.oculus.jj.config.AppPreferences.is3DShadingEnabled());
         chkShading.setFont(new Font("SansSerif", Font.PLAIN, 10));
         chkShading.setOpaque(false);
         chkShading.setFocusable(false);
@@ -1354,6 +1397,7 @@ public class Viewer3DController extends JFrame {
 
         chkShading.addActionListener(e -> {
             boolean isShaded = chkShading.isSelected();
+            com.oculus.jj.config.AppPreferences.set3DShadingEnabled(isShaded);
             if (glViewer != null) {
                 glViewer.setUseShading(isShaded);
             }
@@ -1629,6 +1673,7 @@ public class Viewer3DController extends JFrame {
             if (activeWindow != this && (activeWindow == null || activeWindow.getOwner() != this))
                 return false;
 
+            noteUserInteraction();
             int keyCode = e.getKeyCode();
             switch (keyCode) {
                 case KeyEvent.VK_W:
@@ -1936,6 +1981,12 @@ public class Viewer3DController extends JFrame {
 
     private GLViewer3D createGLViewer(GLData glData) {
         GLViewer3D viewer = new GLViewer3D(glData, volume, dimX, dimY, dimZ);
+        viewer.setUseShading(com.oculus.jj.config.AppPreferences.is3DShadingEnabled());
+        double superSampling = com.oculus.jj.config.AppPreferences.getDouble("3d.supersampling", 3.50);
+        double quality = Math.max(0.0, Math.min(1.0, (superSampling - 0.5) / 4.5));
+        viewer.setLodFactor((float) (1.0 - quality));
+        viewer.setEngine(com.oculus.jj.config.AppPreferences.getBool("3d.engineCpu", true)
+            ? GLViewer3D.ENGINE_CPU : GLViewer3D.ENGINE_GPU);
         viewer.setBackground(Color.BLACK); // AWTの灰色消去バグを黒色で無効化
         viewer.addMouseListener(glMouseHandler);
         viewer.addMouseMotionListener(glMouseHandler);

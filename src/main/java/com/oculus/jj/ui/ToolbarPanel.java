@@ -200,8 +200,6 @@ public class ToolbarPanel extends JFrame {
         } else { setVisible(false); }
     }
 
-    public ViewerController getViewer() { return viewer; }
-
     // --- Action handlers (existing logic) ---
 
     private void toggleAnnotationsPanel() {

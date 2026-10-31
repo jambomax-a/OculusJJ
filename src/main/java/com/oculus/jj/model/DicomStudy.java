@@ -444,30 +444,35 @@ public class DicomStudy {
      * + (NSArray*) seriesSortDescriptors
      */
     public static java.util.Comparator<DicomSeries> getSeriesSortComparator() {
-        // HOROS-20240407準拠: SERIESORDER設定に基づいてソート順序を決定
-        // デフォルトはseriesInstanceUID (numericCompare) -> date (ascending)
-        int seriesOrder = 0; // TODO: NSUserDefaultsから取得 (SERIESORDER)
+        int seriesOrder = com.oculus.jj.config.AppPreferences.getInt("database.sortSeries", 0);
 
         return (s1, s2) -> {
-            int result = 0;
-            if (seriesOrder == 0) { // sortid, sortdate
-                result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
-                if (result == 0) {
-                    result = compareDates(s1.getDate(), s2.getDate(), true);
-                }
-            } else if (seriesOrder == 1) { // sortdate, sortid
-                result = compareDates(s1.getDate(), s2.getDate(), true);
-                if (result == 0) {
-                    result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
-                }
-            } else { // デフォルトはsortid, sortdate
-                result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
-                if (result == 0) {
-                    result = compareDates(s1.getDate(), s2.getDate(), true);
-                }
+            int result;
+            if (seriesOrder == 1) {
+                java.time.LocalDateTime t1 = s1.getDicomTime() != null ? s1.getDicomTime() : s1.getDate();
+                java.time.LocalDateTime t2 = s2.getDicomTime() != null ? s2.getDicomTime() : s2.getDate();
+                result = compareDates(t1, t2, true);
+            } else if (seriesOrder == 2) {
+                result = compareNullableInteger(firstInstanceNumber(s1), firstInstanceNumber(s2), true);
+            } else {
+                result = compareNullableInteger(s1.getSeriesNumber(), s2.getSeriesNumber(), true);
             }
+            if (result == 0) result = compareSeriesInstanceUID(s1.getSeriesInstanceUID(), s2.getSeriesInstanceUID());
             return result;
         };
+    }
+
+    private static Integer firstInstanceNumber(DicomSeries series) {
+        List<DicomImage> images = series.sortedImages();
+        return images.isEmpty() ? null : images.get(0).getInstanceNumber();
+    }
+
+    private static int compareNullableInteger(Integer a, Integer b, boolean ascending) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        int result = Integer.compare(a, b);
+        return ascending ? result : -result;
     }
 
     /**

@@ -87,22 +87,42 @@ public class DicomSeries {
         }
 
         List<DicomImage> result = new java.util.ArrayList<>(images);
-
-        // HOROS-20240407準拠: sortDescriptorsForImagesでソート
-        // 簡易実装として、instanceNumberでソート
+        int sortMode = com.oculus.jj.config.AppPreferences.getInt("database.sortImages", 0);
         result.sort((a, b) -> {
-            Integer aInst = a.getInstanceNumber();
-            Integer bInst = b.getInstanceNumber();
-            if (aInst == null && bInst == null)
-                return 0;
-            if (aInst == null)
-                return -1;
-            if (bInst == null)
-                return 1;
-            return aInst.compareTo(bInst);
+            int comparison;
+            if (sortMode == 0 || sortMode == 1) {
+                comparison = compareNullableDouble(a.getSliceLocation(), b.getSliceLocation(), sortMode == 0);
+            } else {
+                comparison = compareNullableDate(a.getAcquisitionDate(), b.getAcquisitionDate(), sortMode == 2);
+            }
+            if (comparison != 0) return comparison;
+            return compareNullableInteger(a.getInstanceNumber(), b.getInstanceNumber());
         });
 
         return result;
+    }
+
+    private static int compareNullableDouble(Double a, Double b, boolean ascending) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        int comparison = Double.compare(a, b);
+        return ascending ? comparison : -comparison;
+    }
+
+    private static int compareNullableDate(LocalDateTime a, LocalDateTime b, boolean ascending) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        int comparison = a.compareTo(b);
+        return ascending ? comparison : -comparison;
+    }
+
+    private static int compareNullableInteger(Integer a, Integer b) {
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        return Integer.compare(a, b);
     }
 
     /**

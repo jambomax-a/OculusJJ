@@ -2,6 +2,9 @@ package com.oculus.jj.config;
 
 import java.util.prefs.Preferences;
 import java.awt.Color;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 
 /**
  * AppPreferences - アプリケーションの設定管理クラス。
@@ -106,17 +109,17 @@ public class AppPreferences {
 
     // === Default values ===
     private static final double DEFAULT_3D_RESOLUTION = 0.5;
-    private static final boolean DEFAULT_3D_SHADING = true;
+    private static final boolean DEFAULT_3D_SHADING = false;
     private static final int DEFAULT_ROI_COLOR = Color.YELLOW.getRGB();
 
     /** デフォルトのDICOMフォルダパス */
     // --- Fusion preferences ---
     public static com.oculus.jj.model.FusionImageProcessor.FusionMode getFusionMode() {
-        String modeStr = prefs.get(KEY_FUSION_MODE, "COLOR");
+        String modeStr = prefs.get(KEY_FUSION_MODE, "ALPHA");
         try {
             return com.oculus.jj.model.FusionImageProcessor.FusionMode.valueOf(modeStr);
         } catch (IllegalArgumentException e) {
-            return com.oculus.jj.model.FusionImageProcessor.FusionMode.COLOR;
+            return com.oculus.jj.model.FusionImageProcessor.FusionMode.ALPHA;
         }
     }
 
@@ -552,7 +555,7 @@ public class AppPreferences {
     }
 
     public static boolean isListenerAutoStart() {
-        return prefs.getBoolean(KEY_LISTENER_AUTO_START, false);
+        return prefs.getBoolean(KEY_LISTENER_AUTO_START, true);
     }
 
     public static void setListenerAutoStart(boolean auto) {
@@ -561,7 +564,7 @@ public class AppPreferences {
 
     // --- Web Server ---
     public static int getWebServerPort() {
-        return prefs.getInt(KEY_WEB_SERVER_PORT, 8080);
+        return prefs.getInt(KEY_WEB_SERVER_PORT, 3333);
     }
 
     public static void setWebServerPort(int port) {
@@ -660,5 +663,61 @@ public class AppPreferences {
         } catch (Exception e) {
             // エラーは無視するか、適切にログ出力を行う（コンソールへの直接出力は避ける）
         }
+    }
+
+    public static void resetAll() throws java.util.prefs.BackingStoreException {
+        prefs.clear();
+        prefs.flush();
+    }
+
+    public static void exportAll(File file) throws java.io.IOException, java.util.prefs.BackingStoreException {
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            prefs.exportSubtree(out);
+        }
+    }
+
+    public static void importAll(File file) throws java.io.IOException, java.util.prefs.InvalidPreferencesFormatException {
+        try (FileInputStream in = new FileInputStream(file)) {
+            Preferences.importPreferences(in);
+        }
+    }
+
+    // ============================================================
+    // Generic flat-key helpers (HOROS NSUserDefaults 相当).
+    // 大量の Preference ペイン項目を個別に定数/getter/setter として
+    // 定義する代わりに、キー文字列を直接渡す薄いラッパー。
+    // ============================================================
+    public static boolean getBool(String key, boolean def) {
+        return prefs.getBoolean(key, def);
+    }
+
+    public static void setBool(String key, boolean v) {
+        prefs.putBoolean(key, v);
+    }
+
+    public static int getInt(String key, int def) {
+        return prefs.getInt(key, def);
+    }
+
+    public static void setInt(String key, int v) {
+        prefs.putInt(key, v);
+    }
+
+    public static double getDouble(String key, double def) {
+        String s = prefs.get(key, null);
+        if (s == null) return def;
+        try { return Double.parseDouble(s); } catch (NumberFormatException e) { return def; }
+    }
+
+    public static void setDouble(String key, double v) {
+        prefs.put(key, String.valueOf(v));
+    }
+
+    public static String getStr(String key, String def) {
+        return prefs.get(key, def == null ? "" : def);
+    }
+
+    public static void setStr(String key, String v) {
+        prefs.put(key, v == null ? "" : v);
     }
 }

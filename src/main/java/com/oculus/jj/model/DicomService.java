@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * DicomService - DICOMネットワーク通信（C-FIND, C-MOVE等）を担当するクラス
@@ -36,6 +38,8 @@ public class DicomService {
     private final Connection conn = new Connection();
     private final ApplicationEntity ae = new ApplicationEntity();
     private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private ScheduledExecutorService incomingImportScheduler;
+    private boolean listenerStarted;
 
     private DicomService() {
         device.addConnection(conn);
@@ -60,17 +64,38 @@ public class DicomService {
         device.setDimseRQHandler(new DicomStoreSCP("*"));
     }
 
-    public void startListener(int port) throws IOException, GeneralSecurityException {
+    public synchronized void startListener(int port) throws IOException, GeneralSecurityException {
+        if (listenerStarted) return;
         ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
         conn.setPort(port);
         device.bindConnections();
+        listenerStarted = true;
+        int intervalSeconds = Math.max(1, Math.min(3600,
+                com.oculus.jj.config.AppPreferences.getInt("listener.checkInterval", 3)));
+        incomingImportScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "DICOM-Incoming-Poller");
+            thread.setDaemon(true);
+            return thread;
+        });
+        incomingImportScheduler.scheduleWithFixedDelay(() -> {
+            DicomDatabase database = DicomDatabase.activeLocalDatabase();
+            if (database == null) database = DicomDatabase.defaultDatabase();
+            if (database != null) database.initiateImportFilesFromIncomingDirUnlessAlreadyImporting();
+        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
         // // logger.info(
 // //                 "DICOM Listener started on port {} (AET: {}). Ensure your PACS is configured to send to this AET, IP and Port.",
 // //                 port, ae.getAETitle());
     }
 
-    public void stopListener() {
-        device.unbindConnections();
+    public synchronized void stopListener() {
+        if (incomingImportScheduler != null) {
+            incomingImportScheduler.shutdownNow();
+            incomingImportScheduler = null;
+        }
+        if (listenerStarted) {
+            device.unbindConnections();
+            listenerStarted = false;
+        }
         // // logger.info("DICOM Listener stopped");
     }
 

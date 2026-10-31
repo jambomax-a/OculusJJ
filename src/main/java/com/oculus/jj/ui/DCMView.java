@@ -394,11 +394,12 @@ public class DCMView extends JPanel {
         // // System.out.println("[DEBUG] DCMView() - annotationType loaded from
         // Preferences: " + annotationType);
 
-        // HOROS-20240407準拠: コンポーネントサイズ変更時にscaleToFitを呼び出す
+        // HOROS-20240407準拠: Preferenceで有効な場合のみサイズ変更時にscaleToFitを呼び出す
         addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                if (curDCM != null && !scaleToFitNoReentry) {
+                if (curDCM != null && !scaleToFitNoReentry
+                        && com.oculus.jj.config.AppPreferences.getBool("viewers.scaleFit", true)) {
                     scaleToFit();
                 }
             }
@@ -751,6 +752,26 @@ public class DCMView extends JPanel {
                     float newWW = startWW + dragDx * sensitivity;
                     float newWL = startWL + dragDy * sensitivity;
 
+                    boolean petModality = curDCM != null && ("PT".equalsIgnoreCase(curDCM.getModality())
+                            || "PET".equalsIgnoreCase(curDCM.getModality()));
+                    boolean nmModality = curDCM != null && "NM".equalsIgnoreCase(curDCM.getModality())
+                            && com.oculus.jj.config.AppPreferences.getBool("pet.wmApplyNM", false);
+                    if (petModality || nmModality) {
+                        int windowingMode = com.oculus.jj.config.AppPreferences.getInt("pet.mouseWindowing", 1);
+                        if (windowingMode == 1) {
+                            float minimum = com.oculus.jj.config.AppPreferences.getInt("pet.wmFixedMin", 0);
+                            float maximum = startWL + startWW / 2.0f + dragDy * sensitivity;
+                            newWW = Math.max(1.0f, maximum - minimum);
+                            newWL = minimum + newWW / 2.0f;
+                        } else if (windowingMode == 2) {
+                            float minimum = startWL - startWW / 2.0f + dragDx * sensitivity;
+                            float maximum = startWL + startWW / 2.0f + dragDy * sensitivity;
+                            if (maximum < minimum + 1.0f) maximum = minimum + 1.0f;
+                            newWW = maximum - minimum;
+                            newWL = minimum + newWW / 2.0f;
+                        }
+                    }
+
                     if (newWW < 1)
                         newWW = 1;
 
@@ -1020,8 +1041,9 @@ public class DCMView extends JPanel {
                                     (float) curDCM.getPixelSpacingY(), imgPt);
                             newRoi.setSourcePix(curDCM);
                             newRoi.setParentView(DCMView.this);
-                            // HOROS-20240407: Set Default ROI Name - 新規ROIに既定名を適用
-                            if (newRoi.getName() == null || newRoi.getName().isEmpty()) {
+                            if (com.oculus.jj.config.AppPreferences.getBool("viewers.roiUnnamed", true)) {
+                                newRoi.setName("");
+                            } else {
                                 newRoi.setName(com.oculus.jj.config.AppPreferences.getRoiDefaultName());
                             }
 
@@ -1601,6 +1623,8 @@ public class DCMView extends JPanel {
 
                                     pixToLoad.loadImage();
 
+                                    applyAutomaticSUVConversion(pixToLoad);
+
                                     if (Thread.currentThread().isInterrupted())
                                         return;
 
@@ -1622,6 +1646,7 @@ public class DCMView extends JPanel {
                             backgroundLoadThread.setPriority(Thread.NORM_PRIORITY);
                             backgroundLoadThread.start();
                         } else if (this.curDCM != null) {
+                            applyAutomaticSUVConversion(this.curDCM);
                             // // System.out.println(
                             // // "[DEBUG] DCMView.setIndex() - image already loaded or null
                             // (pixToLoad.getBufferedImageNoLoad()="
@@ -1697,6 +1722,12 @@ public class DCMView extends JPanel {
                 e.printStackTrace();
             }
         }
+    }
+
+    private void applyAutomaticSUVConversion(DicomPix pix) {
+        if (pix == null || !com.oculus.jj.config.AppPreferences.getBool("pet.suvAuto", false)
+                || !pix.hasSUV() || pix.isSUVConverted()) return;
+        pix.setSUVConverted(true);
     }
 
     /**
@@ -1980,13 +2011,20 @@ public class DCMView extends JPanel {
 
         // HOROS-20240407準拠: マウスホイールの回転量を取得
         int rotation = e.getWheelRotation();
+        if (com.oculus.jj.config.AppPreferences.getBool("viewers.reverseScroll", true)) {
+            rotation = -rotation;
+        }
 
         // HOROS-20240407準拠: DCMView.m scrollWheel: 修飾キーによる挙動の分岐
         if (e.isAltDown()) {
             // ALTキー (macOSではOptionキー相当): ズーム処理
-            // Horosではマウス位置へのズームを試みるが、ここではシンプルにスケール値を変更
             float incValue = -rotation * (scaleValue * 0.1f); // 現在のスケールに対して10%ずつ増減
-            setScaleValue(scaleValue + incValue);
+            float newScale = scaleValue + incValue;
+            if (com.oculus.jj.config.AppPreferences.getBool("viewers.zoomAroundMouse", true)) {
+                setScaleValueAtPoint(newScale, e.getPoint());
+            } else {
+                setScaleValue(newScale);
+            }
             sendSyncMessageZoom(scaleValue);
             repaint();
             return;
@@ -2021,9 +2059,7 @@ public class DCMView extends JPanel {
         }
 
         // HOROS-20240407準拠: DCMView.m scrollWheel: 5019-5023行目の画像インデックス範囲チェック
-        // loopScrollWheel設定でループするかクランプするかを制御
-        // デフォルトはtrue（ループする）
-        boolean loopScrollWheel = true; // TODO: ユーザー設定から取得
+        boolean loopScrollWheel = com.oculus.jj.config.AppPreferences.getBool("viewers.loopSeries", false);
 
         if (dcmPixList.size() > 3 && loopScrollWheel) {
             // HOROS-20240407準拠: 画像数が3より多く、loopScrollWheelが有効な場合はループ
@@ -2045,6 +2081,20 @@ public class DCMView extends JPanel {
         // HOROS-20240407準拠: DCMView.m scrollWheel: 5122行目
         // inc（移動量）を渡すことで、相対同期（REL）などが正しく動作するようにする
         sendSyncMessage(inc);
+    }
+
+    private void setScaleValueAtPoint(float requestedScale, java.awt.Point point) {
+        if (curDCM == null) {
+            setScaleValue(requestedScale);
+            return;
+        }
+        float nextScale = Math.max(0.01f, Math.min(100.0f, requestedScale));
+        float pixelRatio = (float) curDCM.getPixelRatio();
+        float imageOffsetX = (point.x - getWidth() / 2.0f - origin.x) / scaleValue;
+        float imageOffsetY = (point.y - getHeight() / 2.0f - origin.y) / (scaleValue * pixelRatio);
+        origin.x = Math.round(point.x - getWidth() / 2.0f - imageOffsetX * nextScale);
+        origin.y = Math.round(point.y - getHeight() / 2.0f - imageOffsetY * nextScale * pixelRatio);
+        setScaleValue(nextScale);
     }
 
     /**
@@ -2239,8 +2289,13 @@ public class DCMView extends JPanel {
                 // // // + ", frontMost: " + frontMost);
             }
 
-            // アンチエイリアスと高品質スケーリングを有効化 (HOROS-20240407準拠の美しさ)
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                boolean highQualityZoom = com.oculus.jj.config.AppPreferences.getBool("viewers.hqZoom", true);
+                boolean noInterpolation = com.oculus.jj.config.AppPreferences.getBool("viewers.noInterpZoom", true);
+                Object interpolation = highQualityZoom
+                    ? RenderingHints.VALUE_INTERPOLATION_BICUBIC
+                    : noInterpolation ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR
+                    : RenderingHints.VALUE_INTERPOLATION_BILINEAR;
+                g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, interpolation);
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
@@ -2690,8 +2745,7 @@ public class DCMView extends JPanel {
                         int yPos = (int) mouseYPos;
                         if (xPos >= 0 && xPos < curDCM.getPwidth() && yPos >= 0 && yPos < curDCM.getPheight()) {
                             pixelValue = curDCM.getPixelValueX(xPos, yPos);
-                            // HOROS-20240407準拠: DCMView.m 8338-8339行目 - SUVConvertedの場合は"SUV"を表示
-                            // TODO: SUVConvertedの判定を実装
+                            if (curDCM.isSUVConverted()) pixelUnit = "SUV"; // Display "SUV" if converted
                         }
                     } catch (Exception e) {
                         pixelValue = 0.0f;

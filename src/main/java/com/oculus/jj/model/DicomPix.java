@@ -73,6 +73,9 @@ public class DicomPix {
     private float windowWidth = 0.0f;
     private float defaultWL = 0.0f;
     private float defaultWW = 0.0f;
+    private int[] voiLUTData;
+    private int voiLUTFirstMappedValue;
+    private int voiLUTBits = 8;
 
     // Rescale Slope/Intercept (HU等への変換用)
     private float rescaleSlope = 1.0f;
@@ -87,6 +90,11 @@ public class DicomPix {
     private float radionuclideTotalDose = 0.0f;       // RadionuclideTotalDose (0008,2114)
     private float halflife = 0.0f;                    // RadionuclideHalfLife (0008,2116)
     private boolean hasSUV = false;                   // checkSUV 相当の判定結果
+    private long acquisitionTimeMillis = Long.MIN_VALUE;
+    private long injectionTimeMillis = Long.MIN_VALUE;
+    private boolean suvConverted;
+    private double suvScaleFactor;
+    private float[] suvParameterOverride;
 
     // 画像サイズ
     private int width;
@@ -321,30 +329,49 @@ public class DicomPix {
             // VOI LUT
             org.dcm4che3.data.Sequence voiLutSeq = attrs.getSequence(0x00283010); // VOILUTSequence
             if (voiLutSeq != null && !voiLutSeq.isEmpty()) {
-                // // System.out.println("[DEBUG] DicomPix.readHeader() - Found VOI LUT
-                // sequence. High priority.");
-                // VOI LUTがある場合は、後で適用することを検討するか、BestFitを促す
+                org.dcm4che3.data.Attributes voiLut = voiLutSeq.get(0);
+                if (voiLut != null) {
+                    int[] descriptor = voiLut.getInts(0x00283002); // LUTDescriptor
+                    int[] data = voiLut.getInts(0x00283006); // LUTData
+                    if (descriptor != null && descriptor.length >= 3 && data != null) {
+                        int entries = descriptor[0] & 0xFFFF;
+                        if (entries == 0) entries = 65536;
+                        if (entries > 0 && data.length >= entries) {
+                            this.voiLUTFirstMappedValue = isSigned ? (short) descriptor[1] : descriptor[1] & 0xFFFF;
+                            this.voiLUTBits = Math.max(1, Math.min(16, descriptor[2] & 0xFFFF));
+                            this.voiLUTData = java.util.Arrays.copyOf(data, entries);
+                        }
+                    }
+                }
             }
 
             // HOROS-20240407準拠: DCMPix.m 6327-6464行目 - SUV 属性の読み込み
             // PatientsWeight (0010,1030)
             this.patientsWeight = attrs.getFloat(0x00101030, 0.0f);
-            // Units (0008,103E)
-            this.units = attrs.getString(0x0008103E, null);
-            // DecayCorrection (0008,2112)
-            this.decayCorrection = attrs.getString(0x00082112, null);
-            // RadiopharmaceuticalInformationSequence (0008,2110)
-            org.dcm4che3.data.Sequence radSeq = attrs.getSequence(0x00082110);
+            // Units (0054,1001)
+            this.units = attrs.getString(0x00541001, null);
+            // DecayCorrection (0054,1102)
+            this.decayCorrection = attrs.getString(0x00541102, null);
+            // RadiopharmaceuticalInformationSequence (0054,0016)
+            org.dcm4che3.data.Sequence radSeq = attrs.getSequence(0x00540016);
             if (radSeq != null && !radSeq.isEmpty()) {
                 org.dcm4che3.data.Attributes radItem = radSeq.get(0);
                 if (radItem != null) {
-                    // RadionuclideTotalDose (0008,2114)
-                    this.radionuclideTotalDose = radItem.getFloat(0x00082114, 0.0f);
-                    // RadionuclideHalfLife (0008,2116)
-                    this.halflife = radItem.getFloat(0x00082116, 0.0f);
+                    // RadionuclideTotalDose (0018,1074)
+                    this.radionuclideTotalDose = radItem.getFloat(0x00181074, 0.0f);
+                    // RadionuclideHalfLife (0018,1075)
+                    this.halflife = radItem.getFloat(0x00181075, 0.0f);
+                    this.injectionTimeMillis = dicomDateTime(radItem, 0x00181078,
+                            0x00080022, 0x00181072, 0x00080021, 0x00080031);
                 }
             }
             this.hasSUV = hasSUV();
+                this.acquisitionTimeMillis = dicomDateTime(attrs, 0x0008002A,
+                    0x00080022, 0x00080032, 0x00080021, 0x00080031);
+            if (injectionTimeMillis != Long.MIN_VALUE && acquisitionTimeMillis != Long.MIN_VALUE
+                    && injectionTimeMillis > acquisitionTimeMillis) {
+                injectionTimeMillis -= 24L * 60L * 60L * 1000L;
+            }
 
             // Rescale Slope/Intercept
             this.rescaleSlope = attrs.getFloat(0x00281053, 1.0f); // RescaleSlope
@@ -917,22 +944,24 @@ public class DicomPix {
         float low = windowLevel - (windowWidth / 2f);
         float actualWW = (windowWidth < 1.0f) ? 1.0f : windowWidth;
         float factor = 255.0f / actualWW;
+        boolean useVoiLUT = com.oculus.jj.config.AppPreferences.isUseVOILUT() && voiLUTData != null && !suvConverted;
 
         for (int i = 0; i < 65536; i++) {
             // DICOMのピクセル値に応じたRescale Slope/Interceptを考慮
             float rawValue = isSigned ? (float) ((short) i) : (float) i;
             float v = rawValue * rescaleSlope + rescaleIntercept;
+            if (suvConverted) v *= suvScaleFactor;
 
-            // HOROS-20240407準拠: MONOCHROME1の場合、データ(v)とWLを両方反転させる
-            if (this.isInverse) {
-                v = -v;
+            int p;
+            if (useVoiLUT) {
+                p = mapVOILUTValue(Math.round(v), voiLUTFirstMappedValue, voiLUTBits, voiLUTData, this.isInverse);
+            } else {
+                // HOROS-20240407準拠: MONOCHROME1の場合、データ(v)とWLを両方反転させる
+                if (this.isInverse) v = -v;
+                p = (int) ((v - low) * factor);
+                if (p < 0) p = 0;
+                if (p > 255) p = 255;
             }
-
-            int p = (int) ((v - low) * factor);
-            if (p < 0)
-                p = 0;
-            if (p > 255)
-                p = 255;
 
             // Note: vとWL(lowの一部)が両方反転しているため、ここで255-pをする必要はない
             lut[i] = (byte) p;
@@ -966,6 +995,14 @@ public class DicomPix {
                 pixels[i] = (gray << 16) | (gray << 8) | gray;
             }
         }
+    }
+
+    static int mapVOILUTValue(int modalityValue, int firstMappedValue, int bits, int[] data, boolean inverse) {
+        int index = Math.max(0, Math.min(data.length - 1, modalityValue - firstMappedValue));
+        int maxOutput = bits >= 16 ? 65535 : (1 << Math.max(1, bits)) - 1;
+        int output = (int) Math.round((data[index] & 0xFFFF) * 255.0 / maxOutput);
+        output = Math.max(0, Math.min(255, output));
+        return inverse ? 255 - output : output;
     }
 
     /**
@@ -1584,6 +1621,98 @@ public class DicomPix {
         return true;
     }
 
+    public boolean isSUVConverted() {
+        return suvConverted;
+    }
+
+    public boolean setSUVConverted(boolean converted) {
+        if (converted == suvConverted) return true;
+        if (converted) {
+            double factor = getSUVScaleFactor();
+            if (!Double.isFinite(factor) || factor <= 0) return false;
+            suvScaleFactor = factor;
+            scaleSUVWindow(factor);
+        } else {
+            scaleSUVWindow(1.0 / suvScaleFactor);
+            suvScaleFactor = 0.0;
+        }
+        suvConverted = converted;
+        if (isGrayscale && rawShortData != null) applyWLWWInMemory();
+        thumbnailImage = null;
+        return true;
+    }
+
+    public void setSUVConversionParameters(float weightKg, float doseBq, float halfLifeSeconds) {
+        if (weightKg <= 0 || doseBq <= 0 || halfLifeSeconds <= 0)
+            throw new IllegalArgumentException("SUV parameters must be positive");
+        suvParameterOverride = new float[]{weightKg, doseBq, halfLifeSeconds};
+        if (suvConverted) {
+            double nextFactor = getSUVScaleFactor();
+            if (Double.isFinite(nextFactor) && nextFactor > 0) {
+                scaleSUVWindow(nextFactor / suvScaleFactor);
+                suvScaleFactor = nextFactor;
+                if (isGrayscale && rawShortData != null) applyWLWWInMemory();
+            }
+        }
+    }
+
+    private void scaleSUVWindow(double factor) {
+        if (windowWidth > 0) windowWidth = (float) (windowWidth * factor);
+        if (windowLevel != 0) windowLevel = (float) (windowLevel * factor);
+        if (defaultWW > 0) defaultWW = (float) (defaultWW * factor);
+        if (defaultWL != 0) defaultWL = (float) (defaultWL * factor);
+    }
+
+    private double getSUVScaleFactor() {
+        if (!"BQML".equalsIgnoreCase(units)) return Double.NaN;
+        float weightKg = patientsWeight;
+        float doseBq = radionuclideTotalDose;
+        float halfLifeSeconds = halflife;
+        if (suvParameterOverride != null) {
+            weightKg = suvParameterOverride[0];
+            doseBq = suvParameterOverride[1];
+            halfLifeSeconds = suvParameterOverride[2];
+        } else {
+            if (weightKg <= 0) weightKg = com.oculus.jj.config.AppPreferences.getSUVPatientsWeight();
+            if (halfLifeSeconds <= 0) halfLifeSeconds = com.oculus.jj.config.AppPreferences.getSUVRadionuclideHalfLife() * 60.0f;
+        }
+        double elapsedSeconds = 0.0;
+        if (!"ADMIN".equalsIgnoreCase(decayCorrection)) {
+            if (injectionTimeMillis == Long.MIN_VALUE || acquisitionTimeMillis == Long.MIN_VALUE) return Double.NaN;
+            elapsedSeconds = Math.max(0.0, (acquisitionTimeMillis - injectionTimeMillis) / 1000.0);
+        }
+        return calculateSUVScaleFactor(weightKg, doseBq, halfLifeSeconds, elapsedSeconds);
+    }
+
+    static double calculateSUVScaleFactor(double weightKg, double doseBq, double halfLifeSeconds,
+            double elapsedSeconds) {
+        if (!Double.isFinite(weightKg) || !Double.isFinite(doseBq) || !Double.isFinite(halfLifeSeconds)
+                || !Double.isFinite(elapsedSeconds) || weightKg <= 0 || doseBq <= 0
+                || halfLifeSeconds <= 0 || elapsedSeconds < 0) return Double.NaN;
+        double decayedDose = doseBq * Math.pow(0.5, elapsedSeconds / halfLifeSeconds);
+        return weightKg * 1000.0 / decayedDose;
+    }
+
+    private static long dicomDateTime(org.dcm4che3.data.Attributes attrs, int dateTimeTag,
+            int dateTag, int timeTag, int fallbackDateTag, int fallbackTimeTag) {
+        java.util.Date dateTime = attrs.getDate(dateTimeTag);
+        if (dateTime != null) return dateTime.getTime();
+        java.util.Date date = attrs.getDate(dateTag);
+        java.util.Date time = attrs.getDate(timeTag);
+        if (date == null) date = attrs.getDate(fallbackDateTag);
+        if (time == null) time = attrs.getDate(fallbackTimeTag);
+        if (date == null || time == null) return Long.MIN_VALUE;
+        java.util.Calendar dateCalendar = java.util.Calendar.getInstance();
+        dateCalendar.setTime(date);
+        java.util.Calendar timeCalendar = java.util.Calendar.getInstance();
+        timeCalendar.setTime(time);
+        dateCalendar.set(java.util.Calendar.HOUR_OF_DAY, timeCalendar.get(java.util.Calendar.HOUR_OF_DAY));
+        dateCalendar.set(java.util.Calendar.MINUTE, timeCalendar.get(java.util.Calendar.MINUTE));
+        dateCalendar.set(java.util.Calendar.SECOND, timeCalendar.get(java.util.Calendar.SECOND));
+        dateCalendar.set(java.util.Calendar.MILLISECOND, timeCalendar.get(java.util.Calendar.MILLISECOND));
+        return dateCalendar.getTimeInMillis();
+    }
+
     // --- SUV property getters (HOROS-20240407準拠: DCMPix.h) ---
     public float getPatientsWeight() { return patientsWeight; }
     public String getUnits() { return units; }
@@ -1808,9 +1937,14 @@ public class DicomPix {
         if (x < 0 || x >= width || y < 0 || y >= height)
             return 0.0f;
 
+        if (rawShortData != null && rawShortData.length >= width * height) {
+            int raw = rawShortData[y * width + x] & 0xFFFF;
+            float modalityValue = (isSigned ? (short) raw : raw) * rescaleSlope + rescaleIntercept;
+            return suvConverted ? (float) (modalityValue * suvScaleFactor) : modalityValue;
+        }
+
         BufferedImage img = getBufferedImage();
-        if (img == null)
-            return 0.0f;
+        if (img == null) return 0.0f;
 
         try {
             // DataBufferから生の値を直接取得を試みる (HU計算のために重要)

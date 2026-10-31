@@ -467,18 +467,29 @@ public class OculusJJApp {
                 // HOROS-20240407準拠：BrowserControllerを起動
                 BrowserController browser = new BrowserController();
 
-                // HOROS-20240407準拠：AppController.m 2217行目 - DICOMリスナーを起動
-                try {
-                    com.oculus.jj.model.DicomNodeManager manager = com.oculus.jj.model.DicomNodeManager
-                            .getInstance();
-                    int port = manager.getLocalPort();
-                    com.oculus.jj.model.DicomService.getInstance().startListener(port);
-                } catch (Exception e) {
-                    // // System.err.println("Failed to start DICOM Listener: " + e.getMessage());
+                if (com.oculus.jj.config.AppPreferences.isListenerAutoStart()) {
+                    try {
+                        com.oculus.jj.model.DicomNodeManager manager = com.oculus.jj.model.DicomNodeManager
+                                .getInstance();
+                        String aetitle = com.oculus.jj.config.AppPreferences.getListenerAETitle();
+                        int port = com.oculus.jj.config.AppPreferences.getListenerPort();
+                        manager.setLocalConfig(aetitle, port);
+                        com.oculus.jj.model.DicomService.getInstance().startListener(port);
+                    } catch (Exception e) {
+                        // Listener startup is optional and must not prevent the viewer from opening.
+                    }
+                }
+                if (com.oculus.jj.config.AppPreferences.getBool("webserver.active", false)) {
+                    try {
+                        com.oculus.jj.model.WebServerService.getInstance().start();
+                    } catch (Exception e) {
+                        System.err.println("Web Server startup failed: " + e.getMessage());
+                    }
                 }
 
                 // データベース接続を確実に閉じるためのシャットダウンフック
                 Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    com.oculus.jj.model.WebServerService.getInstance().stop();
                     com.oculus.jj.model.DicomDatabase db = com.oculus.jj.model.DicomDatabase
                             .activeLocalDatabase();
                     if (db != null) {

@@ -1281,6 +1281,13 @@ public class BrowserController extends JFrame {
             searchField.addActionListener(e -> {
                 // HOROS-20240407準拠: 検索を実行してアウトラインビューを更新
                 outlineViewRefresh();
+                if (com.oculus.jj.config.AppPreferences.getBool("ondemand.active", false)
+                        && com.oculus.jj.config.AppPreferences.getBool("ondemand.useToolbarSearch", true)
+                        && !searchField.getText().trim().isEmpty()) {
+                    int searchType = browserToolbar.getSearchTypeCombo() == null
+                            ? 0 : browserToolbar.getSearchTypeCombo().getSelectedIndex();
+                    QueryController.getInstance().setToolbarSearchAndQuery(searchField.getText().trim(), searchType);
+                }
             });
 
             // HOROS-20240407準拠: NSSearchFieldのリアルタイム検索（ディレイ付き）を再現
@@ -1945,6 +1952,20 @@ public class BrowserController extends JFrame {
                         continue;
                     }
 
+                    if (com.oculus.jj.config.AppPreferences.getInt("cddvd.contentMode", 1) == 1) {
+                        List<java.nio.file.Path> indexedFiles = List.of();
+                        try {
+                            indexedFiles = com.oculus.jj.model.DicomDirectoryUtils.referencedFiles(file.toPath());
+                        } catch (Exception ex) {
+                            // Fall through to Scan Mode only when the preference allows it.
+                        }
+                        if (!indexedFiles.isEmpty()) {
+                            for (java.nio.file.Path indexedFile : indexedFiles) filesArray.add(indexedFile.toString());
+                            continue;
+                        }
+                        if (!com.oculus.jj.config.AppPreferences.getBool("cddvd.switchToScanWhenEmpty", true)) continue;
+                    }
+
                     // HOROS-20240407準拠: BrowserController.m 886行目
                     // NSDirectoryEnumerator *enumer = [[NSFileManager defaultManager]
                     // enumeratorAtPath: filename];
@@ -2028,7 +2049,7 @@ public class BrowserController extends JFrame {
             Map<String, Object> options = new HashMap<>();
             // HOROS-20240407準拠: BrowserController.m 997行目
             // [[NSUserDefaults standardUserDefaults] objectForKey: @"onlyDICOM"]
-            // options.put("onlyDICOM", ...);
+            options.put("onlyDICOM", com.oculus.jj.config.AppPreferences.getBool("database.dicomOnly", true));
             options.put("async", true); // HOROS-20240407準拠: [NSNumber numberWithBool: YES], @"async"
             options.put("addToAlbum", true); // HOROS-20240407準拠: [NSNumber numberWithBool: YES], @"addToAlbum"
             options.put("selectStudy", true); // HOROS-20240407準拠: [NSNumber numberWithBool: YES], @"selectStudy"
@@ -2311,10 +2332,6 @@ public class BrowserController extends JFrame {
             return;
         }
 
-        // HOROS-20240407準拠: BOOL COPYDATABASE = [[NSUserDefaults standardUserDefaults]
-        // boolForKey: @"COPYDATABASE"]; (2196行目)
-        boolean copyDatabase = false;
-
         // HOROS-20240407準拠: NSMutableArray *newFilesToCopyList = [NSMutableArray
         // arrayWithCapacity: [filesInput count]]; (2208行目)
         List<String> newFilesToCopyList = new ArrayList<>();
@@ -2329,10 +2346,8 @@ public class BrowserController extends JFrame {
             }
         }
 
-        boolean copyFiles = false;
-        if (copyDatabase && !newFilesToCopyList.isEmpty()) {
-            copyFiles = true;
-        }
+        int copyMode = com.oculus.jj.config.AppPreferences.getInt("database.copyMode", 2);
+        boolean copyFiles = !newFilesToCopyList.isEmpty() && shouldCopyImportedFiles(newFilesToCopyList, inPath, copyMode);
 
         // HOROS-20240407準拠: if( [[options objectForKey: @"async"] boolValue]) (2282行目)
         boolean async = options != null && Boolean.TRUE.equals(options.get("async"));
@@ -2346,6 +2361,7 @@ public class BrowserController extends JFrame {
             }
             dict.put("filesInput", filesInput); // HOROS-20240407準拠: filesInputをそのまま使用（newFilesToCopyListではなく）
             dict.put("copyFiles", copyFiles);
+            dict.put("onlyDICOM", com.oculus.jj.config.AppPreferences.getBool("database.dicomOnly", true));
 
             // HOROS-20240407準拠: NSThread *t = [[[NSThread alloc]
             // initWithTarget:_database.independentDatabase
@@ -2385,6 +2401,33 @@ public class BrowserController extends JFrame {
             // 同期処理の場合は、Waitスプラッシュを表示してから処理を実行
             // 現在は非同期処理のみをサポート
             // 同期処理が必要な場合は、async=falseを設定して呼び出す
+        }
+    }
+
+    private boolean shouldCopyImportedFiles(List<String> files, String databasePath, int copyMode) {
+        if (copyMode == 0) return true;
+        if (copyMode == 2) {
+            final int[] answer = {JOptionPane.NO_OPTION};
+            Runnable prompt = () -> answer[0] = JOptionPane.showConfirmDialog(this,
+                    LanguageManager.get("prefs.db.copy_ask_prompt", "Copy imported files into the database folder?"),
+                    LanguageManager.get("prefs.db.filemgmt", "File Management"), JOptionPane.YES_NO_OPTION);
+            if (SwingUtilities.isEventDispatchThread()) prompt.run();
+            else {
+                try { SwingUtilities.invokeAndWait(prompt); }
+                catch (Exception ex) { return false; }
+            }
+            return answer[0] == JOptionPane.YES_OPTION;
+        }
+
+        try {
+            java.nio.file.FileStore databaseStore = java.nio.file.Files.getFileStore(java.nio.file.Path.of(databasePath));
+            for (String file : files) {
+                java.nio.file.FileStore sourceStore = java.nio.file.Files.getFileStore(java.nio.file.Path.of(file));
+                if (!databaseStore.equals(sourceStore)) return true;
+            }
+            return false;
+        } catch (Exception ex) {
+            return true;
         }
     }
 
@@ -5896,6 +5939,7 @@ public class BrowserController extends JFrame {
         toOpenArray.add(loadList);
 
         openViewerFromImages(toOpenArray, false, null, false);
+        autoFuseVisiblePETCT();
 
         // HOROS-20240407準拠: AUTOTILING処理
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(ViewerController.class);
@@ -6327,6 +6371,52 @@ public class BrowserController extends JFrame {
         for (List<Object> loadList : toOpenArray) {
             openViewerFromImages(java.util.Arrays.asList(loadList), movieViewer, viewer, false);
         }
+        autoFuseVisiblePETCT();
+    }
+
+    private void autoFuseVisiblePETCT() {
+        if (!com.oculus.jj.config.AppPreferences.getBool("pet.autoFuse", true)) return;
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+            javax.swing.SwingUtilities.invokeLater(this::autoFuseVisiblePETCT);
+            return;
+        }
+
+        List<ViewerController> viewers = new ArrayList<>(ViewerController.getDisplayed2DViewers());
+        java.util.List<DicomPix[]> pairs = new java.util.ArrayList<>();
+        for (ViewerController controller : viewers) {
+            DCMView view = controller.getImageView();
+            if (view == null) continue;
+            List<DicomPix> pixels = view.getDcmPixList();
+            if (pixels == null) continue;
+            for (DicomPix ct : pixels) {
+                if (ct == null || !isCTModality(ct.getModality()) || ct.hasFusion()) continue;
+                DicomPix pet = findPetOrSpectFor(ct, viewers);
+                if (pet != null) pairs.add(new DicomPix[]{ct, pet});
+            }
+        }
+        if (pairs.isEmpty()) return;
+
+        com.oculus.jj.model.FusionImageProcessor.FusionMode mode =
+                com.oculus.jj.config.AppPreferences.getFusionMode();
+        double weight = com.oculus.jj.config.AppPreferences.getFusionWeight();
+        new javax.swing.SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() {
+                for (DicomPix[] pair : pairs) {
+                    DicomPix ct = pair[0];
+                    DicomPix pet = pair[1];
+                    if (ct.getBufferedImage() == null || pet.getBufferedImage() == null) continue;
+                    ct.setFusionOverlay(pet, weight, mode);
+                }
+                return null;
+            }
+
+            @Override protected void done() {
+                for (ViewerController controller : viewers) {
+                    DCMView view = controller.getImageView();
+                    if (view != null) view.repaint();
+                }
+            }
+        }.execute();
     }
 
     /**
@@ -11078,6 +11168,28 @@ public class BrowserController extends JFrame {
      * HOROS-20240407準拠: - (IBAction) viewXML:(id) sender (18391行目)
      */
     public void viewXML(Object sender) {
+        String filePath = null;
+        DCMView activeView = getActiveDCMViewForEdit();
+        if (activeView != null && activeView.getCurDCM() != null && activeView.getCurDCM().getPath() != null) {
+            filePath = activeView.getCurDCM().getPath().toString();
+        }
+        if (filePath == null) {
+            Object selected = getSelectedItem();
+            if (selected instanceof com.oculus.jj.model.DicomImage image) {
+                filePath = image.completePath();
+            } else if (selected instanceof com.oculus.jj.model.DicomSeries series) {
+                List<com.oculus.jj.model.DicomImage> images = series.sortedImages();
+                if (!images.isEmpty()) filePath = images.get(0).completePath();
+            }
+        }
+        if (filePath == null || filePath.isBlank()) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("meta.nofile", "No DICOM file selected."),
+                    LanguageManager.get("meta.title", "DICOM Meta-Data"), JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        DicomMetadataDialog dialog = new DicomMetadataDialog(this, filePath);
+        dialog.setVisible(true);
     }
 
     /**
@@ -11313,7 +11425,7 @@ public class BrowserController extends JFrame {
      * (4721行目)
      */
     public void refreshPACSOnDemandResults(Object sender) {
-        QueryController.getInstance().refreshResults(BrowserController.this);
+        QueryController.getInstance().refreshOnDemandResults(BrowserController.this);
     }
 
     /**
@@ -13224,11 +13336,14 @@ public class BrowserController extends JFrame {
                 LanguageManager.get("suv.window.title", "SUV Conversion"), true);
 
         final javax.swing.JTextField weightField = new javax.swing.JTextField(
-                String.valueOf(pix.getPatientsWeight()), 12);
+            String.valueOf(pix.getPatientsWeight() > 0 ? pix.getPatientsWeight() :
+                com.oculus.jj.config.AppPreferences.getSUVPatientsWeight()), 12);
         final javax.swing.JTextField doseField = new javax.swing.JTextField(
-                String.valueOf(pix.getRadionuclideTotalDose()), 12);
+            String.valueOf(pix.getRadionuclideTotalDose() > 0 ? pix.getRadionuclideTotalDose() / 1_000_000.0f :
+                com.oculus.jj.config.AppPreferences.getSUVRadionuclideTotalDose()), 12);
         final javax.swing.JTextField halflifeField = new javax.swing.JTextField(
-                String.valueOf(pix.getHalfLife()), 12);
+            String.valueOf(pix.getHalfLife() > 0 ? pix.getHalfLife() / 60.0f :
+                com.oculus.jj.config.AppPreferences.getSUVRadionuclideHalfLife()), 12);
 
         javax.swing.JPanel form = new javax.swing.JPanel();
         form.setLayout(new java.awt.GridBagLayout());
@@ -13265,9 +13380,9 @@ public class BrowserController extends JFrame {
                 float w = Float.parseFloat(weightField.getText().trim());
                 float d = Float.parseFloat(doseField.getText().trim());
                 float h = Float.parseFloat(halflifeField.getText().trim());
-                if (w < 0) throw new NumberFormatException("weight");
+                if (w <= 0) throw new NumberFormatException("weight");
                 if (d <= 0) throw new NumberFormatException("dose");
-                if (h < 0) throw new NumberFormatException("halflife");
+                if (h <= 0) throw new NumberFormatException("halflife");
                 values.add(new float[]{w, d, h});
                 dlg.dispose();
             } catch (NumberFormatException ex) {
@@ -13298,7 +13413,13 @@ public class BrowserController extends JFrame {
             com.oculus.jj.config.AppPreferences.setSUVRadionuclideHalfLife(v[2]);
             DicomPix cur = view.getCurDCM();
             if (cur != null) {
-                cur.setWindowLevelWidth(cur.getSavedWL(), cur.getSavedWW());
+                cur.setSUVConversionParameters(v[0], v[1] * 1_000_000.0f, v[2] * 60.0f);
+                boolean converted = cur.setSUVConverted(!cur.isSUVConverted());
+                if (!converted) {
+                    JOptionPane.showMessageDialog(this,
+                            LanguageManager.get("suv.error.time", "SUV conversion requires BQML units and valid acquisition/injection times."),
+                            LanguageManager.get("suv.error.title", "SUV Error"), JOptionPane.ERROR_MESSAGE);
+                }
             }
             view.repaint();
         }
