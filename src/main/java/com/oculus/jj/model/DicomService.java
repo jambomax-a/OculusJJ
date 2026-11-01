@@ -433,6 +433,238 @@ public class DicomService {
     }
 
     /**
+     * DICOM Print Management (Basic Grayscale Print Management Meta SOP Class) ジョブ送信。
+     *
+     * <p>DICOM PS3.4 Annex H 準拠シーケンス:
+     * <ol>
+     *   <li>N-CREATE BasicFilmSession (2000,0010 NumberOfCopies / PrintPriority / MediumType / FilmDestination)</li>
+     *   <li>フィルムごとに N-CREATE BasicFilmBox (ImageDisplayFormat / FilmOrientation / FilmSizeID / MagnificationType / BorderDensity / EmptyImageDensity / Trim / ConfigurationInformation / ReferencedFilmSessionSequence)</li>
+     *   <li>各スロットに N-SET BasicGrayscaleImageBox (ImageBoxPosition + BasicGrayscaleImageSequence)</li>
+     *   <li>N-ACTION BasicFilmBox (Action Type ID = 1: Print)</li>
+     *   <li>N-DELETE BasicFilmBox / BasicFilmSession</li>
+     * </ol>
+     */
+    public void printDICOMImages(DicomNode printer, java.util.List<java.awt.image.BufferedImage> pages)
+            throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
+        if (printer == null) {
+            throw new IOException("No DICOM printer configured");
+        }
+        if (pages == null || pages.isEmpty()) {
+            throw new IOException("No images to print");
+        }
+
+        Attributes filmSessionAttrs = buildFilmSessionAttributes();
+        int[] grid = resolveLayoutGrid(pages.size());
+        int cols = grid[0];
+        int rows = grid[1];
+        int slotsPerFilm = Math.max(1, cols * rows);
+
+        DicomNodeManager manager = DicomNodeManager.getInstance();
+        ae.setAETitle(manager.getLocalAET());
+
+        String metaUID = UID.BasicGrayscalePrintManagementMeta;
+        AAssociateRQ rq = new AAssociateRQ();
+        rq.setCalledAET(printer.getAeTitle());
+        rq.addPresentationContext(new PresentationContext(1, metaUID,
+                UID.ExplicitVRLittleEndian, UID.ImplicitVRLittleEndian));
+
+        Association association = ae.connect(new Connection(null, printer.getAddress(), printer.getPort()), rq);
+        try {
+            String filmSessionIUID = org.dcm4che3.util.UIDUtils.createUID();
+            DimseRSP sessionRsp = association.ncreate(metaUID, UID.BasicFilmSession, filmSessionIUID, filmSessionAttrs, null);
+            sessionRsp.next();
+            checkDimseStatus(sessionRsp.getCommand(), "N-CREATE BasicFilmSession");
+            String returnedSessionIUID = sessionRsp.getCommand().getString(Tag.AffectedSOPInstanceUID);
+            if (returnedSessionIUID != null && !returnedSessionIUID.isBlank()) {
+                filmSessionIUID = returnedSessionIUID;
+            }
+
+            for (int offset = 0; offset < pages.size(); offset += slotsPerFilm) {
+                Attributes filmBoxAttrs = buildFilmBoxAttributes(filmSessionIUID, cols, rows);
+                String filmBoxIUID = org.dcm4che3.util.UIDUtils.createUID();
+                DimseRSP boxRsp = association.ncreate(metaUID, UID.BasicFilmBox, filmBoxIUID, filmBoxAttrs, null);
+                boxRsp.next();
+                checkDimseStatus(boxRsp.getCommand(), "N-CREATE BasicFilmBox");
+                String returnedBoxIUID = boxRsp.getCommand().getString(Tag.AffectedSOPInstanceUID);
+                if (returnedBoxIUID != null && !returnedBoxIUID.isBlank()) {
+                    filmBoxIUID = returnedBoxIUID;
+                }
+
+                org.dcm4che3.data.Sequence refImageBoxes = boxRsp.getDataset() != null
+                        ? boxRsp.getDataset().getSequence(Tag.ReferencedImageBoxSequence) : null;
+
+                int limit = Math.min(slotsPerFilm, pages.size() - offset);
+                for (int slot = 0; slot < limit; slot++) {
+                    java.awt.image.BufferedImage page = pages.get(offset + slot);
+                    if (page == null) continue;
+                    String imageBoxIUID = (refImageBoxes != null && slot < refImageBoxes.size())
+                            ? refImageBoxes.get(slot).getString(Tag.ReferencedSOPInstanceUID) : null;
+                    if (imageBoxIUID == null || imageBoxIUID.isBlank()) {
+                        imageBoxIUID = org.dcm4che3.util.UIDUtils.createUID();
+                    }
+                    Attributes imageBoxAttrs = buildGrayscaleImageBoxAttributes(page, slot + 1);
+                    DimseRSP setRsp = association.nset(metaUID, UID.BasicGrayscaleImageBox, imageBoxIUID, imageBoxAttrs, null);
+                    setRsp.next();
+                    checkDimseStatus(setRsp.getCommand(), "N-SET BasicGrayscaleImageBox");
+                }
+
+                DimseRSP actionRsp = association.naction(metaUID, UID.BasicFilmBox, filmBoxIUID, 1, null, null);
+                actionRsp.next();
+                checkDimseStatus(actionRsp.getCommand(), "N-ACTION BasicFilmBox Print");
+
+                DimseRSP delBoxRsp = association.ndelete(metaUID, UID.BasicFilmBox, filmBoxIUID);
+                delBoxRsp.next();
+            }
+
+            DimseRSP delSessionRsp = association.ndelete(metaUID, UID.BasicFilmSession, filmSessionIUID);
+            delSessionRsp.next();
+        } finally {
+            if (association.isReadyForDataTransfer()) {
+                association.release();
+            }
+        }
+    }
+
+    public static Attributes buildFilmSessionAttributes() {
+        String[] priorities = {"HIGH", "MED", "LOW"};
+        String[] media = {"BLUE FILM", "CLEAR FILM", "PAPER"};
+        String[] destinations = {"PROCESSOR", "MAGAZINE", "BIN_1", "BIN_2"};
+        int priorityIdx = Math.max(0, Math.min(priorities.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.priority", 0)));
+        int mediumIdx = Math.max(0, Math.min(media.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.medium", 0)));
+        int destIdx = Math.max(0, Math.min(destinations.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.filmDestination", 0)));
+        int copiesIdx = Math.max(0, Math.min(5,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.copies", 0)));
+        int copies = copiesIdx <= 0 ? 1 : copiesIdx;
+
+        Attributes attrs = new Attributes();
+        attrs.setString(Tag.NumberOfCopies, VR.IS, Integer.toString(copies));
+        attrs.setString(Tag.PrintPriority, VR.CS, priorities[priorityIdx]);
+        attrs.setString(Tag.MediumType, VR.CS, media[mediumIdx]);
+        attrs.setString(Tag.FilmDestination, VR.CS, destinations[destIdx]);
+        return attrs;
+    }
+
+    public static Attributes buildFilmBoxAttributes(String filmSessionIUID, int cols, int rows) {
+        String[] orientations = {"PORTRAIT", "LANDSCAPE"};
+        String[] sizes = {"8INX10IN", "10INX12IN", "10INX14IN", "14INX17IN"};
+        String[] magnifications = {"NONE", "CUBIC", "BILINEAR", "REPLICATE"};
+        String[] trims = {"NO", "YES"};
+        String[] colors = {"BLACK", "WHITE"};
+
+        int orientIdx = Math.max(0, Math.min(orientations.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.filmOrientationIndex", 1)));
+        int sizeIdx = Math.max(0, Math.min(sizes.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.filmSize", 0)));
+        int magIdx = Math.max(0, Math.min(magnifications.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.magnification", 0)));
+        int trimIdx = Math.max(0, Math.min(trims.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.trim", 0)));
+        int borderIdx = Math.max(0, Math.min(colors.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.borderColor", 0)));
+        int emptyIdx = Math.max(0, Math.min(colors.length - 1,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.emptyColor", 0)));
+        String configInfo = com.oculus.jj.config.AppPreferences.getStr("dicomPrint.configuration", "No Selection");
+
+        Attributes attrs = new Attributes();
+        attrs.setString(Tag.ImageDisplayFormat, VR.ST, "STANDARD\\" + Math.max(1, cols) + "," + Math.max(1, rows));
+        attrs.setString(Tag.FilmOrientation, VR.CS, orientations[orientIdx]);
+        attrs.setString(Tag.FilmSizeID, VR.CS, sizes[sizeIdx]);
+        attrs.setString(Tag.MagnificationType, VR.CS, magnifications[magIdx]);
+        attrs.setString(Tag.BorderDensity, VR.CS, colors[borderIdx]);
+        attrs.setString(Tag.EmptyImageDensity, VR.CS, colors[emptyIdx]);
+        attrs.setString(Tag.Trim, VR.CS, trims[trimIdx]);
+        if (configInfo != null && !configInfo.isBlank() && !"No Selection".equalsIgnoreCase(configInfo.trim())) {
+            attrs.setString(Tag.ConfigurationInformation, VR.ST, configInfo.trim());
+        }
+        Attributes sessionRef = new Attributes();
+        sessionRef.setString(Tag.ReferencedSOPClassUID, VR.UI, UID.BasicFilmSession);
+        sessionRef.setString(Tag.ReferencedSOPInstanceUID, VR.UI, filmSessionIUID);
+        attrs.ensureSequence(Tag.ReferencedFilmSessionSequence, 1).add(sessionRef);
+        return attrs;
+    }
+
+    public static Attributes buildGrayscaleImageBoxAttributes(java.awt.image.BufferedImage image, int position) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        byte[] pixels = new byte[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int rgb = image.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                pixels[y * width + x] = (byte) ((r * 77 + g * 150 + b * 29) >> 8);
+            }
+        }
+        Attributes imageBox = new Attributes();
+        imageBox.setInt(Tag.ImageBoxPosition, VR.US, Math.max(1, position));
+        Attributes pixelItem = new Attributes();
+        pixelItem.setInt(Tag.SamplesPerPixel, VR.US, 1);
+        pixelItem.setString(Tag.PhotometricInterpretation, VR.CS, "MONOCHROME2");
+        pixelItem.setInt(Tag.Rows, VR.US, height);
+        pixelItem.setInt(Tag.Columns, VR.US, width);
+        pixelItem.setInt(Tag.PixelAspectRatio, VR.IS, 1, 1);
+        pixelItem.setInt(Tag.BitsAllocated, VR.US, 8);
+        pixelItem.setInt(Tag.BitsStored, VR.US, 8);
+        pixelItem.setInt(Tag.HighBit, VR.US, 7);
+        pixelItem.setInt(Tag.PixelRepresentation, VR.US, 0);
+        pixelItem.setBytes(Tag.PixelData, VR.OB, pixels);
+        imageBox.ensureSequence(Tag.BasicGrayscaleImageSequence, 1).add(pixelItem);
+        return imageBox;
+    }
+
+    public static int[] resolveLayoutGrid(int imageCount) {
+        if (com.oculus.jj.config.AppPreferences.getBool("dicomPrint.automaticLayout", false)) {
+            if (imageCount <= 1) return new int[]{1, 1};
+            if (imageCount == 2) return new int[]{2, 1};
+            return new int[]{2, 2};
+        }
+        int fmtIdx = Math.max(0, Math.min(3,
+                com.oculus.jj.config.AppPreferences.getInt("dicomPrint.layoutFormat", 0)));
+        return switch (fmtIdx) {
+            case 1 -> new int[]{2, 1};
+            case 2 -> new int[]{1, 2};
+            case 3 -> new int[]{2, 2};
+            default -> new int[]{1, 1};
+        };
+    }
+
+    public static DicomNode resolveConfiguredDicomPrinter() {
+        String json = com.oculus.jj.config.AppPreferences.getStr("dicomPrint.printers", "");
+        if (json == null || json.isBlank()) return null;
+        try {
+            String[][] rows = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, String[][].class);
+            String[] chosen = null;
+            for (String[] row : rows) {
+                if (row == null || row.length < 4) continue;
+                if (chosen == null) chosen = row;
+                if (row.length >= 5 && Boolean.parseBoolean(row[4])) {
+                    chosen = row;
+                    break;
+                }
+            }
+            if (chosen == null) return null;
+            String host = chosen[1] == null ? "" : chosen[1].trim();
+            String aet = chosen[3] == null ? "" : chosen[3].trim();
+            int port = Integer.parseInt(chosen[2] == null ? "104" : chosen[2].trim());
+            if (host.isEmpty() || aet.isEmpty() || port <= 0 || port > 65535) return null;
+            return new DicomNode(chosen[0], aet, host, port);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static void checkDimseStatus(Attributes cmd, String operation) throws IOException {
+        int status = cmd == null ? -1 : cmd.getInt(Tag.Status, -1);
+        if (status != Status.Success && !Status.isPending(status) && (status & 0xF000) != 0xB000) {
+            throw new IOException(operation + " failed with status: 0x" + Integer.toHexString(status));
+        }
+    }
+
+    /**
      * WADO: 後方互換性のためのURL生成（既存コード用）
      */
     public static String getWadoUrl(String baseUrl, String studyUID, String seriesUID, String sopInstanceUID) {

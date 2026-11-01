@@ -51,6 +51,7 @@
 | **Series List** Single Series List per screen (ON) | なし | NEW |
 | Automatically showhide the list (OFF) | なし | NEW |
 | **12bit Display** Automatically enable 12 Bit Totoku Display support for CR, MQ, DX, DR, XA and RF (OFF) | なし（別メニューに isLUT12Bit 実装あり 193a768） | GAP（キー連携） |
+| Compute Skewness and Kurtosis for ROI (OFF) | `viewers.skewKurt` CB + ROI.getSkewness()/getKurtosis() + DicomPix.computeSkewKurt()（2026-10-31実装） | OK（有効化時 ROIテキストBox6行目 "SKEW/KURT" + AnnotationsPanel列） |
 | **Scale** Always 'scale to fit' when displaying or resizing windows (ON) | なし | NEW |
 | **Misc** Save left bottom mouse tool (OFF) | なし | NEW |
 | Reverse scroll wheel direction (ON) | なし | NEW |
@@ -260,7 +261,7 @@
 | Automatically retrieve studies that have already some local images (ON) | なし | NEW |
 | Use PACS On Demand, when using the toolbar search fields (ON) | なし | NEW |
 | Activate search for following Smart Albums, with Q&R Date & Modality filters: テーブル（Just Acquired✓/Last hour, Just Added/Any date, Today CR✓/Today/CR, Today CT✓/Today/CT, Today MG✓/Today/MG）+ "Double-Click on a line to edit..." | `ondemand.querySmartAlbums`(CB) | GAP（テーブル化） |
-| Maximum number of background auto-retrieve requests per server: 2 | なし | NEW |
+| Maximum number of background auto-retrieve requests per server: 2 | `ondemand.maxBackgroundRequests` Spinner(1-6) + QueryController.moveStudiesWithLimit()（Semaphore並行制御, 2026-10-31実装） | OK（smart album auto-retrieve と partial-local auto-retrieve 両方に適用） |
 | Activate PACS On Demand for following Web Server functions: Comparative Studies (Study level) / Search function / Albums | `ondemand.searchComparatives`(CB) | GAP |
 | Query Timeout / Max Studies（現行のみ） | 実機に無い（実機は背景req制限） | 維持 or 統合 |
 
@@ -312,12 +313,36 @@ Connected to runtime behavior:
 - Built-in HTTP server lifecycle follows the Web Server preference and serves local DICOM instances over `/wado` by Study/Series/SOP Instance UID; TLS/auth-required modes fail closed until configured (`WebServerService`).
 - General preferences reset and XML import/export.
 
+## Runtime Integration Progress (2026-10-31)
+Connected to runtime behavior:
+- Viewers "Compute Skewness and Kurtosis for ROI" (`viewers.skewKurt`):
+  `DicomPix.computeROIStatistics` が合計値/平方和/三階積矩/四階積矩を1パスで集計し、
+  `DicomPix.computeSkewKurt`（標準化3/4階積矩、静的メソッドで単体テスト可能）から
+  歪度・尖度を算出。`ROI.setSkewKurt/getSkewness/getKurtosis` に格納し、
+  `viewers.skewKurt` が有効でSD>0の場合、ROIテキストBoxの6行目に
+  `SKEW: %.3f KURT: %.2f` を表示、AnnotationsPanelに Skew/Kurt 列を追加
+  （i18n `annotations.col.skew/kurt` を en/ja 両方に追加）。
+  `DicomPixTest` に4ケース追加（対称分布・右歪検出・定数サンプル・空入力）。
+- On-Demand "Maximum number of background auto-retrieve requests per server":
+  UIを `preferenceSpinner`（1-6, 既定2）に置き換え（以前は `preferenceCombo` で
+  int/値混在の潜在バグを解消）。`QueryController.maxAutoRetrievePerServer()`
+  で読み込み、`moveStudiesWithLimit`（Semaphore + CompletableFuture）で
+  smart album の自動C-MOVEと partial-local 自動C-MOVEの両方を
+  サーバー毎の最大並行数で制御（従来は逐次実行）。失敗一覧も両経路で反映。
+- DICOM Print (`dicomPrint.*`):
+  `DicomService.printDICOMImages` で Basic Grayscale Print Management Meta SOP Class
+  (`N-CREATE BasicFilmSession` → `N-CREATE BasicFilmBox` → `N-SET BasicGrayscaleImageBox` →
+  `N-ACTION BasicFilmBox Print` → `N-DELETE`) を実装。`dicomPrint.printers` からデフォルト
+  プリンタを解決し、`dicomPrint.priority`/`medium`/`filmDestination`/`copies`、
+  `filmOrientationIndex`/`filmSize`/`magnification`/`trim`/`borderColor`/`emptyColor`/`configuration`、
+  `layoutFormat`/`automaticLayout`、`autoResizeWindow` を `BrowserController.printDICOM` に接続。
+
 Still requiring real service/domain integration:
 - SUV conversion intentionally refuses CNTS, missing acquisition/injection timing for START/NONE, and invalid dose/weight/half-life rather than displaying a potentially incorrect value. Validate against representative vendor PET datasets before clinical use.
 - Import crash-test validation, automatic disc insertion detection/handling, and hanging-protocol application.
 - Listener TLS, per-user session gating, inbound decompression/JPEG transformation, Bonjour publishing, C-FIND SCP, and XML-RPC.
-- Locations network/local database discovery and sync; On-Demand distant-study substitution and multi-request concurrency scheduling (automatic retrieves currently run sequentially, within the configured maximum).
+- Locations network/local database discovery and sync; On-Demand distant-study substitution.
 - Web Server HTTPS/TLS, user authentication/administration, notifications, and email delivery. WADO returns 401 when identified-user/authentication is required because user management is not implemented.
-- DICOM Print printer negotiation/job submission and a number of viewer export/display toggles.
+- Remaining viewer export/display toggles (crop-on-export, tiled-view export, open-after-export, CLUT bar retention on screenshot).
 
-Tests: `DicomPixTest` covers VOI LUT input clamping, 8/16-bit scaling, MONOCHROME1 inversion, SUV weight/dose scaling, half-life correction, invalid parameter rejection, and Patient UID field selection/compatibility. `DicomDatabaseTest` covers routing wildcard matches. `DicomDirectoryUtilsTest` covers referenced-file resolution and traversal rejection. `WebServerServiceTest` exercises HTTP startup and WADO request validation. Full `./gradlew test` passes.
+Tests: `DicomPixTest` covers VOI LUT input clamping, 8/16-bit scaling, MONOCHROME1 inversion, SUV weight/dose scaling, half-life correction, invalid parameter rejection, Patient UID field selection/compatibility, skew/kurt moment computation (symmetric distribution, right-skew detection, constant samples, empty input), and DICOM Print attribute builders (Film Session / Film Box / Grayscale Image Box). `DicomDatabaseTest` covers routing wildcard matches. `DicomDirectoryUtilsTest` covers referenced-file resolution and traversal rejection. `WebServerServiceTest` exercises HTTP startup and WADO request validation. Full `./gradlew test` passes.

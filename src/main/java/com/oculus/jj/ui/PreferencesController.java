@@ -868,6 +868,13 @@ public static synchronized PreferencesController getInstance() {
         return combo;
     }
 
+    private JSpinner preferenceSpinner(String key, int defaultValue, int min, int max) {
+        JSpinner spinner = new JSpinner(new SpinnerNumberModel(
+                Math.max(min, Math.min(max, AppPreferences.getInt(key, defaultValue))), min, max, 1));
+        spinner.addChangeListener(e -> AppPreferences.setInt(key, ((Number) spinner.getValue()).intValue()));
+        return spinner;
+    }
+
     private JTextField preferenceText(String key, String defaultValue, int columns) {
         JTextField field = new JTextField(AppPreferences.getStr(key, defaultValue), columns);
         field.addActionListener(e -> AppPreferences.setStr(key, field.getText()));
@@ -2084,7 +2091,7 @@ public static synchronized PreferencesController getInstance() {
         pane.add(smart);
         JPanel maxRequests = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         maxRequests.add(new JLabel(LanguageManager.get("prefs.ond.max_requests", "Maximum number of background auto-retrieve requests per server:")));
-        maxRequests.add(preferenceCombo("ondemand.maxBackgroundRequests", 2, new String[]{"1", "2", "3", "4", "5", "6"}));
+        maxRequests.add(preferenceSpinner("ondemand.maxBackgroundRequests", 2, 1, 6));
         pane.add(maxRequests);
 
         JPanel webFunctions = preferenceSection(LanguageManager.get("prefs.ond.web_functions", "Activate PACS On Demand for following Web Server functions"));

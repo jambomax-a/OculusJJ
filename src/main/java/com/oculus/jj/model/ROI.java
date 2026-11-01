@@ -195,6 +195,8 @@ public class ROI {
 
     // HOROS: float rmean, rmax, rmin, rdev, rtotal
     private float rmean = 0, rmax = 0, rmin = 0, rdev = 0, rtotal = 0;
+    // HOROS Preferences Viewers: "Compute Skewness and Kurtosis for ROI"
+    private double rskew = 0, rkurt = 0;
     private String pixelUnit = "";
     private boolean hasStatistics = false;
 
@@ -1919,6 +1921,21 @@ public class ROI {
         return rdev;
     }
 
+    /** 歪度（skewness, 標準化3階積矩） */
+    public double getSkewness() {
+        return rskew;
+    }
+
+    /** 尖度（kurtosis, 標準化4階積矩） */
+    public double getKurtosis() {
+        return rkurt;
+    }
+
+    public void setSkewKurt(double skew, double kurt) {
+        this.rskew = skew;
+        this.rkurt = kurt;
+    }
+
     public double getArea() {
         if (type == DCMView.ToolMode.tAxis && points.size() >= 4) {
             double len1 = calculateDistanceBetween(points.get(0), points.get(1));
@@ -1986,6 +2003,17 @@ public class ROI {
     public void updateStatistics() {
         // 本来はピクセルデータから計算するが、ここではプレースホルダ
         // DCMView側で計算してsetStatisticsが呼ばれることを前提とする
+    }
+
+    /**
+     * HOROS Preferences Viewers: "Compute Skewness and Kurtosis for ROI"
+     * 設定が有効で統計が得られている場合、textualBoxLine6 に SKEW/KURT 行を付加する。
+     */
+    private void appendSkewKurt() {
+        if (hasStatistics && getStDev() > 0
+                && com.oculus.jj.config.AppPreferences.getBool("viewers.skewKurt", false)) {
+            textualBoxLine6 = String.format("SKEW: %.3f KURT: %.2f", getSkewness(), getKurtosis());
+        }
     }
 
     private String formatLength(double lengthInCm) {
@@ -2096,6 +2124,7 @@ public class ROI {
                     textualBoxLine3 = String.format("Mean: %.2f SD: %.2f", getMean(), getStDev());
                     textualBoxLine4 = String.format("Min: %.1f Max: %.1f", getMin(), getMax());
                     textualBoxLine5 = String.format("Perim: %s", formatLength(getPerimeter() / 10.0));
+                    appendSkewKurt();
                 } else {
                     textualBoxLine3 = String.format("Perim: %s", formatLength(getPerimeter() / 10.0));
                 }
@@ -2113,6 +2142,7 @@ public class ROI {
                 double width = rect.width * pixelSpacingX / 10.0;
                 double height = rect.height * pixelSpacingY / 10.0;
                 textualBoxLine5 = String.format("Size: %s x %s", formatLength(width), formatLength(height));
+                appendSkewKurt();
                 break;
 
             case tAngle:

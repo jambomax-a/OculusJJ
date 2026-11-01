@@ -231,6 +231,10 @@ public class DicomPix {
         return null;
     }
 
+    public String getSOPClassUID() {
+        return sopClassUID;
+    }
+
     /**
      * ヘッダー情報を読み込む（ピクセルデータは読み込まない）
      */
@@ -1878,6 +1882,8 @@ public class DicomPix {
 
             double total = 0;
             double sumSq = 0;
+            double sumCube = 0;
+            double sumFourth = 0;
             double sumArea = 0;
             float min = Float.MAX_VALUE;
             float max = -Float.MAX_VALUE;
@@ -1895,6 +1901,8 @@ public class DicomPix {
 
                         total += val;
                         sumSq += (val * val);
+                        sumCube += (val * val * val);
+                        sumFourth += (val * val) * (val * val);
                         if (val < min)
                             min = val;
                         if (val > max)
@@ -1914,6 +1922,12 @@ public class DicomPix {
                 if (count > 1) {
                     dev = (float) Math.sqrt((sumSq - (total * total) / count) / (count - 1));
                 }
+                // HOROS Preferences Viewers: "Compute Skewness and Kurtosis for ROI"
+                // 歪度（標準化3階積矩）/ 尖度（標準化4階積矩）を計算し、設定が有効な場合のみ反映する
+                if (dev > 0 && count > 2 && com.oculus.jj.config.AppPreferences.getBool("viewers.skewKurt", false)) {
+                    double[] sk = computeSkewKurt(total, sumSq, sumCube, sumFourth, count);
+                    roi.setSkewKurt(sk[0], sk[1]);
+                }
                 // 第5引数 (total) には、UI表示の便宜上 $mm^2$ 単位の面積を渡す
                 // HOROSの慣習に従い、rtotalは面積を保持する
                 roi.setStatistics(mean, max, min, dev, (float) sumArea, rescaleType);
@@ -1923,6 +1937,24 @@ public class DicomPix {
                 roi.setStatsCalculating(false);
             }
         }
+    }
+
+    /**
+     * 歪度・尖度を計算する（標準化積矩定義）。
+     * 戻り値は [skewness, kurtosis]。母集団2次モーメントが0以下なら [0, 0]。
+     * 引数は合計値（sum, sumSq, sumCube, sumFourth）とサンプル数。
+     */
+    public static double[] computeSkewKurt(double sum, double sumSq, double sumCube, double sumFourth, long count) {
+        if (count <= 0) return new double[]{0, 0};
+        double m = sum / count;
+        double m2 = sumSq / count - m * m;
+        if (m2 <= 0) return new double[]{0, 0};
+        double s2 = sumSq / count;
+        double s3 = sumCube / count;
+        double s4 = sumFourth / count;
+        double m3 = s3 - 3 * m * s2 + 2 * m * m * m;
+        double m4 = s4 - 4 * m * s3 + 6 * m * m * s2 - 3 * m * m * m * m;
+        return new double[]{m3 / Math.pow(m2, 1.5), m4 / (m2 * m2)};
     }
 
     /**

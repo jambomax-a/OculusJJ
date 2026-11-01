@@ -48,6 +48,68 @@ class DicomPixTest {
         assertTrue(Double.isNaN(DicomPix.calculateSUVScaleFactor(70.0, 370_000_000.0, 0.0, 0.0)));
     }
 
+    private static double[] moments(double... values) {
+        double sum = 0, sumSq = 0, sumCube = 0, sumFourth = 0;
+        for (double v : values) {
+            sum += v;
+            sumSq += v * v;
+            sumCube += v * v * v;
+            sumFourth += v * v * v * v;
+        }
+        return DicomPix.computeSkewKurt(sum, sumSq, sumCube, sumFourth, values.length);
+    }
+
+    @Test
+    void skewKurtIsZeroForSymmetricDistribution() {
+        // 対称分布 (1..5) → 歪度0
+        double[] sk = moments(1, 2, 3, 4, 5);
+        assertEquals(0.0, sk[0], 1e-9);
+        // 尖度 = μ4/σ^4 = 21.7 / (2)^2 = 1.7（正規分布=3から見て尖った分布）
+        assertEquals(1.7, sk[1], 1e-9);
+    }
+
+    @Test
+    void skewKurtDetectsRightSkew() {
+        double[] sk = moments(1, 1, 1, 2, 3, 10);
+        assertTrue(sk[0] > 0.5, "右歪分布は正の歪度になるべき: " + sk[0]);
+    }
+
+    @Test
+    void skewKurtConstantSamplesYieldZero() {
+        double[] sk = moments(5, 5, 5, 5);
+        assertEquals(0.0, sk[0], 1e-12);
+        assertEquals(0.0, sk[1], 1e-12);
+    }
+
+    @Test
+    void skewKurtEmptyInputYieldsZero() {
+        double[] sk = DicomPix.computeSkewKurt(0, 0, 0, 0, 0);
+        assertEquals(0.0, sk[0]);
+        assertEquals(0.0, sk[1]);
+    }
+
+    @Test
+    void dicomPrintBuildersPopulateFilmSessionFilmBoxAndImageBoxAttributes() {
+        org.dcm4che3.data.Attributes session = DicomService.buildFilmSessionAttributes();
+        assertTrue(session.containsValue(org.dcm4che3.data.Tag.NumberOfCopies));
+        assertTrue(session.containsValue(org.dcm4che3.data.Tag.PrintPriority));
+        assertTrue(session.containsValue(org.dcm4che3.data.Tag.MediumType));
+        assertTrue(session.containsValue(org.dcm4che3.data.Tag.FilmDestination));
+
+        org.dcm4che3.data.Attributes box = DicomService.buildFilmBoxAttributes("1.2.3.4", 2, 1);
+        assertEquals("STANDARD\\2,1", box.getString(org.dcm4che3.data.Tag.ImageDisplayFormat));
+        assertEquals("1.2.3.4", box.getSequence(org.dcm4che3.data.Tag.ReferencedFilmSessionSequence)
+                .get(0).getString(org.dcm4che3.data.Tag.ReferencedSOPInstanceUID));
+
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(4, 3, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        org.dcm4che3.data.Attributes imageBox = DicomService.buildGrayscaleImageBoxAttributes(img, 2);
+        assertEquals(2, imageBox.getInt(org.dcm4che3.data.Tag.ImageBoxPosition, 0));
+        org.dcm4che3.data.Attributes pixelItem = imageBox.getSequence(org.dcm4che3.data.Tag.BasicGrayscaleImageSequence).get(0);
+        assertEquals(3, pixelItem.getInt(org.dcm4che3.data.Tag.Rows, 0));
+        assertEquals(4, pixelItem.getInt(org.dcm4che3.data.Tag.Columns, 0));
+        assertEquals("MONOCHROME2", pixelItem.getString(org.dcm4che3.data.Tag.PhotometricInterpretation));
+    }
+
     @Test
     void patientUidUsesSelectedFieldsAndKeepsIdOnlyCompatibility() {
         java.util.Date birthDate = java.util.Date.from(java.time.LocalDate.of(2018, 4, 12)

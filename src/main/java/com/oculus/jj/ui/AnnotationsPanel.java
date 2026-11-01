@@ -49,6 +49,8 @@ public class AnnotationsPanel extends JFrame {
                         LanguageManager.get("annotations.col.sd", "SD"),
                         LanguageManager.get("annotations.col.min", "Min"),
                         LanguageManager.get("annotations.col.max", "Max"),
+                        LanguageManager.get("annotations.col.skew", "Skew"),
+                        LanguageManager.get("annotations.col.kurt", "Kurt"),
                         LanguageManager.get("annotations.col.locked", "Locked")
                 },
                 0) {
@@ -135,6 +137,7 @@ public class AnnotationsPanel extends JFrame {
                     && roi.getType() != DCMView.ToolMode.tArrow
                     && roi.getType() != DCMView.ToolMode.tText;
 
+            boolean showSkewKurt = com.oculus.jj.config.AppPreferences.getBool("viewers.skewKurt", false);
             double area = roi.getArea() / 100.0; // HOROS: formatArea(getArea() / 100.0)
             tableModel.addRow(new Object[]{
                     roi.getType() != null ? roi.getType().name() : "",
@@ -143,6 +146,8 @@ public class AnnotationsPanel extends JFrame {
                     hasStats ? String.format("%.2f", roi.getStDev()) : "-",
                     hasStats ? String.format("%.1f", roi.getMin()) : "-",
                     hasStats ? String.format("%.1f", roi.getMax()) : "-",
+                    (hasStats && showSkewKurt) ? String.format("%.3f", roi.getSkewness()) : "-",
+                    (hasStats && showSkewKurt) ? String.format("%.2f", roi.getKurtosis()) : "-",
                     roi.isLocked() ? "✓" : ""
             });
         }

@@ -11442,11 +11442,11 @@ public class BrowserController extends JFrame {
 
     /**
      * DICOMをプリント (HOROS: printDICOM:).
-     * HOROS の print:（ページ設定ダイアログ）と同様に、選択モードと From/To の
-     * スライダーとテキストを双方向同期させ、選択スライスをページ単位で出力する。
+     * 設定済みの DICOM Printer が存在する場合は DICOM Print Management (Basic Grayscale Print)
+     * で送信し、未設定の場合はメッセージを表示して通常のプリントダイアログまたは設定を案内する。
      */
     public void printDICOM(Object sender) {
-        showPrintDialog();
+        showPrintDialog(true);
     }
 
     /**
@@ -11458,11 +11458,24 @@ public class BrowserController extends JFrame {
      * 出力は Swing PrinterJob（プリンタまたはOSの「PDFとして保存」）でページ単位の画像をレンダリングする。
      */
     public void showPrintDialog() {
+        showPrintDialog(false);
+    }
+
+    public void showPrintDialog(boolean dicomPrintMode) {
         DCMView targetView = getActiveDCMViewForEdit();
         if (targetView == null) {
             JOptionPane.showMessageDialog(this,
                     LanguageManager.get("browser.print.noActiveView", "No active image view for printing"),
                     "Print", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        final com.oculus.jj.model.DicomNode dicomPrinter = dicomPrintMode
+                ? com.oculus.jj.model.DicomService.resolveConfiguredDicomPrinter() : null;
+        if (dicomPrintMode && dicomPrinter == null) {
+            JOptionPane.showMessageDialog(this,
+                    LanguageManager.get("browser.print.noDicomPrinter",
+                            "No DICOM printer is configured in Preferences > DICOM Print."),
+                    "DICOM Print", JOptionPane.WARNING_MESSAGE);
             return;
         }
         java.util.List<com.oculus.jj.model.DicomPix> pixList = targetView.getDcmPixList();
@@ -11606,11 +11619,41 @@ public class BrowserController extends JFrame {
                 catch (Exception ex) { pages[k] = null; okAll = false; }
             }
             int valid = 0;
-            for (java.awt.image.BufferedImage b : pages) if (b != null) valid++;
+            java.util.List<java.awt.image.BufferedImage> validPages = new java.util.ArrayList<>();
+            for (java.awt.image.BufferedImage b : pages) {
+                if (b != null) {
+                    valid++;
+                    validPages.add(b);
+                }
+            }
             if (valid == 0) {
                 JOptionPane.showMessageDialog(dialog,
                         LanguageManager.get("browser.print.renderFailed", "Failed to render the selected slices"),
                         "Print", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (dicomPrintMode && dicomPrinter != null) {
+                java.awt.Window viewerWin = javax.swing.SwingUtilities.getWindowAncestor(targetView);
+                java.awt.Dimension origSize = viewerWin != null ? viewerWin.getSize() : null;
+                if (viewerWin != null && com.oculus.jj.config.AppPreferences.getBool("dicomPrint.autoResizeWindow", true)) {
+                    int side = Math.min(origSize.width, origSize.height);
+                    if (side > 0) viewerWin.setSize(side, side);
+                }
+                try {
+                    com.oculus.jj.model.DicomService.getInstance().printDICOMImages(dicomPrinter, validPages);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(dialog,
+                            LanguageManager.get("browser.print.jobFailed", "Print job failed: ") + ex.getMessage(),
+                            "DICOM Print", JOptionPane.ERROR_MESSAGE);
+                    return;
+                } finally {
+                    if (viewerWin != null && origSize != null
+                            && com.oculus.jj.config.AppPreferences.getBool("dicomPrint.autoResizeWindow", true)) {
+                        viewerWin.setSize(origSize);
+                    }
+                }
+                dialog.dispose();
                 return;
             }
 

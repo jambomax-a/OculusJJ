@@ -268,15 +268,53 @@ public class QueryController extends JFrame {
         }
     }
 
+    /**
+     * HOROS Preferences On-Demand: "Maximum number of background auto-retrieve requests per server"
+     * サーバー毎の最大並行数（既定2、1〜6）を AppPreferences から読み取る。
+     */
+    private static int maxAutoRetrievePerServer() {
+        int max = com.oculus.jj.config.AppPreferences.getInt("ondemand.maxBackgroundRequests", 2);
+        return Math.max(1, Math.min(6, max));
+    }
+
+    /**
+     * 指定の並行度で C-MOVE を実行する共通ヘルパー（失敗一覧を返す）。
+     * Semaphore でサーバー毎の最大同時要求数を制御する。
+     */
+    private List<String> moveStudiesWithLimit(DicomNode node, List<String> uids, java.util.concurrent.Semaphore limiter, boolean cancellable) throws InterruptedException {
+        List<String> failures = new ArrayList<>();
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        for (String uid : uids) {
+            limiter.acquire();
+            if (cancellable && Thread.currentThread().isInterrupted()) break;
+            futures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    DicomService.getInstance().move(node, uid);
+                } catch (Exception ex) {
+                    synchronized (failures) { failures.add(uid + ": " + ex.getMessage()); }
+                } finally {
+                    limiter.release();
+                    autoRetrieveInFlight.remove(uid);
+                }
+            }));
+        }
+        for (java.util.concurrent.Future<?> f : futures) {
+            try { f.get(60, java.util.concurrent.TimeUnit.MINUTES); } catch (Exception ignored) { }
+        }
+        return failures;
+    }
+
     private void retrieveSmartAlbumResults(DicomNode node, List<String> uids) {
+        int limit = maxAutoRetrievePerServer();
         new SwingWorker<Void, Void>() {
             private final List<String> failures = new ArrayList<>();
 
             @Override protected Void doInBackground() {
-                for (String uid : uids) {
-                    try { DicomService.getInstance().move(node, uid); }
-                    catch (Exception ex) { failures.add(uid + ": " + ex.getMessage()); }
-                    finally { autoRetrieveInFlight.remove(uid); }
+                try {
+                    failures.addAll(moveStudiesWithLimit(node, uids,
+                            new java.util.concurrent.Semaphore(limit), false));
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
                 }
                 return null;
             }
@@ -791,23 +829,19 @@ public class QueryController extends JFrame {
         }
         if (studyUIDs.isEmpty()) return;
 
-        SwingWorker<Integer, String> worker = new SwingWorker<>() {
+        // HOROS Preferences On-Demand: "Maximum number of background auto-retrieve requests per server"
+        int limit = maxAutoRetrievePerServer();
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
             private final List<String> failures = new ArrayList<>();
 
-            @Override protected Integer doInBackground() {
-                int retrieved = 0;
-                for (String uid : studyUIDs) {
-                    if (isCancelled()) break;
-                    try {
-                        DicomService.getInstance().move(source, uid);
-                        retrieved++;
-                    } catch (Exception ex) {
-                        failures.add(uid + ": " + ex.getMessage());
-                    } finally {
-                        autoRetrieveInFlight.remove(uid);
-                    }
+            @Override protected Void doInBackground() {
+                try {
+                    failures.addAll(moveStudiesWithLimit(source, studyUIDs,
+                            new java.util.concurrent.Semaphore(limit), true));
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
                 }
-                return retrieved;
+                return null;
             }
 
             @Override protected void done() {
