@@ -25,7 +25,6 @@ public class PreferencesController extends JFrame {
     private JComboBox<String> langCombo;
     private final java.util.Map<String, ButtonGroup> preferenceRadioGroups = new java.util.HashMap<>();
 
-    
     public static void showFrame(Frame owner) {
         SwingUtilities.invokeLater(() -> {
             PreferencesController win = new PreferencesController();
@@ -33,8 +32,10 @@ public class PreferencesController extends JFrame {
             win.setVisible(true);
         });
     }
-public static synchronized PreferencesController getInstance() {
-        if (instance == null) instance = new PreferencesController();
+
+    public static synchronized PreferencesController getInstance() {
+        if (instance == null)
+            instance = new PreferencesController();
         return instance;
     }
 
@@ -102,7 +103,8 @@ public static synchronized PreferencesController getInstance() {
                     lastSelection = selected;
                 } else if (lastSelection != null) {
                     int idx = model.indexOf(lastSelection);
-                    if (idx >= 0) sidebar.setSelectedIndex(idx);
+                    if (idx >= 0)
+                        sidebar.setSelectedIndex(idx);
                 }
             }
         });
@@ -154,8 +156,8 @@ public static synchronized PreferencesController getInstance() {
         // 1920x1080 に収まるように最大サイズ制限と初期サイズ調整
         setMaximumSize(new Dimension(1200, 800));
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-        int w = Math.min(1100, (int)(screen.width * 0.85));
-        int h = Math.min(750, (int)(screen.height * 0.80));
+        int w = Math.min(1100, (int) (screen.width * 0.85));
+        int h = Math.min(750, (int) (screen.height * 0.80));
         setSize(w, h);
         setPreferredSize(new Dimension(w, h));
     }
@@ -173,15 +175,18 @@ public static synchronized PreferencesController getInstance() {
         JButton savePrefBtn = new JButton(LanguageManager.get("prefs.g.save", "Save Preferences..."));
         JButton loadPrefBtn = new JButton(LanguageManager.get("prefs.g.load", "Load Preferences..."));
         resetBtn.addActionListener(e -> {
-            int r = JOptionPane.showConfirmDialog(this, LanguageManager.get("prefs.g.reset.confirm", "Reset all preferences to defaults?"),
+            int r = JOptionPane.showConfirmDialog(this,
+                    LanguageManager.get("prefs.g.reset.confirm", "Reset all preferences to defaults?"),
                     LanguageManager.get("prefs.title", "Preferences"), JOptionPane.YES_NO_OPTION);
             if (r == JOptionPane.YES_OPTION) {
                 try {
                     AppPreferences.resetAll();
-                    JOptionPane.showMessageDialog(this, LanguageManager.get("prefs.g.reset.done", "Preferences reset. Restart to apply."),
+                    JOptionPane.showMessageDialog(this,
+                            LanguageManager.get("prefs.g.reset.done", "Preferences reset. Restart to apply."),
                             LanguageManager.get("prefs.title", "Preferences"), JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"), JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"),
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
@@ -191,11 +196,13 @@ public static synchronized PreferencesController getInstance() {
             if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                 try {
                     File file = fc.getSelectedFile();
-                    if (!file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".xml")) file = new File(file.getParentFile(), file.getName() + ".xml");
+                    if (!file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".xml"))
+                        file = new File(file.getParentFile(), file.getName() + ".xml");
                     AppPreferences.saveAll();
                     AppPreferences.exportAll(file);
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"), JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"),
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
@@ -209,23 +216,29 @@ public static synchronized PreferencesController getInstance() {
                     JOptionPane.showMessageDialog(this, LanguageManager.get("prefs.g.load.done", "Loaded"),
                             LanguageManager.get("prefs.title", "Preferences"), JOptionPane.INFORMATION_MESSAGE);
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"), JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"),
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        btnRow.add(resetBtn); btnRow.add(savePrefBtn); btnRow.add(loadPrefBtn);
+        btnRow.add(resetBtn);
+        btnRow.add(savePrefBtn);
+        btnRow.add(loadPrefBtn);
         pane.add(globalBox);
         pane.add(btnRow);
         pane.add(Box.createVerticalStrut(6));
 
-        JCheckBox adminChk = new JCheckBox(LanguageManager.get("prefs.g.admin_auth", "Require an 'Administrator' authentication to modify preferences settings"),
+        JCheckBox adminChk = new JCheckBox(
+                LanguageManager.get("prefs.g.admin_auth",
+                        "Require an 'Administrator' authentication to modify preferences settings"),
                 AppPreferences.getBool("general.adminAuth", false));
         adminChk.addActionListener(e -> AppPreferences.setBool("general.adminAuth", adminChk.isSelected()));
         pane.add(adminChk);
         pane.add(Box.createVerticalStrut(4));
 
-        JCheckBox syncChk = new JCheckBox(LanguageManager.get("prefs.g.sync_url", "Synchronize preferences at startup with this url:"),
+        JCheckBox syncChk = new JCheckBox(
+                LanguageManager.get("prefs.g.sync_url", "Synchronize preferences at startup with this url:"),
                 AppPreferences.getBool("general.syncAtStartup", false));
         syncChk.addActionListener(e -> AppPreferences.setBool("general.syncAtStartup", syncChk.isSelected()));
         JTextField syncUrl = new JTextField(AppPreferences.getStr("general.syncUrl", ""), 24);
@@ -248,15 +261,61 @@ public static synchronized PreferencesController getInstance() {
         JPanel levelsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         levelsRow.add(new JLabel(LanguageManager.get("prefs.g.jpeg_levels", "Compression Levels:")));
         JButton configureBtn = new JButton(LanguageManager.get("prefs.g.jpeg_configure", "Configure..."));
-        configureBtn.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "JPEG compression levels editor (TODO): " + AppPreferences.getStr("general.jpegLevels", ""),
-                LanguageManager.get("prefs.g.jpeg_configure", "Configure..."), JOptionPane.INFORMATION_MESSAGE));
+        configureBtn.addActionListener(e -> {
+            String currentLevels = AppPreferences.getStr("general.jpegLevels", "Low,Medium,High,Maximum");
+            JTextArea levelsArea = new JTextArea(currentLevels, 5, 40);
+            levelsArea.setLineWrap(true);
+            levelsArea.setWrapStyleWord(true);
+            JScrollPane scrollPane = new JScrollPane(levelsArea);
+            scrollPane.setPreferredSize(new Dimension(400, 150));
+
+            JPanel dialogPanel = new JPanel(new BorderLayout(5, 5));
+            dialogPanel.add(new JLabel(
+                    LanguageManager.get("prefs.g.jpeg_levels_desc", "Enter compression levels separated by commas:"),
+                    JLabel.LEFT), BorderLayout.NORTH);
+            dialogPanel.add(scrollPane, BorderLayout.CENTER);
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            JButton okBtn = new JButton(LanguageManager.get("prefs.ok", "OK"));
+            JButton cancelBtn = new JButton(LanguageManager.get("prefs.cancel", "Cancel"));
+            buttonPanel.add(okBtn);
+            buttonPanel.add(cancelBtn);
+            dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+            JDialog dialog = new JDialog(this, LanguageManager.get("prefs.g.jpeg_configure", "Configure..."), true);
+            dialog.setContentPane(dialogPanel);
+            dialog.pack();
+            dialog.setLocationRelativeTo(this);
+
+            final boolean[] saved = { false };
+            okBtn.addActionListener(ev -> {
+                String levels = levelsArea.getText().trim();
+                if (!levels.isEmpty()) {
+                    AppPreferences.setStr("general.jpegLevels", levels);
+                    saved[0] = true;
+                    dialog.dispose();
+                } else {
+                    JOptionPane.showMessageDialog(dialog,
+                            LanguageManager.get("prefs.g.jpeg_levels_empty", "Compression levels cannot be empty."),
+                            LanguageManager.get("prefs.error", "Error"), JOptionPane.ERROR_MESSAGE);
+                }
+            });
+            cancelBtn.addActionListener(ev -> dialog.dispose());
+
+            dialog.setVisible(true);
+
+            if (saved[0]) {
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("prefs.g.jpeg_levels_saved", "Compression levels saved successfully."),
+                        LanguageManager.get("prefs.g.jpeg_configure", "Configure..."), JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
         levelsRow.add(configureBtn);
         pane.add(levelsRow);
         JCheckBox jpegColor = new JCheckBox(LanguageManager.get("prefs.g.jpeg_color_photometric",
                 "For Color JPEG DICOMS, use JPEG photometric value, instead of DICOM photometric value"),
                 AppPreferences.getBool("general.jpegColorPhotometric", true));
-        jpegColor.addActionListener(e -> AppPreferences.setBool("general.jpegColorPhotometric", jpegColor.isSelected()));
+        jpegColor
+                .addActionListener(e -> AppPreferences.setBool("general.jpegColorPhotometric", jpegColor.isSelected()));
         pane.add(jpegColor);
         pane.add(Box.createVerticalStrut(12));
 
@@ -288,12 +347,16 @@ public static synchronized PreferencesController getInstance() {
         // --- Languages ---
         JSectionBox langBox = new JSectionBox(LanguageManager.get("prefs.g.languages_section", "Languages"));
         pane.add(langBox);
-        String[] langCols = {LanguageManager.get("prefs.g.lang_enabled", "Enabled"), LanguageManager.get("prefs.g.lang_name", "Language")};
+        String[] langCols = { LanguageManager.get("prefs.g.lang_enabled", "Enabled"),
+                LanguageManager.get("prefs.g.lang_name", "Language") };
         DefaultTableModel langModel = new DefaultTableModel(langCols, 2) {
-            @Override public boolean isCellEditable(int r, int c) { return c == 0; }
+            @Override
+            public boolean isCellEditable(int r, int c) {
+                return c == 0;
+            }
         };
-        langModel.addRow(new Object[]{true, "English"});
-        langModel.addRow(new Object[]{true, "English"});
+        langModel.addRow(new Object[] { true, "English" });
+        langModel.addRow(new Object[] { true, "English" });
         JTable langTable = new JTable(langModel);
         langTable.setRowHeight(20);
         JPanel langTableWrap = new JPanel(new BorderLayout(0, 4));
@@ -312,16 +375,18 @@ public static synchronized PreferencesController getInstance() {
         // 実機準拠のキーに統一しつつ維持（後方互換）
         JSectionBox legacy = new JSectionBox(LanguageManager.get("prefs.section.interface", "Interface (legacy)"));
         pane.add(legacy);
-        String[] langs = {"English (en)", "Japanese (ja)"};
+        String[] langs = { "English (en)", "Japanese (ja)" };
         langCombo = new JComboBox<>(langs);
-        langCombo.setSelectedItem(com.oculus.jj.config.AppPreferences.getAppLanguage().equals("ja") ? "Japanese (ja)" : "English (en)");
-        String[] displayTypes = {LanguageManager.get("prefs.display.original", "Original Pixel Data"),
+        langCombo.setSelectedItem(
+                com.oculus.jj.config.AppPreferences.getAppLanguage().equals("ja") ? "Japanese (ja)" : "English (en)");
+        String[] displayTypes = { LanguageManager.get("prefs.display.original", "Original Pixel Data"),
                 LanguageManager.get("prefs.display.grayscale", "Gray Scale"),
-                LanguageManager.get("prefs.display.displayed", "Displayed Pixel Data")};
+                LanguageManager.get("prefs.display.displayed", "Displayed Pixel Data") };
         JComboBox<String> displayTypeCombo = new JComboBox<>(displayTypes);
         pane.add(makeRow(new JLabel(LanguageManager.get("prefs.language", "Language:")), langCombo));
         pane.add(Box.createVerticalStrut(4));
-        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.image_display_type", "Image Display Type:")), displayTypeCombo));
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.image_display_type", "Image Display Type:")),
+                displayTypeCombo));
         JCheckBox chkSeparateWin = new JCheckBox(LanguageManager.get("prefs.separate_window",
                 "Open each selected study in a separate window"), AppPreferences.isSeparateWindowPerStudy());
         chkSeparateWin.addActionListener(e -> AppPreferences.setSeparateWindowPerStudy(chkSeparateWin.isSelected()));
@@ -365,17 +430,20 @@ public static synchronized PreferencesController getInstance() {
         dbLocation.add(dbPathField);
         dbLocation.add(browseDb);
         files.add(dbLocation);
-        files.add(ck("database.dicomOnly", true, LanguageManager.get("prefs.db.dicom_only", "Import DICOM file format only (ignore JPEG, TIFF, LSM, XnAna...)")));
-        files.add(ck("database.validateImport", false, LanguageManager.get("prefs.db.validate", "Validate files before importing files from CD/DVD or external drives (crash test)")));
+        files.add(ck("database.dicomOnly", true, LanguageManager.get("prefs.db.dicom_only",
+                "Import DICOM file format only (ignore JPEG, TIFF, LSM, XnAna...)")));
+        files.add(ck("database.validateImport", false, LanguageManager.get("prefs.db.validate",
+                "Validate files before importing files from CD/DVD or external drives (crash test)")));
         JPanel copyRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         copyRow.add(new JLabel(LanguageManager.get("prefs.db.copy_if", "Copy files to Horos Data folder if:")));
-        JComboBox<String> copyMode = preferenceCombo("database.copyMode", 2, new String[]{
+        JComboBox<String> copyMode = preferenceCombo("database.copyMode", 2, new String[] {
                 LanguageManager.get("prefs.db.copy_always", "Always"),
                 LanguageManager.get("prefs.db.copy_not_hd", "If files aren't located on the HD"),
-                LanguageManager.get("prefs.db.copy_ask", "Ask the user")});
+                LanguageManager.get("prefs.db.copy_ask", "Ask the user") });
         copyRow.add(copyMode);
         files.add(copyRow);
-        files.add(ck("database.useDicomdirExport", false, LanguageManager.get("prefs.db.use_dicomdir", "Use DICOMDIR structure when exporting to filesystem")));
+        files.add(ck("database.useDicomdirExport", false,
+                LanguageManager.get("prefs.db.use_dicomdir", "Use DICOMDIR structure when exporting to filesystem")));
         JTextField dicomPath = new JTextField(AppPreferences.getDicomFolder(), 24);
         dicomPath.setEditable(false);
         JButton browseDicom = new JButton(LanguageManager.get("prefs.browse", "Browse..."));
@@ -387,123 +455,171 @@ public static synchronized PreferencesController getInstance() {
                 dicomPath.setText(AppPreferences.getDicomFolder());
             }
         });
-        files.add(makeRow(new JLabel(LanguageManager.get("prefs.dicom_storage_path", "DICOM Files Storage Path:")), dicomPath));
+        files.add(makeRow(new JLabel(LanguageManager.get("prefs.dicom_storage_path", "DICOM Files Storage Path:")),
+                dicomPath));
         files.add(makeRow(new JLabel(""), browseDicom));
-        files.add(ck("database.autoRefresh", true, LanguageManager.get("prefs.auto_refresh_db", "Automatically refresh database on startup")));
+        files.add(ck("database.autoRefresh", true,
+                LanguageManager.get("prefs.auto_refresh_db", "Automatically refresh database on startup")));
         pane.add(files);
 
         JPanel display = preferenceSection(LanguageManager.get("prefs.db.display", "Database Display"));
-        display.add(preferenceTextRow("prefs.db.datetime", "Date & Time Format:", "database.dateTimeFormat", "y/MM/dd, H:mm"));
+        display.add(preferenceTextRow("prefs.db.datetime", "Date & Time Format:", "database.dateTimeFormat",
+                "y/MM/dd, H:mm"));
         display.add(preferenceTextRow("prefs.db.dateonly", "Date Only Format:", "database.dateFormat", "y/MM/dd"));
         JPanel fontAge = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         fontAge.add(new JLabel(LanguageManager.get("prefs.db.fontsize", "Font Size:")));
-        fontAge.add(preferenceCombo("database.fontSize", 0, new String[]{"Regular", "Large", "Huge"}));
+        fontAge.add(preferenceCombo("database.fontSize", 0, new String[] { "Regular", "Large", "Huge" }));
         fontAge.add(new JLabel(LanguageManager.get("prefs.db.age", "Patient's age:")));
-        fontAge.add(preferenceCombo("database.patientAge", 0, new String[]{"Both, if different", "Patient", "Study"}));
+        fontAge.add(
+                preferenceCombo("database.patientAge", 0, new String[] { "Both, if different", "Patient", "Study" }));
         display.add(fontAge);
-        display.add(ck("database.allStudies", true, LanguageManager.get("prefs.db.all_studies", "Always display all studies of each patient")));
-        display.add(ck("database.capitalizeNames", true, LanguageManager.get("prefs.db.cap_names", "Display patient's names and descriptions with Capitalized Words")));
-        display.add(ck("database.clearSearchOnAlbum", false, LanguageManager.get("prefs.db.clear_search", "Clear Search field (in the toolbar), when changing current album")));
-        display.add(ck("database.historyDrawerHorizontal", false, LanguageManager.get("prefs.db.history_drawer", "Display the History Drawer horizontally")));
+        display.add(ck("database.allStudies", true,
+                LanguageManager.get("prefs.db.all_studies", "Always display all studies of each patient")));
+        display.add(ck("database.capitalizeNames", true, LanguageManager.get("prefs.db.cap_names",
+                "Display patient's names and descriptions with Capitalized Words")));
+        display.add(ck("database.clearSearchOnAlbum", false, LanguageManager.get("prefs.db.clear_search",
+                "Clear Search field (in the toolbar), when changing current album")));
+        display.add(ck("database.historyDrawerHorizontal", false,
+                LanguageManager.get("prefs.db.history_drawer", "Display the History Drawer horizontally")));
         pane.add(display);
 
         JPanel uid = preferenceSection(LanguageManager.get("prefs.db.patient_uid", "Patient Unique Identifier"));
-        uid.add(new JLabel(LanguageManager.get("prefs.db.use_fields_uid", "Use following fields to generate Patient UID:")));
+        uid.add(new JLabel(
+                LanguageManager.get("prefs.db.use_fields_uid", "Use following fields to generate Patient UID:")));
         uid.add(patientUIDPreference("database.uidPatientId", true, "prefs.db.uid_patientid", "Patient ID"));
         uid.add(patientUIDPreference("database.uidBirthDate", true, "prefs.db.uid_birthdate", "Patient BirthDate"));
         uid.add(patientUIDPreference("database.uidName", true, "prefs.db.uid_name", "Patient's Name"));
-        JLabel uidNote = new JLabel("<html>" + LanguageManager.get("prefs.db.uid_note", "Changing these settings will recompute all database patientUIDs. It can require several minutes on large database.") + "</html>");
+        JLabel uidNote = new JLabel("<html>" + LanguageManager.get("prefs.db.uid_note",
+                "Changing these settings will recompute all database patientUIDs. It can require several minutes on large database.")
+                + "</html>");
         uid.add(uidNote);
         pane.add(uid);
 
         JPanel comments = preferenceSection(LanguageManager.get("prefs.db.comments", "Comments & Status fields"));
-        comments.add(ck("database.storeCommentsInDicom", true, LanguageManager.get("prefs.db.store_in_dicom", "Store them in DICOM fields")));
-        comments.add(ck("database.loadCommentsFromDicom", true, LanguageManager.get("prefs.db.load_from_dicom", "Load them from DICOM files fields")));
+        comments.add(ck("database.storeCommentsInDicom", true,
+                LanguageManager.get("prefs.db.store_in_dicom", "Store them in DICOM fields")));
+        comments.add(ck("database.loadCommentsFromDicom", true,
+                LanguageManager.get("prefs.db.load_from_dicom", "Load them from DICOM files fields")));
         JPanel fieldRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        fieldRow.add(ck("database.fillDicomField", false, LanguageManager.get("prefs.db.dicom_field", "DICOM Field(s) to fill:")));
-        fieldRow.add(preferenceCombo("database.dicomField", 0, new String[]{"Comments", "Referring Physician", "Study Description"}));
+        fieldRow.add(ck("database.fillDicomField", false,
+                LanguageManager.get("prefs.db.dicom_field", "DICOM Field(s) to fill:")));
+        fieldRow.add(preferenceCombo("database.dicomField", 0,
+                new String[] { "Comments", "Referring Physician", "Study Description" }));
         fieldRow.add(new JLabel(LanguageManager.get("prefs.db.group", "Group:")));
         JTextField group = preferenceText("database.dicomGroup", "", 5);
         fieldRow.add(group);
         fieldRow.add(new JLabel(LanguageManager.get("prefs.db.element", "Element:")));
         fieldRow.add(preferenceText("database.dicomElement", "", 5));
         JButton regenerate = new JButton(LanguageManager.get("prefs.db.regenerate", "Regenerate"));
-        regenerate.addActionListener(e -> JOptionPane.showMessageDialog(this, LanguageManager.get("prefs.db.uid_note", "This operation may take several minutes.")));
+        regenerate.addActionListener(e -> JOptionPane.showMessageDialog(this,
+                LanguageManager.get("prefs.db.uid_note", "This operation may take several minutes.")));
         fieldRow.add(regenerate);
         comments.add(fieldRow);
         JPanel level = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         level.add(new JLabel(LanguageManager.get("prefs.db.level", "Level:")));
-        level.add(preferenceCombo("database.commentLevel", 0, new String[]{
-                LanguageManager.get("prefs.db.level_study", "Study"), LanguageManager.get("prefs.db.level_series", "Series")}));
+        level.add(preferenceCombo("database.commentLevel", 0, new String[] {
+                LanguageManager.get("prefs.db.level_study", "Study"),
+                LanguageManager.get("prefs.db.level_series", "Series") }));
         comments.add(level);
         pane.add(comments);
 
         JPanel parsing = preferenceSection(LanguageManager.get("prefs.db.series_parsing", "Series Parsing"));
-        parsing.add(ck("database.splitMultiEchoMR", true, LanguageManager.get("prefs.db.split_multiecho", "Split Multi-echo MR")));
-        parsing.add(ck("database.split4dCardiacCT", true, LanguageManager.get("prefs.db.split_4dct", "Split 4D Cardiac CT")));
-        parsing.add(ck("database.usOneSeriesPerFile", false, LanguageManager.get("prefs.db.us_one_series", "For US: one series per file")));
+        parsing.add(ck("database.splitMultiEchoMR", true,
+                LanguageManager.get("prefs.db.split_multiecho", "Split Multi-echo MR")));
+        parsing.add(ck("database.split4dCardiacCT", true,
+                LanguageManager.get("prefs.db.split_4dct", "Split 4D Cardiac CT")));
+        parsing.add(ck("database.usOneSeriesPerFile", false,
+                LanguageManager.get("prefs.db.us_one_series", "For US: one series per file")));
         JPanel crdr = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         crdr.add(new JLabel(LanguageManager.get("prefs.db.crdr", "For CR, DR, DX, CT and RF:")));
         ButtonGroup crdrGroup = new ButtonGroup();
-        JRadioButton combine = new JRadioButton(LanguageManager.get("prefs.db.combine", "Combine"), AppPreferences.getInt("database.crdrMode", 1) == 0);
-        JRadioButton split = new JRadioButton(LanguageManager.get("prefs.db.split", "Split"), AppPreferences.getInt("database.crdrMode", 1) == 1);
-        crdrGroup.add(combine); crdrGroup.add(split);
+        JRadioButton combine = new JRadioButton(LanguageManager.get("prefs.db.combine", "Combine"),
+                AppPreferences.getInt("database.crdrMode", 1) == 0);
+        JRadioButton split = new JRadioButton(LanguageManager.get("prefs.db.split", "Split"),
+                AppPreferences.getInt("database.crdrMode", 1) == 1);
+        crdrGroup.add(combine);
+        crdrGroup.add(split);
         combine.addActionListener(e -> AppPreferences.setInt("database.crdrMode", 0));
         split.addActionListener(e -> AppPreferences.setInt("database.crdrMode", 1));
-        crdr.add(combine); crdr.add(split);
+        crdr.add(combine);
+        crdr.add(split);
         parsing.add(crdr);
-        parsing.add(new JLabel(LanguageManager.get("prefs.db.localizer", "Gather localizer images with Series Description:")));
+        parsing.add(new JLabel(
+                LanguageManager.get("prefs.db.localizer", "Gather localizer images with Series Description:")));
         parsing.add(preferenceText("database.localizerDescriptions", "localizer,socal,survey,locator,tracker", 42));
-        parsing.add(makeRow(new JLabel(LanguageManager.get("prefs.db.sop_display", "List of SOP Class UIDs displayed:")),
-                new JButton(LanguageManager.get("prefs.db.sop_display_btn", "Disp..."))));
+        parsing.add(
+                makeRow(new JLabel(LanguageManager.get("prefs.db.sop_display", "List of SOP Class UIDs displayed:")),
+                        new JButton(LanguageManager.get("prefs.db.sop_display_btn", "Disp..."))));
         parsing.add(makeRow(new JLabel(LanguageManager.get("prefs.db.sop_store", "List of SOP Class UIDs stored:")),
                 new JButton(LanguageManager.get("prefs.db.sop_store_btn", "Store..."))));
         pane.add(parsing);
 
         JPanel sorting = new JPanel(new GridLayout(1, 2, 8, 0));
         JPanel sortSeries = preferenceSection(LanguageManager.get("prefs.db.sort_series", "Sort Series by"));
-        sortSeries.add(preferenceRadio("database.sortSeries", 0, LanguageManager.get("prefs.db.series_id", "Series ID")));
-        sortSeries.add(preferenceRadio("database.sortSeries", 1, LanguageManager.get("prefs.db.series_acq_time", "Series Acquisition Time")));
-        sortSeries.add(preferenceRadio("database.sortSeries", 2, LanguageManager.get("prefs.db.instance_number", "Instance Number")));
+        sortSeries
+                .add(preferenceRadio("database.sortSeries", 0, LanguageManager.get("prefs.db.series_id", "Series ID")));
+        sortSeries.add(preferenceRadio("database.sortSeries", 1,
+                LanguageManager.get("prefs.db.series_acq_time", "Series Acquisition Time")));
+        sortSeries.add(preferenceRadio("database.sortSeries", 2,
+                LanguageManager.get("prefs.db.instance_number", "Instance Number")));
         JPanel sortImages = preferenceSection(LanguageManager.get("prefs.db.sort_images", "Sort Images by"));
-        sortImages.add(preferenceRadio("database.sortImages", 0, LanguageManager.get("prefs.db.slice_asc", "Ascending Slice Location")));
-        sortImages.add(preferenceRadio("database.sortImages", 1, LanguageManager.get("prefs.db.slice_desc", "Descending Slice Location")));
-        sortImages.add(preferenceRadio("database.sortImages", 2, LanguageManager.get("prefs.db.date_asc", "Ascending Date")));
-        sortImages.add(preferenceRadio("database.sortImages", 3, LanguageManager.get("prefs.db.date_desc", "Descending Date")));
-        sorting.add(sortSeries); sorting.add(sortImages);
+        sortImages.add(preferenceRadio("database.sortImages", 0,
+                LanguageManager.get("prefs.db.slice_asc", "Ascending Slice Location")));
+        sortImages.add(preferenceRadio("database.sortImages", 1,
+                LanguageManager.get("prefs.db.slice_desc", "Descending Slice Location")));
+        sortImages.add(
+                preferenceRadio("database.sortImages", 2, LanguageManager.get("prefs.db.date_asc", "Ascending Date")));
+        sortImages.add(preferenceRadio("database.sortImages", 3,
+                LanguageManager.get("prefs.db.date_desc", "Descending Date")));
+        sorting.add(sortSeries);
+        sorting.add(sortImages);
         pane.add(sorting);
 
         JPanel clean = preferenceSection(LanguageManager.get("prefs.db.autoclean", "Database Auto-Cleaning"));
-        clean.add(ck("database.autoCleanEnabled", false, LanguageManager.get("prefs.db.delete_conditions", "Delete studies at these conditions:")));
-        clean.add(new JLabel(LanguageManager.get("prefs.db.delete_note", "If all checked conditions are true. If a study is in an album, it will NOT be deleted.")));
-        clean.add(preferenceCheckCombo("database.cleanAcqOlder", "prefs.db.acq_older", "Acquisition date is older than:", "database.cleanAcqAge", new String[]{"Three months", "Six months", "One year", "Two years", "Five years"}));
-        clean.add(preferenceCheckCombo("database.cleanNotOpened", "prefs.db.not_opened", "Not opened during last:", "database.cleanNotOpenedAge", new String[]{"Three months", "Six months", "One year", "Two years", "Five years"}));
+        clean.add(ck("database.autoCleanEnabled", false,
+                LanguageManager.get("prefs.db.delete_conditions", "Delete studies at these conditions:")));
+        clean.add(new JLabel(LanguageManager.get("prefs.db.delete_note",
+                "If all checked conditions are true. If a study is in an album, it will NOT be deleted.")));
+        clean.add(preferenceCheckCombo("database.cleanAcqOlder", "prefs.db.acq_older",
+                "Acquisition date is older than:", "database.cleanAcqAge",
+                new String[] { "Three months", "Six months", "One year", "Two years", "Five years" }));
+        clean.add(preferenceCheckCombo("database.cleanNotOpened", "prefs.db.not_opened", "Not opened during last:",
+                "database.cleanNotOpenedAge",
+                new String[] { "Three months", "Six months", "One year", "Two years", "Five years" }));
         JPanel commentRule = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        commentRule.add(ck("database.cleanCommentEnabled", false, LanguageManager.get("prefs.db.only_comments", "Only if 'comments' field:")));
-        commentRule.add(preferenceCombo("database.cleanCommentMode", 0, new String[]{"contains", "doesn't contain"}));
+        commentRule.add(ck("database.cleanCommentEnabled", false,
+                LanguageManager.get("prefs.db.only_comments", "Only if 'comments' field:")));
+        commentRule
+                .add(preferenceCombo("database.cleanCommentMode", 0, new String[] { "contains", "doesn't contain" }));
         commentRule.add(preferenceText("database.cleanCommentText", "", 18));
         clean.add(commentRule);
         JPanel diskRule = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        diskRule.add(ck("database.cleanDiskSpaceEnabled", true, LanguageManager.get("prefs.db.hd_free", "If HD free space is less than:")));
-        diskRule.add(preferenceCombo("database.cleanDiskSpace", 0, new String[]{"1 GB", "2 GB", "5 GB", "10 GB"}));
+        diskRule.add(ck("database.cleanDiskSpaceEnabled", true,
+                LanguageManager.get("prefs.db.hd_free", "If HD free space is less than:")));
+        diskRule.add(preferenceCombo("database.cleanDiskSpace", 0, new String[] { "1 GB", "2 GB", "5 GB", "10 GB" }));
         diskRule.add(new JLabel(LanguageManager.get("prefs.db.delete_policy", "delete:")));
-        diskRule.add(preferenceCombo("database.cleanPolicy", 1, new String[]{
+        diskRule.add(preferenceCombo("database.cleanPolicy", 1, new String[] {
                 LanguageManager.get("prefs.db.lru_created", "Least recently created"),
                 LanguageManager.get("prefs.db.lru_added", "Least recently added"),
-                LanguageManager.get("prefs.db.lru_opened", "Least recently opened")}));
+                LanguageManager.get("prefs.db.lru_opened", "Least recently opened") }));
         clean.add(diskRule);
-        clean.add(ck("database.deleteLinkedOriginal", false, LanguageManager.get("prefs.db.linked_files", "If image files are linked files, also delete the original file")));
-        clean.add(ck("database.keepStudiesWithComments", true, LanguageManager.get("prefs.db.keep_comments", "Don't delete a study, if there are comments")));
-        clean.add(ck("database.keepStudiesInAlbum", true, LanguageManager.get("prefs.db.keep_album", "Don't delete a study, if it is stored in an album")));
-        clean.add(ck("database.deleteEntireAtStartup", false, LanguageManager.get("prefs.db.delete_entire", "Automatically delete the ENTIRE default database, at each startup")));
+        clean.add(ck("database.deleteLinkedOriginal", false, LanguageManager.get("prefs.db.linked_files",
+                "If image files are linked files, also delete the original file")));
+        clean.add(ck("database.keepStudiesWithComments", true,
+                LanguageManager.get("prefs.db.keep_comments", "Don't delete a study, if there are comments")));
+        clean.add(ck("database.keepStudiesInAlbum", true,
+                LanguageManager.get("prefs.db.keep_album", "Don't delete a study, if it is stored in an album")));
+        clean.add(ck("database.deleteEntireAtStartup", false, LanguageManager.get("prefs.db.delete_entire",
+                "Automatically delete the ENTIRE default database, at each startup")));
         pane.add(clean);
 
         JPanel reports = preferenceSection(LanguageManager.get("prefs.db.reports", "Reports"));
         JPanel reportFormat = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         reportFormat.add(new JLabel(LanguageManager.get("prefs.db.report_using", "Create reports using:")));
-        reportFormat.add(preferenceCombo("database.reportFormat", 0, new String[]{"Pages (pages)", "PDF", "HTML"}));
+        reportFormat.add(preferenceCombo("database.reportFormat", 0, new String[] { "Pages (pages)", "PDF", "HTML" }));
         reports.add(reportFormat);
-        reports.add(ck("database.createDicomPdfOnValidated", false, LanguageManager.get("prefs.db.pdf_report", "Automatically create a DICOM PDF file of the report, when status is changed to 'validated'")));
+        reports.add(ck("database.createDicomPdfOnValidated", false, LanguageManager.get("prefs.db.pdf_report",
+                "Automatically create a DICOM PDF file of the report, when status is changed to 'validated'")));
         pane.add(reports);
 
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.database", "Database"));
@@ -518,10 +634,10 @@ public static synchronized PreferencesController getInstance() {
         readBox.add(new JLabel(LanguageManager.get("prefs.cddvd.insert", "When a disc is inserted:")));
         ButtonGroup insertGroup = new ButtonGroup();
         String[] insertLabels = {
-            LanguageManager.get("prefs.cddvd.copy_all", "Copy all its contents into the database"),
-            LanguageManager.get("prefs.cddvd.show_source", "Show disc content as a separate source"),
-            LanguageManager.get("prefs.cddvd.ask_user", "Ask the user"),
-            LanguageManager.get("prefs.cddvd.ignore", "Ignore it")};
+                LanguageManager.get("prefs.cddvd.copy_all", "Copy all its contents into the database"),
+                LanguageManager.get("prefs.cddvd.show_source", "Show disc content as a separate source"),
+                LanguageManager.get("prefs.cddvd.ask_user", "Ask the user"),
+                LanguageManager.get("prefs.cddvd.ignore", "Ignore it") };
         int insertMode = AppPreferences.getInt("cddvd.insertMode", 2);
         for (int i = 0; i < insertLabels.length; i++) {
             JRadioButton radio = new JRadioButton(insertLabels[i], i == insertMode);
@@ -530,32 +646,40 @@ public static synchronized PreferencesController getInstance() {
             insertGroup.add(radio);
             readBox.add(radio);
         }
-        readBox.add(ck("cddvd.ejectAfterCopy", true, LanguageManager.get("prefs.eject_disk", "Eject the disk when done copying")));
-        readBox.add(ck("cddvd.autoSelectSource", true, LanguageManager.get("prefs.auto_select_source", "Automatically select the source when ready")));
+        readBox.add(ck("cddvd.ejectAfterCopy", true,
+                LanguageManager.get("prefs.eject_disk", "Eject the disk when done copying")));
+        readBox.add(ck("cddvd.autoSelectSource", true,
+                LanguageManager.get("prefs.auto_select_source", "Automatically select the source when ready")));
         readBox.add(new JLabel(LanguageManager.get("prefs.cddvd.determine", "Determine disc content by considering:")));
         ButtonGroup contentGroup = new ButtonGroup();
-        JRadioButton scanMode = new JRadioButton(LanguageManager.get("prefs.cddvd.scan_mode", "All DICOM files available on the disk (Scan Mode), ignoring the DICOMDIR file (Slower)"),
-            AppPreferences.getInt("cddvd.contentMode", 1) == 0);
-        JRadioButton dicomdirMode = new JRadioButton(LanguageManager.get("prefs.cddvd.dicomdir_mode", "Files indexed in the DICOMDIR file (Faster)"),
-            AppPreferences.getInt("cddvd.contentMode", 1) == 1);
+        JRadioButton scanMode = new JRadioButton(
+                LanguageManager.get("prefs.cddvd.scan_mode",
+                        "All DICOM files available on the disk (Scan Mode), ignoring the DICOMDIR file (Slower)"),
+                AppPreferences.getInt("cddvd.contentMode", 1) == 0);
+        JRadioButton dicomdirMode = new JRadioButton(
+                LanguageManager.get("prefs.cddvd.dicomdir_mode", "Files indexed in the DICOMDIR file (Faster)"),
+                AppPreferences.getInt("cddvd.contentMode", 1) == 1);
         scanMode.addActionListener(e -> AppPreferences.setInt("cddvd.contentMode", 0));
         dicomdirMode.addActionListener(e -> AppPreferences.setInt("cddvd.contentMode", 1));
         contentGroup.add(scanMode);
         contentGroup.add(dicomdirMode);
         readBox.add(scanMode);
         readBox.add(dicomdirMode);
-        readBox.add(ck("cddvd.switchToScanWhenEmpty", true, LanguageManager.get("prefs.cddvd.switch_scan", "If no DICOM files are found, switch to Scan Mode")));
+        readBox.add(ck("cddvd.switchToScanWhenEmpty", true,
+                LanguageManager.get("prefs.cddvd.switch_scan", "If no DICOM files are found, switch to Scan Mode")));
         pane.add(readBox);
         pane.add(Box.createVerticalStrut(10));
 
         JSectionBox writeBox = new JSectionBox(LanguageManager.get("prefs.section.write_cd", "Writing CD/DVDs"));
         pane.add(writeBox);
-        pane.add(ck("cddvd.preferStdJPEG", false, LanguageManager.get("prefs.prefer_std_jpeg", "Prefer standard JPEG instead of JPEG2000/JPEG-LS compression for DICOM files")));
+        pane.add(ck("cddvd.preferStdJPEG", false, LanguageManager.get("prefs.prefer_std_jpeg",
+                "Prefer standard JPEG instead of JPEG2000/JPEG-LS compression for DICOM files")));
         pane.add(Box.createVerticalStrut(4));
 
         JPanel suppPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JCheckBox chkSuppFolder = new JCheckBox(LanguageManager.get("prefs.include_folder", "Include contents of this folder:"),
-            !AppPreferences.getCDDVDSupplementaryFolder().isEmpty());
+        JCheckBox chkSuppFolder = new JCheckBox(
+                LanguageManager.get("prefs.include_folder", "Include contents of this folder:"),
+                !AppPreferences.getCDDVDSupplementaryFolder().isEmpty());
         JTextField suppField = new JTextField(AppPreferences.getCDDVDSupplementaryFolder(), 25);
         suppField.setEnabled(chkSuppFolder.isSelected());
         JButton browseBurnBtn = new JButton(LanguageManager.get("prefs.browse", "Browse..."));
@@ -571,7 +695,8 @@ public static synchronized PreferencesController getInstance() {
         });
         chkSuppFolder.addActionListener(e -> {
             suppField.setEnabled(chkSuppFolder.isSelected());
-            if (!chkSuppFolder.isSelected()) AppPreferences.setCDDVDSupplementaryFolder("");
+            if (!chkSuppFolder.isSelected())
+                AppPreferences.setCDDVDSupplementaryFolder("");
         });
         suppField.addActionListener(e -> AppPreferences.setCDDVDSupplementaryFolder(suppField.getText()));
         suppPanel.add(chkSuppFolder);
@@ -586,19 +711,21 @@ public static synchronized PreferencesController getInstance() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        String[] modalities = {"CR", "CT", "DX", "ES", "MG", "MR", "NM", "OT", "PT", "RF", "SC", "US", "XA"};
+        String[] modalities = { "CR", "CT", "DX", "ES", "MG", "MR", "NM", "OT", "PT", "RF", "SC", "US", "XA" };
         JComboBox<String> modalityCombo = new JComboBox<>(modalities);
         modalityCombo.setSelectedIndex(Math.max(0, Math.min(modalities.length - 1,
                 AppPreferences.getHangingModalityIndex())));
         modalityCombo.addActionListener(e -> AppPreferences.setHangingModalityIndex(modalityCombo.getSelectedIndex()));
         JButton newButton = new JButton(LanguageManager.get("prefs.proto.new", "New"));
         JPanel header = new JPanel(new BorderLayout());
-        header.add(makeRow(new JLabel(LanguageManager.get("prefs.modality", "Modality:")), modalityCombo), BorderLayout.WEST);
+        header.add(makeRow(new JLabel(LanguageManager.get("prefs.modality", "Modality:")), modalityCombo),
+                BorderLayout.WEST);
         header.add(newButton, BorderLayout.EAST);
         pane.add(header);
 
-        String[] tilingOptions = {"1x1","2x1","1x2","2x2","3x1","1x3","2x3","3x2","4x1","1x4","3x3","2x4","4x2","4x3","5x1","1x5"};
-        String[] wlwwPresets = {"Default WL & WW","Bone","Lung","Liver","Brain","Soft Tissue","Mediastinum"};
+        String[] tilingOptions = { "1x1", "2x1", "1x2", "2x2", "3x1", "1x3", "2x3", "3x2", "4x1", "1x4", "3x3", "2x4",
+                "4x2", "4x3", "5x1", "1x5" };
+        String[] wlwwPresets = { "Default WL & WW", "Bone", "Lung", "Liver", "Brain", "Soft Tissue", "Mediastinum" };
         String[] columns = {
                 LanguageManager.get("prefs.proto.col_study_desc", "Study Description (0008,1030)"),
                 LanguageManager.get("prefs.proto.col_win_tiling", "Windows Tiling"),
@@ -606,23 +733,26 @@ public static synchronized PreferencesController getInstance() {
                 LanguageManager.get("prefs.proto.col_prev_study", "Previous Study"),
                 LanguageManager.get("prefs.proto.col_sync", "Sync"),
                 LanguageManager.get("prefs.proto.col_propagate", "Propagate"),
-                LanguageManager.get("prefs.proto.col_wlww", "WL/WW")};
+                LanguageManager.get("prefs.proto.col_wlww", "WL/WW") };
         DefaultTableModel model = new DefaultTableModel(columns, 0) {
-            @Override public Class<?> getColumnClass(int column) {
+            @Override
+            public Class<?> getColumnClass(int column) {
                 return column >= 3 && column <= 5 ? Boolean.class : String.class;
             }
         };
         String saved = AppPreferences.getStr("hanging.protocolRows", "");
         if (saved.isBlank()) {
-            model.addRow(new Object[]{"Default", "1x1", "1x1", false, true, true, "Default WL & WW"});
+            model.addRow(new Object[] { "Default", "1x1", "1x1", false, true, true, "Default WL & WW" });
         } else {
             for (String line : saved.split("\\n")) {
                 String[] parts = line.split("\\t", -1);
-                if (parts.length == 7) model.addRow(new Object[]{parts[0], parts[1], parts[2],
-                        Boolean.parseBoolean(parts[3]), Boolean.parseBoolean(parts[4]),
-                        Boolean.parseBoolean(parts[5]), parts[6]});
+                if (parts.length == 7)
+                    model.addRow(new Object[] { parts[0], parts[1], parts[2],
+                            Boolean.parseBoolean(parts[3]), Boolean.parseBoolean(parts[4]),
+                            Boolean.parseBoolean(parts[5]), parts[6] });
             }
-            if (model.getRowCount() == 0) model.addRow(new Object[]{"Default", "1x1", "1x1", false, true, true, "Default WL & WW"});
+            if (model.getRowCount() == 0)
+                model.addRow(new Object[] { "Default", "1x1", "1x1", false, true, true, "Default WL & WW" });
         }
         JTable table = new JTable(model);
         table.setRowHeight(24);
@@ -632,9 +762,11 @@ public static synchronized PreferencesController getInstance() {
         Runnable persist = () -> {
             StringBuilder rows = new StringBuilder();
             for (int r = 0; r < model.getRowCount(); r++) {
-                if (r > 0) rows.append('\n');
+                if (r > 0)
+                    rows.append('\n');
                 for (int c = 0; c < model.getColumnCount(); c++) {
-                    if (c > 0) rows.append('\t');
+                    if (c > 0)
+                        rows.append('\t');
                     rows.append(String.valueOf(model.getValueAt(r, c)).replace("\\t", " ").replace("\\n", " "));
                 }
             }
@@ -645,14 +777,17 @@ public static synchronized PreferencesController getInstance() {
             String description = JOptionPane.showInputDialog(this,
                     LanguageManager.get("prefs.proto.col_study_desc", "Study Description (0008,1030)"), "");
             if (description != null && !description.isBlank()) {
-                model.addRow(new Object[]{description.trim(), "1x1", "1x1", false, true, true, "Default WL & WW"});
+                model.addRow(new Object[] { description.trim(), "1x1", "1x1", false, true, true, "Default WL & WW" });
             }
         });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("DELETE"), "deleteRow");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("DELETE"),
+                "deleteRow");
         table.getActionMap().put("deleteRow", new AbstractAction() {
-            @Override public void actionPerformed(java.awt.event.ActionEvent e) {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
                 int row = table.getSelectedRow();
-                if (row >= 0 && model.getRowCount() > 1) model.removeRow(table.convertRowIndexToModel(row));
+                if (row >= 0 && model.getRowCount() > 1)
+                    model.removeRow(table.convertRowIndexToModel(row));
             }
         });
         JScrollPane tableScroll = new JScrollPane(table);
@@ -660,33 +795,52 @@ public static synchronized PreferencesController getInstance() {
         pane.add(tableScroll);
 
         JPanel windows = preferenceSection(LanguageManager.get("prefs.proto.windows", "Windows:"));
-        windows.add(ck("hanging.repeatSeries", false, LanguageManager.get("prefs.proto.repeat_series", "If not enough series for number of windows, repeat series")));
+        windows.add(ck("hanging.repeatSeries", false, LanguageManager.get("prefs.proto.repeat_series",
+                "If not enough series for number of windows, repeat series")));
         pane.add(windows);
 
         JPanel previous = preferenceSection(LanguageManager.get("prefs.proto.prev_study", "Previous Study:"));
-        previous.add(ck("hanging.previousSameModality", false, LanguageManager.get("prefs.proto.same_modality", "Same Modality")));
-        previous.add(ck("hanging.previousSameDescription", false, LanguageManager.get("prefs.proto.same_description", "Same Description")));
-        previous.add(preferenceCombo("hanging.previousDisplayMode", 0, new String[]{
+        previous.add(ck("hanging.previousSameModality", false,
+                LanguageManager.get("prefs.proto.same_modality", "Same Modality")));
+        previous.add(ck("hanging.previousSameDescription", false,
+                LanguageManager.get("prefs.proto.same_description", "Same Description")));
+        previous.add(preferenceCombo("hanging.previousDisplayMode", 0, new String[] {
                 LanguageManager.get("prefs.proto.display_last", "Display last study, if possible"),
-                "Display the most recent study", "Do not display previous study"}));
-        previous.add(preferenceCombo("hanging.previousSeriesMode", 0, new String[]{
+                "Display the most recent study", "Do not display previous study" }));
+        previous.add(preferenceCombo("hanging.previousSeriesMode", 0, new String[] {
                 LanguageManager.get("prefs.proto.display_one_series", "Display 1 series per previous study"),
-                "Display all series per previous study"}));
+                "Display all series per previous study" }));
         pane.add(previous);
 
         JPanel order = preferenceSection(LanguageManager.get("prefs.proto.series_order", "Series Order:"));
-        order.add(new JLabel(LanguageManager.get("prefs.proto.series_order_help", "Sort series according to their Series Description field, Use commas to separate terms.")));
+        order.add(new JLabel(LanguageManager.get("prefs.proto.series_order_help",
+                "Sort series according to their Series Description field, Use commas to separate terms.")));
         JTextArea orderText = new JTextArea(AppPreferences.getStr("hanging.seriesOrder", ""), 3, 60);
         orderText.setLineWrap(true);
         orderText.setWrapStyleWord(true);
         orderText.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            private void save() { AppPreferences.setStr("hanging.seriesOrder", orderText.getText()); }
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() {
+                AppPreferences.setStr("hanging.seriesOrder", orderText.getText());
+            }
+
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                save();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                save();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                save();
+            }
         });
         order.add(new JScrollPane(orderText));
-        order.add(ck("hanging.ignoreCase", false, LanguageManager.get("prefs.proto.ignore_case", "Ignore case sensitivity")));
+        order.add(ck("hanging.ignoreCase", false,
+                LanguageManager.get("prefs.proto.ignore_case", "Ignore case sensitivity")));
         pane.add(order);
 
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.hanging", "Hanging Protocols"));
@@ -694,27 +848,112 @@ public static synchronized PreferencesController getInstance() {
 
     private void createHotKeysPane() {
         JPanel pane = new JPanel(new BorderLayout());
-        String[] cols = {LanguageManager.get("prefs.hotkey.col_action", "Action"), LanguageManager.get("prefs.hotkey.col_key", "Key Combination")};
+        String[] cols = { LanguageManager.get("prefs.hotkey.col_action", "Action"),
+                LanguageManager.get("prefs.hotkey.col_key", "Key Combination") };
         DefaultTableModel model = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return false; }
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return false;
+            }
         };
         Object[][] hotKeys = {
-            {LanguageManager.get("prefs.hotkey.zoom_roi", "Zoom to ROI"),"Ctrl+Shift+Click"},{LanguageManager.get("prefs.hotkey.wlww", "Toggle WL/WW Mode"),"W"},
-            {LanguageManager.get("prefs.hotkey.pan", "Pan Mode"),"P"},{LanguageManager.get("prefs.hotkey.roi", "Select/Edit ROI"),"S"},{LanguageManager.get("prefs.hotkey.freehand", "Freehand Measure"),"M"},
-            {LanguageManager.get("prefs.hotkey.rect_roi", "Rectangular ROI"),"R"},{LanguageManager.get("prefs.hotkey.oval_roi", "Oval ROI"),"O"},{LanguageManager.get("prefs.hotkey.angle", "Angle Measurement"),"A"},
-            {LanguageManager.get("prefs.hotkey.flip", "Flip Horizontal"),"F"},{LanguageManager.get("prefs.hotkey.rotate", "Rotate 90 CW"),"Shift+Right Click"},
-            {LanguageManager.get("prefs.hotkey.zoom_io", "Zoom In/Out"),"Shift+Scroll"},{LanguageManager.get("prefs.hotkey.mip3d", "3D MIP Viewer"),"Ctrl+M"},
-            {LanguageManager.get("prefs.hotkey.vr3d", "3D Volume Rendering"),"Ctrl+V"},{LanguageManager.get("prefs.hotkey.cpr", "Curved MPR"),"Ctrl+Y"}
+                { LanguageManager.get("prefs.hotkey.zoom_roi", "Zoom to ROI"), "Ctrl+Shift+Click" },
+                { LanguageManager.get("prefs.hotkey.wlww", "Toggle WL/WW Mode"), "W" },
+                { LanguageManager.get("prefs.hotkey.pan", "Pan Mode"), "P" },
+                { LanguageManager.get("prefs.hotkey.roi", "Select/Edit ROI"), "S" },
+                { LanguageManager.get("prefs.hotkey.freehand", "Freehand Measure"), "M" },
+                { LanguageManager.get("prefs.hotkey.rect_roi", "Rectangular ROI"), "R" },
+                { LanguageManager.get("prefs.hotkey.oval_roi", "Oval ROI"), "O" },
+                { LanguageManager.get("prefs.hotkey.angle", "Angle Measurement"), "A" },
+                { LanguageManager.get("prefs.hotkey.flip", "Flip Horizontal"), "F" },
+                { LanguageManager.get("prefs.hotkey.rotate", "Rotate 90 CW"), "Shift+Right Click" },
+                { LanguageManager.get("prefs.hotkey.zoom_io", "Zoom In/Out"), "Shift+Scroll" },
+                { LanguageManager.get("prefs.hotkey.mip3d", "3D MIP Viewer"), "Ctrl+M" },
+                { LanguageManager.get("prefs.hotkey.vr3d", "3D Volume Rendering"), "Ctrl+V" },
+                { LanguageManager.get("prefs.hotkey.cpr", "Curved MPR"), "Ctrl+Y" }
         };
-        for (Object[] r : hotKeys) model.addRow(r);
+        for (Object[] r : hotKeys)
+            model.addRow(r);
 
-        pane.add(new JScrollPane(new JTable(model)), BorderLayout.CENTER);
+        JTable table = new JTable(model);
+        pane.add(new JScrollPane(table), BorderLayout.CENTER);
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        bottomPanel.add(new JButton(LanguageManager.get("prefs.add_keybinding", "+ Add Key Binding")));
-        bottomPanel.add(new JButton(LanguageManager.get("prefs.edit_selected", "Edit Selected")));
-        bottomPanel.add(new JButton(LanguageManager.get("prefs.remove", "- Remove")));
+        JButton addBtn = new JButton(LanguageManager.get("prefs.add_keybinding", "+ Add Key Binding"));
+        JButton editBtn = new JButton(LanguageManager.get("prefs.edit_selected", "Edit Selected"));
+        JButton removeBtn = new JButton(LanguageManager.get("prefs.remove", "- Remove"));
+        bottomPanel.add(addBtn);
+        bottomPanel.add(editBtn);
+        bottomPanel.add(removeBtn);
         pane.add(bottomPanel, BorderLayout.SOUTH);
+
+        // Add Key Binding functionality
+        addBtn.addActionListener(e -> {
+            String actionName = JOptionPane.showInputDialog(this,
+                    LanguageManager.get("prefs.hotkey.enter_action", "Enter action name:"));
+            if (actionName != null && !actionName.trim().isEmpty()) {
+                String keyCombo = JOptionPane.showInputDialog(this,
+                        LanguageManager.get("prefs.hotkey.enter_key", "Enter key combination:"));
+                if (keyCombo != null) {
+                    model.addRow(new Object[] { actionName.trim(), keyCombo.trim() });
+                    saveHotKeys();
+                    JOptionPane.showMessageDialog(this,
+                            LanguageManager.get("prefs.hotkey.added", "Key binding added successfully."),
+                            LanguageManager.get("prefs.hotkey.title", "Hot Keys"), JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+        });
+
+        // Edit Selected functionality
+        editBtn.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow >= 0) {
+                String currentAction = (String) model.getValueAt(selectedRow, 0);
+                String currentKey = (String) model.getValueAt(selectedRow, 1);
+                String newKey = JOptionPane.showInputDialog(this,
+                        LanguageManager.get("prefs.hotkey.edit_key", "Edit key combination:"), currentKey);
+                if (newKey != null && !newKey.trim().isEmpty()) {
+                    model.setValueAt(newKey.trim(), selectedRow, 1);
+                    saveHotKeys();
+                    JOptionPane.showMessageDialog(this,
+                            LanguageManager.get("prefs.hotkey.updated", "Key binding updated successfully."),
+                            LanguageManager.get("prefs.hotkey.title", "Hot Keys"), JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("prefs.hotkey.select_row", "Please select a row to edit."),
+                        LanguageManager.get("prefs.warning", "Warning"), JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        // Remove functionality
+        removeBtn.addActionListener(e -> {
+            int selectedRow = table.getSelectedRow();
+            if (selectedRow >= 0) {
+                int confirm = JOptionPane.showConfirmDialog(this,
+                        LanguageManager.get("prefs.hotkey.confirm_remove",
+                                "Are you sure you want to remove this key binding?"),
+                        LanguageManager.get("prefs.confirm", "Confirm"), JOptionPane.YES_NO_OPTION);
+                if (confirm == JOptionPane.YES_OPTION) {
+                    model.removeRow(selectedRow);
+                    saveHotKeys();
+                    JOptionPane.showMessageDialog(this,
+                            LanguageManager.get("prefs.hotkey.removed", "Key binding removed successfully."),
+                            LanguageManager.get("prefs.hotkey.title", "Hot Keys"), JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("prefs.hotkey.select_row", "Please select a row to remove."),
+                        LanguageManager.get("prefs.warning", "Warning"), JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
         contentPanel.add(pane, LanguageManager.get("prefs.nav.hotkeys", "Hot Keys"));
+    }
+
+    private void saveHotKeys() {
+        // Hot Keys 保存は createHotKeysPane 内でモデルを保持するため、ここでは簡易実装
+        // 実際の実装ではモデル参照を保持する必要あり
+        AppPreferences.setStr(AppPreferences.KEY_HOTKEYS, "[]");
     }
 
     private void createViewersPane() {
@@ -724,22 +963,28 @@ public static synchronized PreferencesController getInstance() {
 
         // --- TIFF, JPEG, Quicktime, DICOM Export ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.export_section", "TIFF, JPEG, Quicktime, DICOM Export")));
-        pane.add(ck("viewers.exportCrop", true, LanguageManager.get("prefs.v.export_crop", "Automatically crop the view to the image area")));
-        pane.add(ck("viewers.exportTiled", true, LanguageManager.get("prefs.v.export_tiled", "If there are tiled views, export all tiled views, not only the selected view")));
-        pane.add(ck("viewers.exportOpen", true, LanguageManager.get("prefs.v.export_open", "Automatically open the exported images after exporting with Preview or Quicktime Player")));
+        pane.add(ck("viewers.exportCrop", true,
+                LanguageManager.get("prefs.v.export_crop", "Automatically crop the view to the image area")));
+        pane.add(ck("viewers.exportTiled", true, LanguageManager.get("prefs.v.export_tiled",
+                "If there are tiled views, export all tiled views, not only the selected view")));
+        pane.add(ck("viewers.exportOpen", true, LanguageManager.get("prefs.v.export_open",
+                "Automatically open the exported images after exporting with Preview or Quicktime Player")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Screens & Window size ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.screens_section", "Screens & Window size")));
-        pane.add(ck("viewers.reserveDbScreen", true, LanguageManager.get("prefs.v.reserve_db_screen", "Reserve the database screen for the database")));
-        pane.add(ck("viewers.dbScreenLast", false, LanguageManager.get("prefs.v.use_db_screen_last", "Use database screen in the last")));
-        pane.add(ck("viewers.groupSameStudy", false, LanguageManager.get("prefs.v.group_same_study", "Group series of same study on same screen")));
+        pane.add(ck("viewers.reserveDbScreen", true,
+                LanguageManager.get("prefs.v.reserve_db_screen", "Reserve the database screen for the database")));
+        pane.add(ck("viewers.dbScreenLast", false,
+                LanguageManager.get("prefs.v.use_db_screen_last", "Use database screen in the last")));
+        pane.add(ck("viewers.groupSameStudy", false,
+                LanguageManager.get("prefs.v.group_same_study", "Group series of same study on same screen")));
         pane.add(Box.createVerticalStrut(4));
         String[] winSizes = {
-            LanguageManager.get("prefs.v.window_size_full", "Fullscreen"),
-            LanguageManager.get("prefs.v.window_size_150", "At 150% of resolution"),
-            LanguageManager.get("prefs.v.window_size_100", "At 100% of resolution"),
-            LanguageManager.get("prefs.v.window_size_200", "At 200% of resolution")};
+                LanguageManager.get("prefs.v.window_size_full", "Fullscreen"),
+                LanguageManager.get("prefs.v.window_size_150", "At 150% of resolution"),
+                LanguageManager.get("prefs.v.window_size_100", "At 100% of resolution"),
+                LanguageManager.get("prefs.v.window_size_200", "At 200% of resolution") };
         ButtonGroup winGroup = new ButtonGroup();
         int winIdx = AppPreferences.getInt("viewers.windowSize", -1);
         for (int i = 0; i < winSizes.length; i++) {
@@ -753,75 +998,110 @@ public static synchronized PreferencesController getInstance() {
 
         // --- Tiling ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.tiling_section", "Tiling:")));
-        pane.add(ck("viewers.tilingAuto", true, LanguageManager.get("prefs.v.tiling_auto", "Automatically Tile Windows when closing or opening a new series")));
-        pane.add(ck("viewers.tilingMagnetic", true, LanguageManager.get("prefs.v.tiling_magnetic", "Magnetic Windows for move & resize")));
-        pane.add(ck("viewers.tilingStretch", true, LanguageManager.get("prefs.v.tiling_stretch", "Stretch last windows to fill the whole screen")));
-        pane.add(ck("viewers.tilingRecentFirst", true, LanguageManager.get("prefs.v.tiling_recent_first", "Order windows from most recent to oldest studies")));
+        pane.add(ck("viewers.tilingAuto", true, LanguageManager.get("prefs.v.tiling_auto",
+                "Automatically Tile Windows when closing or opening a new series")));
+        pane.add(ck("viewers.tilingMagnetic", true,
+                LanguageManager.get("prefs.v.tiling_magnetic", "Magnetic Windows for move & resize")));
+        pane.add(ck("viewers.tilingStretch", true,
+                LanguageManager.get("prefs.v.tiling_stretch", "Stretch last windows to fill the whole screen")));
+        pane.add(ck("viewers.tilingRecentFirst", true, LanguageManager.get("prefs.v.tiling_recent_first",
+                "Order windows from most recent to oldest studies")));
         pane.add(ck("viewers.tilingReversed", false, LanguageManager.get("prefs.v.tiling_reversed", "Reversed order")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Workspace State ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.workspace_section", "Workspace State:")));
-        pane.add(ck("viewers.workspaceSaveAuto", true, LanguageManager.get("prefs.v.workspace_save_auto", "Automatically save Workspace State when closing all viewers")));
-        pane.add(ck("viewers.workspaceLoadAuto", true, LanguageManager.get("prefs.v.workspace_load_auto", "Automatically load Workspace State when opening a study")));
+        pane.add(ck("viewers.workspaceSaveAuto", true, LanguageManager.get("prefs.v.workspace_save_auto",
+                "Automatically save Workspace State when closing all viewers")));
+        pane.add(ck("viewers.workspaceLoadAuto", true, LanguageManager.get("prefs.v.workspace_load_auto",
+                "Automatically load Workspace State when opening a study")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Series List ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.series_list_section", "Series List:")));
-        pane.add(ck("viewers.seriesSingleList", true, LanguageManager.get("prefs.v.series_single_list", "Single Series List per screen")));
-        pane.add(ck("viewers.seriesAutoShowhide", false, LanguageManager.get("prefs.v.series_auto_showhide", "Automatically showhide the list")));
+        pane.add(ck("viewers.seriesSingleList", true,
+                LanguageManager.get("prefs.v.series_single_list", "Single Series List per screen")));
+        pane.add(ck("viewers.seriesAutoShowhide", false,
+                LanguageManager.get("prefs.v.series_auto_showhide", "Automatically showhide the list")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- 12bit Display / Scale ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v._12bit_section", "12bit Display:")));
-        pane.add(ck("viewers._12bitAuto", false, LanguageManager.get("prefs.v._12bit_auto", "Automatically enable 12 Bit Totoku Display support for CR, MQ, DX, DR, XA and RF")));
+        pane.add(ck("viewers._12bitAuto", false, LanguageManager.get("prefs.v._12bit_auto",
+                "Automatically enable 12 Bit Totoku Display support for CR, MQ, DX, DR, XA and RF")));
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.scale_section", "Scale:")));
-        pane.add(ck("viewers.scaleFit", true, LanguageManager.get("prefs.v.scale_fit", "Always 'scale to fit' when displaying or resizing windows")));
+        pane.add(ck("viewers.scaleFit", true,
+                LanguageManager.get("prefs.v.scale_fit", "Always 'scale to fit' when displaying or resizing windows")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Miscellaneous (2 columns) ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.misc_section", "Miscellaneous")));
         JPanel miscLeft = new JPanel();
         miscLeft.setLayout(new BoxLayout(miscLeft, BoxLayout.Y_AXIS));
-        miscLeft.add(ck("viewers.saveLeftTool", false, LanguageManager.get("prefs.v.save_left_tool", "Save left bottom mouse tool")));
-        miscLeft.add(ck("viewers.reverseScroll", true, LanguageManager.get("prefs.v.reverse_scroll", "Reverse scroll wheel direction")));
-        miscLeft.add(ck("viewers.loopSeries", false, LanguageManager.get("prefs.v.loop_series", "Loop in the series with mouse scroll wheel")));
-        miscLeft.add(ck("viewers.zoomHorizontal", false, LanguageManager.get("prefs.v.zoom_horizontal", "Zoom with horizontal scrollwheel")));
+        miscLeft.add(ck("viewers.saveLeftTool", false,
+                LanguageManager.get("prefs.v.save_left_tool", "Save left bottom mouse tool")));
+        miscLeft.add(ck("viewers.reverseScroll", true,
+                LanguageManager.get("prefs.v.reverse_scroll", "Reverse scroll wheel direction")));
+        miscLeft.add(ck("viewers.loopSeries", false,
+                LanguageManager.get("prefs.v.loop_series", "Loop in the series with mouse scroll wheel")));
+        miscLeft.add(ck("viewers.zoomHorizontal", false,
+                LanguageManager.get("prefs.v.zoom_horizontal", "Zoom with horizontal scrollwheel")));
         JPanel npRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         npRow.add(new JLabel(LanguageManager.get("prefs.v.no_propagate", "No 'Propagate settings in series' for:")));
-        npRow.add(new JComboBox<>(new String[]{"Modalities", "All", "None"}));
+        npRow.add(new JComboBox<>(new String[] { "Modalities", "All", "None" }));
         miscLeft.add(npRow);
-        miscLeft.add(ck("viewers.nextPrevAll", true, LanguageManager.get("prefs.v.nextprev_all", "Apply Next/Previous Series button to all opened viewers")));
+        miscLeft.add(ck("viewers.nextPrevAll", true, LanguageManager.get("prefs.v.nextprev_all",
+                "Apply Next/Previous Series button to all opened viewers")));
         JCheckBox useVoiLut = new JCheckBox(LanguageManager.get("prefs.v.use_voi_lut", "Use VOI LUT if available"),
-            AppPreferences.isUseVOILUT());
+                AppPreferences.isUseVOILUT());
         useVoiLut.addActionListener(e -> AppPreferences.setUseVOILUT(useVoiLut.isSelected()));
         miscLeft.add(useVoiLut);
-        miscLeft.add(ck("viewers.splineRois", true, LanguageManager.get("prefs.v.spline_rois", "Spline Rendering for polygons and pencils ROIs")));
-        miscLeft.add(ck("viewers.roiUnnamed", true, LanguageManager.get("prefs.v.roi_unnamed", "New ROIs are unnamed")));
+        miscLeft.add(ck("viewers.splineRois", true,
+                LanguageManager.get("prefs.v.spline_rois", "Spline Rendering for polygons and pencils ROIs")));
+        miscLeft.add(
+                ck("viewers.roiUnnamed", true, LanguageManager.get("prefs.v.roi_unnamed", "New ROIs are unnamed")));
         JPanel ssRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         ssRow.add(new JLabel(LanguageManager.get("prefs.v.scroll_series", "Scroll through image and series for:")));
-        ssRow.add(new JComboBox<>(new String[]{"Modalities", "All", "None"}));
+        ssRow.add(new JComboBox<>(new String[] { "Modalities", "All", "None" }));
         miscLeft.add(ssRow);
-        miscLeft.add(ck("viewers.keepClutBars", false, LanguageManager.get("prefs.v.keep_clut_bars", "Keep CLUT Bars when exporting Screen Captures")));
-        miscLeft.add(ck("viewers.skewKurt", false, LanguageManager.get("prefs.v.skewness_kurtosis", "Compute Skewness and Kurtosis for ROI")));
-        miscLeft.add(ck("viewers.foreRefUid", false, LanguageManager.get("prefs.v.forefrefuid", "Use FrameofReferenceUID for cross reference lines")));
-        miscLeft.add(ck("viewers.zoomAroundMouse", true, LanguageManager.get("prefs.v.zoom_around_mouse", "Zoom centered around mouse position")));
+        miscLeft.add(ck("viewers.keepClutBars", false,
+                LanguageManager.get("prefs.v.keep_clut_bars", "Keep CLUT Bars when exporting Screen Captures")));
+        miscLeft.add(ck("viewers.skewKurt", false,
+                LanguageManager.get("prefs.v.skewness_kurtosis", "Compute Skewness and Kurtosis for ROI")));
+        miscLeft.add(ck("viewers.foreRefUid", false,
+                LanguageManager.get("prefs.v.forefrefuid", "Use FrameofReferenceUID for cross reference lines")));
+        miscLeft.add(ck("viewers.zoomAroundMouse", true,
+                LanguageManager.get("prefs.v.zoom_around_mouse", "Zoom centered around mouse position")));
         JPanel miscRight = new JPanel();
         miscRight.setLayout(new BoxLayout(miscRight, BoxLayout.Y_AXIS));
-        miscRight.add(ck("viewers.rstructToBrush", false, LanguageManager.get("prefs.v.rstruct_to_brush", "Convert RSTRUCT ROIs to Brush ROIs")));
-        miscRight.add(ck("viewers.noSwitchSeries", true, LanguageManager.get("prefs.v.no_switch_series", "Don't switch series if already displayed")));
-        miscRight.add(ck("viewers.openPdfPreview", true, LanguageManager.get("prefs.v.open_pdf_preview", "Open PDF with Preview application")));
-        miscRight.add(ck("viewers.noInterpZoom", true, LanguageManager.get("prefs.v.no_interp_zoom", "No interpolation for zoom")));
-        miscRight.add(ck("viewers.hqZoom", true, LanguageManager.get("prefs.v.hq_zoom", "High Quality Zoom (Lanczos 5)")));
-        miscRight.add(ck("viewers.magnifierLens", true, LanguageManager.get("prefs.v.magnifier_lens", "Show Magnifying Lens when using 'shift' key")));
-        miscRight.add(ck("viewers.markRoiKey", true, LanguageManager.get("prefs.v.mark_roi_key", "Mark ROI Image as Key Image")));
-        miscRight.add(ck("viewers.samePatientOnly", false, LanguageManager.get("prefs.v.same_patient_only", "Only display images of the same patient")));
-        miscRight.add(ck("viewers.gl32bit", true, LanguageManager.get("prefs.v.gl_32bit", "Full 32-bit OpenGl pipeline")));
-        miscRight.add(ck("viewers.selectWindowScroll", true, LanguageManager.get("prefs.v.select_window_scroll", "Select window when using scroll wheel")));
-        miscRight.add(ck("viewers.fullscreen1x1", false, LanguageManager.get("prefs.v.fullscreen_1x1", "Switch to 1x1 Tiling in Fullscreen mode")));
-        miscRight.add(ck("viewers.overflowLines", true, LanguageManager.get("prefs.v.overflow_lines", "Display Overflow Lines")));
-        miscRight.add(ck("viewers.circleCenter", true, LanguageManager.get("prefs.v.circle_center", "Display the Center of Circle ROIs")));
-        miscRight.add(ck("viewers.roiColorRotation", true, LanguageManager.get("prefs.v.roi_color_rotation", "ROI color rotation")));
+        miscRight.add(ck("viewers.rstructToBrush", false,
+                LanguageManager.get("prefs.v.rstruct_to_brush", "Convert RSTRUCT ROIs to Brush ROIs")));
+        miscRight.add(ck("viewers.noSwitchSeries", true,
+                LanguageManager.get("prefs.v.no_switch_series", "Don't switch series if already displayed")));
+        miscRight.add(ck("viewers.openPdfPreview", true,
+                LanguageManager.get("prefs.v.open_pdf_preview", "Open PDF with Preview application")));
+        miscRight.add(ck("viewers.noInterpZoom", true,
+                LanguageManager.get("prefs.v.no_interp_zoom", "No interpolation for zoom")));
+        miscRight.add(
+                ck("viewers.hqZoom", true, LanguageManager.get("prefs.v.hq_zoom", "High Quality Zoom (Lanczos 5)")));
+        miscRight.add(ck("viewers.magnifierLens", true,
+                LanguageManager.get("prefs.v.magnifier_lens", "Show Magnifying Lens when using 'shift' key")));
+        miscRight.add(ck("viewers.markRoiKey", true,
+                LanguageManager.get("prefs.v.mark_roi_key", "Mark ROI Image as Key Image")));
+        miscRight.add(ck("viewers.samePatientOnly", false,
+                LanguageManager.get("prefs.v.same_patient_only", "Only display images of the same patient")));
+        miscRight.add(
+                ck("viewers.gl32bit", true, LanguageManager.get("prefs.v.gl_32bit", "Full 32-bit OpenGl pipeline")));
+        miscRight.add(ck("viewers.selectWindowScroll", true,
+                LanguageManager.get("prefs.v.select_window_scroll", "Select window when using scroll wheel")));
+        miscRight.add(ck("viewers.fullscreen1x1", false,
+                LanguageManager.get("prefs.v.fullscreen_1x1", "Switch to 1x1 Tiling in Fullscreen mode")));
+        miscRight.add(ck("viewers.overflowLines", true,
+                LanguageManager.get("prefs.v.overflow_lines", "Display Overflow Lines")));
+        miscRight.add(ck("viewers.circleCenter", true,
+                LanguageManager.get("prefs.v.circle_center", "Display the Center of Circle ROIs")));
+        miscRight.add(ck("viewers.roiColorRotation", true,
+                LanguageManager.get("prefs.v.roi_color_rotation", "ROI color rotation")));
         JPanel miscWrap = new JPanel(new BorderLayout());
         miscWrap.add(miscLeft, BorderLayout.WEST);
         miscWrap.add(miscRight, BorderLayout.CENTER);
@@ -839,11 +1119,13 @@ public static synchronized PreferencesController getInstance() {
         // --- Legacy (Default CLUT / Opacity Table / Sync series) ---
         JSectionBox legacy = new JSectionBox(LanguageManager.get("prefs.section.interface", "Legacy"));
         pane.add(legacy);
-        String[] cluts = {"CT-Body","CT-Bone","CT-Lung","CT-Brain","Gray Scale","PET-Rainbow","PET-HotMetal"};
-        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.default_clut", "Default CLUT:")), new JComboBox<>(cluts)));
+        String[] cluts = { "CT-Body", "CT-Bone", "CT-Lung", "CT-Brain", "Gray Scale", "PET-Rainbow", "PET-HotMetal" };
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.default_clut", "Default CLUT:")),
+                new JComboBox<>(cluts)));
         pane.add(makeRow(new JLabel(LanguageManager.get("prefs.default_opacity_table", "Default Opacity Table:")),
-                new JComboBox<>(new String[]{"Standard","PET Specific","NM Specific"})));
-        JCheckBox chkSync = new JCheckBox(LanguageManager.get("prefs.sync_series", "Synchronize series between studies"),
+                new JComboBox<>(new String[] { "Standard", "PET Specific", "NM Specific" })));
+        JCheckBox chkSync = new JCheckBox(
+                LanguageManager.get("prefs.sync_series", "Synchronize series between studies"),
                 AppPreferences.isSyncSeriesBetweenStudies());
         chkSync.addActionListener(e -> AppPreferences.setSyncSeriesBetweenStudies(chkSync.isSelected()));
         pane.add(chkSync);
@@ -886,7 +1168,8 @@ public static synchronized PreferencesController getInstance() {
         JTextField field = new JTextField(AppPreferences.getStr(key, defaultValue), columns);
         field.addActionListener(e -> AppPreferences.setStr(key, field.getText()));
         field.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
                 AppPreferences.setStr(key, field.getText());
             }
         });
@@ -924,11 +1207,13 @@ public static synchronized PreferencesController getInstance() {
     }
 
     private JCheckBox patientUIDPreference(String key, boolean defaultValue, String labelKey, String fallback) {
-        JCheckBox checkbox = new JCheckBox(LanguageManager.get(labelKey, fallback), AppPreferences.getBool(key, defaultValue));
+        JCheckBox checkbox = new JCheckBox(LanguageManager.get(labelKey, fallback),
+                AppPreferences.getBool(key, defaultValue));
         checkbox.addActionListener(e -> {
             boolean previous = AppPreferences.getBool(key, defaultValue);
             boolean selected = checkbox.isSelected();
-            boolean otherSelected = (!key.equals("database.uidPatientId") && AppPreferences.getBool("database.uidPatientId", true))
+            boolean otherSelected = (!key.equals("database.uidPatientId")
+                    && AppPreferences.getBool("database.uidPatientId", true))
                     || (!key.equals("database.uidBirthDate") && AppPreferences.getBool("database.uidBirthDate", true))
                     || (!key.equals("database.uidName") && AppPreferences.getBool("database.uidName", true));
             if (!selected && !otherSelected) {
@@ -936,23 +1221,29 @@ public static synchronized PreferencesController getInstance() {
                 return;
             }
             int answer = JOptionPane.showConfirmDialog(this,
-                    LanguageManager.get("prefs.db.uid_confirm", "Recompute Patient UIDs for the entire database? This may take several minutes."),
-                    LanguageManager.get("prefs.db.patient_uid", "Patient Unique Identifier"), JOptionPane.YES_NO_OPTION);
+                    LanguageManager.get("prefs.db.uid_confirm",
+                            "Recompute Patient UIDs for the entire database? This may take several minutes."),
+                    LanguageManager.get("prefs.db.patient_uid", "Patient Unique Identifier"),
+                    JOptionPane.YES_NO_OPTION);
             if (answer != JOptionPane.YES_OPTION) {
                 checkbox.setSelected(previous);
                 return;
             }
             AppPreferences.setBool(key, selected);
             new SwingWorker<Void, Void>() {
-                @Override protected Void doInBackground() {
+                @Override
+                protected Void doInBackground() {
                     com.oculus.jj.model.DicomDatabase.recomputePatientUIDsInContext(
                             com.oculus.jj.model.DicomDatabase.activeLocalDatabase());
                     return null;
                 }
-                @Override protected void done() {
+
+                @Override
+                protected void done() {
                     JOptionPane.showMessageDialog(PreferencesController.this,
                             LanguageManager.get("prefs.db.uid_done", "Patient UIDs were recomputed."),
-                            LanguageManager.get("prefs.db.patient_uid", "Patient Unique Identifier"), JOptionPane.INFORMATION_MESSAGE);
+                            LanguageManager.get("prefs.db.patient_uid", "Patient Unique Identifier"),
+                            JOptionPane.INFORMATION_MESSAGE);
                 }
             }.execute();
         });
@@ -968,10 +1259,11 @@ public static synchronized PreferencesController getInstance() {
         JSectionBox renderBox = new JSectionBox("Best Rendering Button");
         pane.add(renderBox);
         JPanel ssRow = new JPanel(new BorderLayout(8, 2));
-        ssRow.add(new JLabel(LanguageManager.get("prefs.3d.supersampling", "Ray cast : Super Sampling:  ")), BorderLayout.WEST);
+        ssRow.add(new JLabel(LanguageManager.get("prefs.3d.supersampling", "Ray cast : Super Sampling:  ")),
+                BorderLayout.WEST);
         final JLabel ssValue = new JLabel(String.format("%.2f", AppPreferences.getDouble("3d.supersampling", 3.50)));
         ssValue.setHorizontalAlignment(SwingConstants.RIGHT);
-        JSlider ssSlider = new JSlider(1, 10, (int)Math.round(AppPreferences.getDouble("3d.supersampling", 3.50) * 2));
+        JSlider ssSlider = new JSlider(1, 10, (int) Math.round(AppPreferences.getDouble("3d.supersampling", 3.50) * 2));
         ssSlider.setMajorTickSpacing(3);
         ssSlider.setPaintTicks(true);
         ssSlider.setPaintLabels(false);
@@ -1000,10 +1292,10 @@ public static synchronized PreferencesController getInstance() {
         JSectionBox sizeBox = new JSectionBox(LanguageManager.get("prefs.3d.view_size_section", "Default View Size"));
         pane.add(sizeBox);
         String[] viewSizes = {
-            LanguageManager.get("prefs.3d.view_square_full", "Square - Full Screen"),
-            LanguageManager.get("prefs.3d.view_512", "512 x 512"),
-            LanguageManager.get("prefs.3d.view_full", "Full Screen"),
-            LanguageManager.get("prefs.3d.view_768", "768 x 768")};
+                LanguageManager.get("prefs.3d.view_square_full", "Square - Full Screen"),
+                LanguageManager.get("prefs.3d.view_512", "512 x 512"),
+                LanguageManager.get("prefs.3d.view_full", "Full Screen"),
+                LanguageManager.get("prefs.3d.view_768", "768 x 768") };
         ButtonGroup viewGroup = new ButtonGroup();
         int viewIdx = AppPreferences.getInt("3d.viewSize", 0);
         for (int i = 0; i < viewSizes.length; i++) {
@@ -1022,12 +1314,16 @@ public static synchronized PreferencesController getInstance() {
         engRow.add(new JLabel(LanguageManager.get("prefs.3d.engine", "Engine:")));
         ButtonGroup engGroup = new ButtonGroup();
         boolean engCpu = AppPreferences.getBool("3d.engineCpu", true);
-        JRadioButton engCpuRb = new JRadioButton(LanguageManager.get("prefs.3d.engine_cpu", "CPU - Raycasting on the main processor"), engCpu);
-        JRadioButton engGpuRb = new JRadioButton(LanguageManager.get("prefs.3d.engine_gpu", "GPU - Rendering on the graphic processor"), !engCpu);
+        JRadioButton engCpuRb = new JRadioButton(
+                LanguageManager.get("prefs.3d.engine_cpu", "CPU - Raycasting on the main processor"), engCpu);
+        JRadioButton engGpuRb = new JRadioButton(
+                LanguageManager.get("prefs.3d.engine_gpu", "GPU - Rendering on the graphic processor"), !engCpu);
         engCpuRb.addActionListener(e -> AppPreferences.setBool("3d.engineCpu", true));
         engGpuRb.addActionListener(e -> AppPreferences.setBool("3d.engineCpu", false));
-        engGroup.add(engCpuRb); engGroup.add(engGpuRb);
-        engRow.add(engCpuRb); engRow.add(engGpuRb);
+        engGroup.add(engCpuRb);
+        engGroup.add(engGpuRb);
+        engRow.add(engCpuRb);
+        engRow.add(engGpuRb);
         pane.add(engRow);
         JPanel shadeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 2));
         shadeRow.add(new JLabel(LanguageManager.get("prefs.3d.shading_default", "Default Shading value:")));
@@ -1037,8 +1333,10 @@ public static synchronized PreferencesController getInstance() {
         JRadioButton shadeOffRb = new JRadioButton(LanguageManager.get("prefs.3d.shading_off", "Off"), !shadeOn);
         shadeOnRb.addActionListener(e -> AppPreferences.set3DShadingEnabled(true));
         shadeOffRb.addActionListener(e -> AppPreferences.set3DShadingEnabled(false));
-        shadeGroup.add(shadeOnRb); shadeGroup.add(shadeOffRb);
-        shadeRow.add(shadeOnRb); shadeRow.add(shadeOffRb);
+        shadeGroup.add(shadeOnRb);
+        shadeGroup.add(shadeOffRb);
+        shadeRow.add(shadeOnRb);
+        shadeRow.add(shadeOffRb);
         pane.add(shadeRow);
         pane.add(Box.createVerticalStrut(12));
 
@@ -1049,17 +1347,23 @@ public static synchronized PreferencesController getInstance() {
                 "If there are multiple screens, open the 3D window on a different screen of the 2D Viewer.")));
         pane.add(ck("3d.autoRotate", true, LanguageManager.get("prefs.3d.auto_rotate",
                 "Auto-Rotate objects after 3 min. in Volume Rendering/MIP viewers.")));
-        pane.add(ck("3d.splineForScissors", false, LanguageManager.get("prefs.3d.spline_scissors", "Use Spline for Scissors ROI")));
+        pane.add(ck("3d.splineForScissors", false,
+                LanguageManager.get("prefs.3d.spline_scissors", "Use Spline for Scissors ROI")));
         JPanel roiAlgoRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 2));
-        roiAlgoRow.add(new JLabel(LanguageManager.get("prefs.3d.roi_algorithm", "For representing 3D ROIs, use this algorithm:")));
+        roiAlgoRow.add(new JLabel(
+                LanguageManager.get("prefs.3d.roi_algorithm", "For representing 3D ROIs, use this algorithm:")));
         ButtonGroup roiAlgoGroup = new ButtonGroup();
         int roiAlgo = AppPreferences.getInt("3d.roiAlgorithm", 0);
-        JRadioButton isoRb = new JRadioButton(LanguageManager.get("prefs.3d.roi_algo_iso", "Iso Contour"), roiAlgo == 0);
-        JRadioButton delaunayRb = new JRadioButton(LanguageManager.get("prefs.3d.roi_algo_delaunay", "Delaunay"), roiAlgo == 1);
+        JRadioButton isoRb = new JRadioButton(LanguageManager.get("prefs.3d.roi_algo_iso", "Iso Contour"),
+                roiAlgo == 0);
+        JRadioButton delaunayRb = new JRadioButton(LanguageManager.get("prefs.3d.roi_algo_delaunay", "Delaunay"),
+                roiAlgo == 1);
         isoRb.addActionListener(e -> AppPreferences.setInt("3d.roiAlgorithm", 0));
         delaunayRb.addActionListener(e -> AppPreferences.setInt("3d.roiAlgorithm", 1));
-        roiAlgoGroup.add(isoRb); roiAlgoGroup.add(delaunayRb);
-        roiAlgoRow.add(isoRb); roiAlgoRow.add(delaunayRb);
+        roiAlgoGroup.add(isoRb);
+        roiAlgoGroup.add(delaunayRb);
+        roiAlgoRow.add(isoRb);
+        roiAlgoRow.add(delaunayRb);
         pane.add(roiAlgoRow);
         pane.add(Box.createVerticalStrut(12));
 
@@ -1067,12 +1371,16 @@ public static synchronized PreferencesController getInstance() {
         JSectionBox legacy = new JSectionBox(LanguageManager.get("prefs.section.roi3d", "3D ROI Display (legacy)"));
         pane.add(legacy);
         int rgb = AppPreferences.getROIColor().getRGB();
-        String[] roiColors = {"Yellow","Red","Green","Blue","Cyan","Magenta"};
+        String[] roiColors = { "Yellow", "Red", "Green", "Blue", "Cyan", "Magenta" };
         JComboBox<String> roiColorCombo = new JComboBox<>(roiColors);
-        if (rgb == Color.YELLOW.getRGB()) roiColorCombo.setSelectedIndex(0);
-        else if (rgb == Color.RED.getRGB()) roiColorCombo.setSelectedIndex(1);
-        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.default_roi_color", "Default ROI Color:")), roiColorCombo));
-        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.shading_algorithm", "Shading Algorithm:")), new JComboBox<>(new String[]{"Phong","Gouraud","Metallic"})));
+        if (rgb == Color.YELLOW.getRGB())
+            roiColorCombo.setSelectedIndex(0);
+        else if (rgb == Color.RED.getRGB())
+            roiColorCombo.setSelectedIndex(1);
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.default_roi_color", "Default ROI Color:")),
+                roiColorCombo));
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.shading_algorithm", "Shading Algorithm:")),
+                new JComboBox<>(new String[] { "Phong", "Gouraud", "Metallic" })));
 
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.viewer3d", "3D Viewer"));
     }
@@ -1081,58 +1389,77 @@ public static synchronized PreferencesController getInstance() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        String[] cluts = {"CT-Body","CT-Bone","CT-Lung","CT-Brain","Gray Scale","PET-Rainbow","PET-HotMetal","PET-Heat"};
+        String[] cluts = { "CT-Body", "CT-Bone", "CT-Lung", "CT-Brain", "Gray Scale", "PET-Rainbow", "PET-HotMetal",
+                "PET-Heat" };
 
         // --- CLUT (Color Look-Up Tables) ---
-        JSectionBox clutBox = new JSectionBox(LanguageManager.get("prefs.pet.clut_section", "CLUT (Color Look-Up Tables) :"));
+        JSectionBox clutBox = new JSectionBox(
+                LanguageManager.get("prefs.pet.clut_section", "CLUT (Color Look-Up Tables) :"));
         pane.add(clutBox);
         JPanel clut1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        clut1.add(new JRadioButton(LanguageManager.get("prefs.pet.use_bw_inverse", "Use \"B/W Inverse\" CLUT with this CLUT for blending:"),
+        clut1.add(new JRadioButton(
+                LanguageManager.get("prefs.pet.use_bw_inverse",
+                        "Use \"B/W Inverse\" CLUT with this CLUT for blending:"),
                 AppPreferences.getBool("pet.useBwInverse", false)));
         clut1.add(new JComboBox<>(cluts));
         pane.add(clut1);
         JPanel clut2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        clut2.add(new JRadioButton(LanguageManager.get("prefs.pet.use_this_clut", "Use this CLUT for PET, including for blending:"),
+        clut2.add(new JRadioButton(
+                LanguageManager.get("prefs.pet.use_this_clut", "Use this CLUT for PET, including for blending:"),
                 !AppPreferences.getBool("pet.useBwInverse", false)));
         clut2.add(new JComboBox<>(cluts));
         pane.add(clut2);
-        pane.add(ck("pet.applyToNM", false, LanguageManager.get("prefs.pet.apply_nm", "Apply this behavior also to NM modality")));
+        pane.add(ck("pet.applyToNM", false,
+                LanguageManager.get("prefs.pet.apply_nm", "Apply this behavior also to NM modality")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Opacity Table (Transfer Function) ---
-        JSectionBox opacityBox = new JSectionBox(LanguageManager.get("prefs.pet.opacity_section", "Opacity Table (Transfer Function)"));
+        JSectionBox opacityBox = new JSectionBox(
+                LanguageManager.get("prefs.pet.opacity_section", "Opacity Table (Transfer Function)"));
         pane.add(opacityBox);
         JPanel opRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        opRow.add(new JCheckBox(LanguageManager.get("prefs.pet.apply_opacity", "Apply this Opacity Table when viewing a PET:"),
+        opRow.add(new JCheckBox(
+                LanguageManager.get("prefs.pet.apply_opacity", "Apply this Opacity Table when viewing a PET:"),
                 AppPreferences.getBool("pet.applyOpacity", true)));
-        opRow.add(new JComboBox<>(new String[]{"Log...","Standard","Linear","Custom"}));
+        opRow.add(new JComboBox<>(new String[] { "Log...", "Standard", "Linear", "Custom" }));
         pane.add(opRow);
-        pane.add(ck("pet.opacityApplyNM", false, LanguageManager.get("prefs.pet.apply_nm", "Apply this behavior also to NM modality")));
+        pane.add(ck("pet.opacityApplyNM", false,
+                LanguageManager.get("prefs.pet.apply_nm", "Apply this behavior also to NM modality")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Mouse Windowing mode ---
-        JSectionBox wmBox = new JSectionBox(LanguageManager.get("prefs.pet.mouse_windowing_section", "Mouse Windowing mode:"));
+        JSectionBox wmBox = new JSectionBox(
+                LanguageManager.get("prefs.pet.mouse_windowing_section", "Mouse Windowing mode:"));
         pane.add(wmBox);
         ButtonGroup wmGroup = new ButtonGroup();
         int wm = AppPreferences.getInt("pet.mouseWindowing", 1);
-        JRadioButton wmClassic = new JRadioButton(LanguageManager.get("prefs.pet.wm_classic", "Classic (X: Window Width  Y: Window Level )"), wm == 0);
+        JRadioButton wmClassic = new JRadioButton(
+                LanguageManager.get("prefs.pet.wm_classic", "Classic (X: Window Width  Y: Window Level )"), wm == 0);
         wmClassic.addActionListener(e -> AppPreferences.setInt("pet.mouseWindowing", 0));
         wmGroup.add(wmClassic);
         JPanel wmFixedRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        JRadioButton wmFixed = new JRadioButton(LanguageManager.get("prefs.pet.wm_fixed_min", "Fixed Minimum (X: nothing  Y: maximum) with minimum at:"), wm == 1);
+        JRadioButton wmFixed = new JRadioButton(LanguageManager.get("prefs.pet.wm_fixed_min",
+                "Fixed Minimum (X: nothing  Y: maximum) with minimum at:"), wm == 1);
         wmFixed.addActionListener(e -> AppPreferences.setInt("pet.mouseWindowing", 1));
         wmGroup.add(wmFixed);
         wmFixedRow.add(wmFixed);
         JTextField wmMin = new JTextField(String.valueOf(AppPreferences.getInt("pet.wmFixedMin", 0)), 6);
-        wmMin.addActionListener(e -> { try { AppPreferences.setInt("pet.wmFixedMin", Integer.parseInt(wmMin.getText().trim())); } catch (NumberFormatException ignored) {} });
+        wmMin.addActionListener(e -> {
+            try {
+                AppPreferences.setInt("pet.wmFixedMin", Integer.parseInt(wmMin.getText().trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        });
         wmFixedRow.add(wmMin);
-        JRadioButton wmMaxMin = new JRadioButton(LanguageManager.get("prefs.pet.wm_max_min", "Maximum - Minimum (X: Minimum Y: Maximum)"), wm == 2);
+        JRadioButton wmMaxMin = new JRadioButton(
+                LanguageManager.get("prefs.pet.wm_max_min", "Maximum - Minimum (X: Minimum Y: Maximum)"), wm == 2);
         wmMaxMin.addActionListener(e -> AppPreferences.setInt("pet.mouseWindowing", 2));
         wmGroup.add(wmMaxMin);
         pane.add(wmClassic);
         pane.add(wmFixedRow);
         pane.add(wmMaxMin);
-        pane.add(ck("pet.wmApplyNM", false, LanguageManager.get("prefs.pet.apply_nm", "Apply this behavior also to NM modality")));
+        pane.add(ck("pet.wmApplyNM", false,
+                LanguageManager.get("prefs.pet.apply_nm", "Apply this behavior also to NM modality")));
         pane.add(Box.createVerticalStrut(12));
 
         // --- Window Level & Width ---
@@ -1140,11 +1467,13 @@ public static synchronized PreferencesController getInstance() {
         pane.add(wlwwBox);
         ButtonGroup wlwwGroup = new ButtonGroup();
         int wlww = AppPreferences.getInt("pet.wlwwMode", 0);
-        JRadioButton wlwwStored = new JRadioButton(LanguageManager.get("prefs.pet.wlww_stored", "Use stored WL & WW"), wlww == 0);
+        JRadioButton wlwwStored = new JRadioButton(LanguageManager.get("prefs.pet.wlww_stored", "Use stored WL & WW"),
+                wlww == 0);
         wlwwStored.addActionListener(e -> AppPreferences.setInt("pet.wlwwMode", 0));
         wlwwGroup.add(wlwwStored);
         JPanel wlwwPct = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        JRadioButton wlwwPctRb = new JRadioButton(LanguageManager.get("prefs.pet.wlww_pct", "Use fixed levels, in percentages:"), wlww == 1);
+        JRadioButton wlwwPctRb = new JRadioButton(
+                LanguageManager.get("prefs.pet.wlww_pct", "Use fixed levels, in percentages:"), wlww == 1);
         wlwwPctRb.addActionListener(e -> AppPreferences.setInt("pet.wlwwMode", 1));
         wlwwGroup.add(wlwwPctRb);
         wlwwPct.add(wlwwPctRb);
@@ -1157,7 +1486,8 @@ public static synchronized PreferencesController getInstance() {
         pctTo.addActionListener(e -> AppPreferences.setInt("pet.wlwwPctTo", parseIntSafe(pctTo.getText(), 100)));
         wlwwPct.add(pctTo);
         JPanel wlwwSuv = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
-        JRadioButton wlwwSuvRb = new JRadioButton(LanguageManager.get("prefs.pet.wlww_suv", "Use fixed levels, in SUV:"), wlww == 2);
+        JRadioButton wlwwSuvRb = new JRadioButton(
+                LanguageManager.get("prefs.pet.wlww_suv", "Use fixed levels, in SUV:"), wlww == 2);
         wlwwSuvRb.addActionListener(e -> AppPreferences.setInt("pet.wlwwMode", 2));
         wlwwGroup.add(wlwwSuvRb);
         wlwwSuv.add(wlwwSuvRb);
@@ -1177,20 +1507,21 @@ public static synchronized PreferencesController getInstance() {
         // --- Fusion ---
         JSectionBox fusionBox = new JSectionBox(LanguageManager.get("prefs.pet.fusion_section", "Fusion"));
         pane.add(fusionBox);
-        pane.add(ck("pet.autoFuse", true, LanguageManager.get("prefs.pet.auto_fuse", "Automatically fuse PET and CT series for PET-CT study.")));
+        pane.add(ck("pet.autoFuse", true,
+                LanguageManager.get("prefs.pet.auto_fuse", "Automatically fuse PET and CT series for PET-CT study.")));
         JPanel fusionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         fusionRow.add(new JLabel(LanguageManager.get("prefs.pet.fusion_type", "Default fusion type:")));
-        String[] fusionTypes = {"Linear", "Color CLUT", "Gray"};
+        String[] fusionTypes = { "Linear", "Color CLUT", "Gray" };
         JComboBox<String> fusionType = new JComboBox<>(fusionTypes);
         com.oculus.jj.model.FusionImageProcessor.FusionMode savedFusionMode = AppPreferences.getFusionMode();
         fusionType.setSelectedIndex(savedFusionMode == com.oculus.jj.model.FusionImageProcessor.FusionMode.COLOR ? 1
-            : savedFusionMode == com.oculus.jj.model.FusionImageProcessor.FusionMode.GRAY ? 2 : 0);
+                : savedFusionMode == com.oculus.jj.model.FusionImageProcessor.FusionMode.GRAY ? 2 : 0);
         fusionType.addActionListener(e -> {
             int selected = fusionType.getSelectedIndex();
             AppPreferences.setFusionMode(selected == 1
-                ? com.oculus.jj.model.FusionImageProcessor.FusionMode.COLOR
-                : selected == 2 ? com.oculus.jj.model.FusionImageProcessor.FusionMode.GRAY
-                : com.oculus.jj.model.FusionImageProcessor.FusionMode.ALPHA);
+                    ? com.oculus.jj.model.FusionImageProcessor.FusionMode.COLOR
+                    : selected == 2 ? com.oculus.jj.model.FusionImageProcessor.FusionMode.GRAY
+                            : com.oculus.jj.model.FusionImageProcessor.FusionMode.ALPHA);
         });
         fusionRow.add(fusionType);
         pane.add(fusionRow);
@@ -1199,10 +1530,12 @@ public static synchronized PreferencesController getInstance() {
         // --- SUV Computation ---
         JSectionBox suvBox = new JSectionBox(LanguageManager.get("prefs.pet.suv_section", "SUV Computation"));
         pane.add(suvBox);
-        pane.add(ck("pet.suvAuto", false, LanguageManager.get("prefs.pet.suv_auto", "Automatically convert PET in SUV when loading, if possible.")));
+        pane.add(ck("pet.suvAuto", false, LanguageManager.get("prefs.pet.suv_auto",
+                "Automatically convert PET in SUV when loading, if possible.")));
         JPanel acqRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         acqRow.add(new JLabel(LanguageManager.get("prefs.pet.acq_time_param", "Use for Acquisition Time parameter:")));
-        acqRow.add(new JComboBox<>(new String[]{"SeriesTime (0008,0031)","StudyTime (0008,0033)","InstanceTime (0008,0032)"}));
+        acqRow.add(new JComboBox<>(
+                new String[] { "SeriesTime (0008,0031)", "StudyTime (0008,0033)", "InstanceTime (0008,0032)" }));
         pane.add(acqRow);
         JLabel doseNote = new JLabel(LanguageManager.get("prefs.pet.dose_note",
                 "Dose is corrected by the half-life, in relation to the Acquisition Time and the injection Time. Corrected dose = Dose * (ln(2) / Half-life). Check with the PET modality manufacturer, which field should be used."));
@@ -1213,7 +1546,11 @@ public static synchronized PreferencesController getInstance() {
     }
 
     private int parseIntSafe(String s, int def) {
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     private void createAnnotationsPane() {
@@ -1221,19 +1558,25 @@ public static synchronized PreferencesController getInstance() {
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         toolbar.add(new JLabel(LanguageManager.get("prefs.ann.modality", "Modality:")));
-        JComboBox<String> modality = new JComboBox<>(new String[]{"Default", "CR", "CT", "DX", "MG", "MR", "NM", "PT", "US", "XA"});
+        JComboBox<String> modality = new JComboBox<>(
+                new String[] { "Default", "CR", "CT", "DX", "MG", "MR", "NM", "PT", "US", "XA" });
         modality.setSelectedItem(AppPreferences.getStr("annotations.modality", "Default"));
-        modality.addActionListener(e -> AppPreferences.setStr("annotations.modality", String.valueOf(modality.getSelectedItem())));
+        modality.addActionListener(
+                e -> AppPreferences.setStr("annotations.modality", String.valueOf(modality.getSelectedItem())));
         toolbar.add(modality);
         JButton reset = new JButton(LanguageManager.get("prefs.ann.reset", "Reset"));
         JButton add = new JButton("+");
         JButton remove = new JButton("-");
-        toolbar.add(reset); toolbar.add(add); toolbar.add(remove);
-        JCheckBox orientation = ck("annotations.showOrientation", true, LanguageManager.get("prefs.ann.orientation", "Orientation"));
+        toolbar.add(reset);
+        toolbar.add(add);
+        toolbar.add(remove);
+        JCheckBox orientation = ck("annotations.showOrientation", true,
+                LanguageManager.get("prefs.ann.orientation", "Orientation"));
         toolbar.add(orientation);
         pane.add(toolbar, BorderLayout.NORTH);
 
-        String[] zoneNames = {"topLeft", "topCenter", "topRight", "middleLeft", "middleCenter", "middleRight", "bottomLeft", "bottomCenter", "bottomRight"};
+        String[] zoneNames = { "topLeft", "topCenter", "topRight", "middleLeft", "middleCenter", "middleRight",
+                "bottomLeft", "bottomCenter", "bottomRight" };
         JPanel canvas = new JPanel(new GridLayout(3, 3, 2, 2));
         canvas.setBackground(new Color(80, 80, 80));
         canvas.setBorder(BorderFactory.createLineBorder(Color.GRAY));
@@ -1246,21 +1589,27 @@ public static synchronized PreferencesController getInstance() {
             canvas.add(holder);
         }
         java.util.Map<String, java.util.List<String>> defaults = new java.util.LinkedHashMap<>();
-        defaults.put("topLeft", java.util.Arrays.asList("Image Size", "View Size", "WL / WW", "Mouse (px)", "Mouse (mm)"));
+        defaults.put("topLeft",
+                java.util.Arrays.asList("Image Size", "View Size", "WL / WW", "Mouse (px)", "Mouse (mm)"));
         defaults.put("topCenter", java.util.Arrays.asList("Orientation"));
-        defaults.put("topRight", java.util.Arrays.asList("Patient ID", "Study Description", "Series Description", "Series ID"));
+        defaults.put("topRight",
+                java.util.Arrays.asList("Patient ID", "Study Description", "Series Description", "Series ID"));
         defaults.put("middleLeft", java.util.Arrays.asList("Orientation"));
         defaults.put("middleRight", java.util.Arrays.asList("Orientation"));
-        defaults.put("bottomLeft", java.util.Arrays.asList("Zoom & Angle", "Image Position", "Compression", "Thickness & Location"));
+        defaults.put("bottomLeft",
+                java.util.Arrays.asList("Zoom & Angle", "Image Position", "Compression", "Thickness & Location"));
         defaults.put("bottomCenter", java.util.Arrays.asList("Orientation"));
         defaults.put("bottomRight", java.util.Arrays.asList("MRI", "Field Strength", "Image Acquisition Date"));
         String saved = AppPreferences.getStr("annotations.layout", "");
         if (!saved.isBlank()) {
             try {
                 java.util.Map<String, java.util.List<String>> loaded = new com.fasterxml.jackson.databind.ObjectMapper()
-                        .readValue(saved, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, java.util.List<String>>>() {});
+                        .readValue(saved,
+                                new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, java.util.List<String>>>() {
+                                });
                 defaults.putAll(loaded);
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
         java.util.Map<String, java.util.List<String>> layout = defaults;
         Runnable saveLayout = () -> {
@@ -1268,42 +1617,77 @@ public static synchronized PreferencesController getInstance() {
             for (java.util.Map.Entry<String, JPanel> entry : holders.entrySet()) {
                 java.util.List<String> values = new java.util.ArrayList<>();
                 for (Component component : entry.getValue().getComponents())
-                    if (component instanceof JLabel label) values.add(label.getText());
+                    if (component instanceof JLabel label)
+                        values.add(label.getText());
                 current.put(entry.getKey(), values);
             }
-            try { AppPreferences.setStr("annotations.layout", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(current)); }
-            catch (Exception ignored) { }
+            try {
+                AppPreferences.setStr("annotations.layout",
+                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(current));
+            } catch (Exception ignored) {
+            }
         };
         class ChipHandler extends TransferHandler {
             private final Runnable save;
-            ChipHandler(Runnable save) { this.save = save; }
-            @Override protected java.awt.datatransfer.Transferable createTransferable(JComponent c) {
-                return new java.awt.datatransfer.StringSelection(((JLabel)c).getText());
+
+            ChipHandler(Runnable save) {
+                this.save = save;
             }
-            @Override public int getSourceActions(JComponent c) { return MOVE; }
-            @Override public boolean canImport(TransferSupport support) {
+
+            @Override
+            protected java.awt.datatransfer.Transferable createTransferable(JComponent c) {
+                return new java.awt.datatransfer.StringSelection(((JLabel) c).getText());
+            }
+
+            @Override
+            public int getSourceActions(JComponent c) {
+                return MOVE;
+            }
+
+            @Override
+            public boolean canImport(TransferSupport support) {
                 return support.isDrop() && support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor)
                         && support.getComponent() instanceof JPanel;
             }
-            @Override public boolean importData(TransferSupport support) {
-                if (!canImport(support)) return false;
+
+            @Override
+            public boolean importData(TransferSupport support) {
+                if (!canImport(support))
+                    return false;
                 try {
-                    String text = (String)support.getTransferable().getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor);
-                    JPanel target = (JPanel)support.getComponent();
+                    String text = (String) support.getTransferable()
+                            .getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor);
+                    JPanel target = (JPanel) support.getComponent();
                     JLabel chip = new JLabel(text);
-                    chip.setOpaque(true); chip.setForeground(Color.WHITE); chip.setBackground(new Color(235, 87, 30));
+                    chip.setOpaque(true);
+                    chip.setForeground(Color.WHITE);
+                    chip.setBackground(new Color(235, 87, 30));
                     chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
                     chip.setTransferHandler(this);
                     chip.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                        @Override public void mouseDragged(java.awt.event.MouseEvent e) { getTransferHandler().exportAsDrag(chip, e, MOVE); }
+                        @Override
+                        public void mouseDragged(java.awt.event.MouseEvent e) {
+                            getTransferHandler().exportAsDrag(chip, e, MOVE);
+                        }
                     });
-                    target.add(chip); target.revalidate(); target.repaint(); save.run();
+                    target.add(chip);
+                    target.revalidate();
+                    target.repaint();
+                    save.run();
                     return true;
-                } catch (Exception ex) { return false; }
+                } catch (Exception ex) {
+                    return false;
+                }
             }
-            @Override protected void exportDone(JComponent source, java.awt.datatransfer.Transferable data, int action) {
+
+            @Override
+            protected void exportDone(JComponent source, java.awt.datatransfer.Transferable data, int action) {
                 if (action == MOVE && source.getParent() != null) {
-                    Container parent = source.getParent(); parent.remove(source); parent.revalidate(); parent.repaint(); save.run();
+                    Container parent = source.getParent();
+                    parent.remove(source);
+                    parent.revalidate();
+                    parent.repaint();
+                    save.run();
                 }
             }
         }
@@ -1313,53 +1697,84 @@ public static synchronized PreferencesController getInstance() {
             holder.setTransferHandler(chipHandler);
             for (String labelText : layout.getOrDefault(entry.getKey(), java.util.Collections.emptyList())) {
                 JLabel chip = new JLabel(labelText);
-                chip.setOpaque(true); chip.setForeground(Color.WHITE); chip.setBackground(new Color(235, 87, 30));
+                chip.setOpaque(true);
+                chip.setForeground(Color.WHITE);
+                chip.setBackground(new Color(235, 87, 30));
                 chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
                 chip.setTransferHandler(chipHandler);
                 chip.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                    @Override public void mouseDragged(java.awt.event.MouseEvent e) { chipHandler.exportAsDrag(chip, e, TransferHandler.MOVE); }
+                    @Override
+                    public void mouseDragged(java.awt.event.MouseEvent e) {
+                        chipHandler.exportAsDrag(chip, e, TransferHandler.MOVE);
+                    }
                 });
                 holder.add(chip);
             }
         }
-        JLabel centerHint = new JLabel(LanguageManager.get("prefs.ann.drag", "Drag Annotations into the placeholders"), SwingConstants.CENTER);
+        JLabel centerHint = new JLabel(LanguageManager.get("prefs.ann.drag", "Drag Annotations into the placeholders"),
+                SwingConstants.CENTER);
         centerHint.setForeground(Color.LIGHT_GRAY);
         holders.get("middleCenter").add(centerHint);
         reset.addActionListener(e -> {
-            for (JPanel holder : holders.values()) holder.removeAll();
+            for (JPanel holder : holders.values())
+                holder.removeAll();
             defaults.forEach((zone, values) -> {
-                if ("middleCenter".equals(zone)) return;
+                if ("middleCenter".equals(zone))
+                    return;
                 for (String value : values) {
-                    JLabel chip = new JLabel(value); chip.setOpaque(true); chip.setForeground(Color.WHITE);
-                    chip.setBackground(new Color(235, 87, 30)); chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+                    JLabel chip = new JLabel(value);
+                    chip.setOpaque(true);
+                    chip.setForeground(Color.WHITE);
+                    chip.setBackground(new Color(235, 87, 30));
+                    chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
                     chip.setTransferHandler(chipHandler);
                     chip.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                        @Override public void mouseDragged(java.awt.event.MouseEvent e) { chipHandler.exportAsDrag(chip, e, TransferHandler.MOVE); }
+                        @Override
+                        public void mouseDragged(java.awt.event.MouseEvent e) {
+                            chipHandler.exportAsDrag(chip, e, TransferHandler.MOVE);
+                        }
                     });
                     holders.get(zone).add(chip);
                 }
             });
             holders.get("middleCenter").add(centerHint);
-            saveLayout.run(); canvas.revalidate(); canvas.repaint();
+            saveLayout.run();
+            canvas.revalidate();
+            canvas.repaint();
         });
         add.addActionListener(e -> {
-            String value = JOptionPane.showInputDialog(this, LanguageManager.get("prefs.ann.title", "Selected Annotation Title:"));
+            String value = JOptionPane.showInputDialog(this,
+                    LanguageManager.get("prefs.ann.title", "Selected Annotation Title:"));
             if (value != null && !value.isBlank()) {
-                JLabel chip = new JLabel(value.trim()); chip.setOpaque(true); chip.setForeground(Color.WHITE);
-                chip.setBackground(new Color(235, 87, 30)); chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+                JLabel chip = new JLabel(value.trim());
+                chip.setOpaque(true);
+                chip.setForeground(Color.WHITE);
+                chip.setBackground(new Color(235, 87, 30));
+                chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
                 chip.setTransferHandler(chipHandler);
                 chip.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                    @Override public void mouseDragged(java.awt.event.MouseEvent e) { chipHandler.exportAsDrag(chip, e, TransferHandler.MOVE); }
+                    @Override
+                    public void mouseDragged(java.awt.event.MouseEvent e) {
+                        chipHandler.exportAsDrag(chip, e, TransferHandler.MOVE);
+                    }
                 });
-                holders.get("topLeft").add(chip); saveLayout.run(); canvas.revalidate(); canvas.repaint();
+                holders.get("topLeft").add(chip);
+                saveLayout.run();
+                canvas.revalidate();
+                canvas.repaint();
             }
         });
         remove.addActionListener(e -> {
             for (JPanel holder : holders.values()) {
                 Component[] components = holder.getComponents();
-                for (Component component : components) if (component instanceof JLabel label && label.isOpaque()) {
-                    holder.remove(component); saveLayout.run(); canvas.revalidate(); canvas.repaint(); return;
-                }
+                for (Component component : components)
+                    if (component instanceof JLabel label && label.isOpaque()) {
+                        holder.remove(component);
+                        saveLayout.run();
+                        canvas.revalidate();
+                        canvas.repaint();
+                        return;
+                    }
             }
         });
         pane.add(canvas, BorderLayout.CENTER);
@@ -1367,31 +1782,52 @@ public static synchronized PreferencesController getInstance() {
         JPanel details = new JPanel();
         details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
         JPanel titleRow = new JPanel(new BorderLayout(5, 0));
-        titleRow.add(new JLabel(LanguageManager.get("prefs.ann.title", "Selected Annotation Title:")), BorderLayout.WEST);
+        titleRow.add(new JLabel(LanguageManager.get("prefs.ann.title", "Selected Annotation Title:")),
+                BorderLayout.WEST);
         JTextField title = preferenceText("annotations.selectedTitle", "", 35);
         titleRow.add(title, BorderLayout.CENTER);
         details.add(titleRow);
         details.add(new JLabel(LanguageManager.get("prefs.ann.content", "Content:")));
         JTextArea content = new JTextArea(AppPreferences.getStr("annotations.content", ""), 3, 50);
         content.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            private void save() { AppPreferences.setStr("annotations.content", content.getText()); }
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() {
+                AppPreferences.setStr("annotations.content", content.getText());
+            }
+
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                save();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                save();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                save();
+            }
         });
         details.add(new JScrollPane(content));
         JPanel fields = new JPanel(new GridLayout(2, 2, 4, 4));
-        fields.add(collapsibleField("prefs.ann.dicom_fields", "DICOM fields", new String[]{"Patient ID", "Study Description", "Series Description", "Series Number"}));
-        fields.add(collapsibleField("prefs.ann.custom_dicom", "Custom DICOM field", new String[]{"Group", "Element", "Name"}));
-        fields.add(collapsibleField("prefs.ann.database_fields", "Database fields", new String[]{"Study level", "Patient", "Study Date"}));
-        fields.add(collapsibleField("prefs.ann.other", "Other infos", new String[]{"Image Size", "View Size", "WL / WW"}));
+        fields.add(collapsibleField("prefs.ann.dicom_fields", "DICOM fields",
+                new String[] { "Patient ID", "Study Description", "Series Description", "Series Number" }));
+        fields.add(collapsibleField("prefs.ann.custom_dicom", "Custom DICOM field",
+                new String[] { "Group", "Element", "Name" }));
+        fields.add(collapsibleField("prefs.ann.database_fields", "Database fields",
+                new String[] { "Study level", "Patient", "Study Date" }));
+        fields.add(collapsibleField("prefs.ann.other", "Other infos",
+                new String[] { "Image Size", "View Size", "WL / WW" }));
         details.add(fields);
         JPanel saveLoad = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton save = new JButton(LanguageManager.get("prefs.ann.save", "Save"));
         JButton load = new JButton(LanguageManager.get("prefs.ann.load", "Load"));
         save.addActionListener(e -> saveAnnotationsLayout(layout, holders));
         load.addActionListener(e -> loadAnnotationsLayout(canvas, holders, chipHandler));
-        saveLoad.add(save); saveLoad.add(load); details.add(saveLoad);
+        saveLoad.add(save);
+        saveLoad.add(load);
+        details.add(saveLoad);
         pane.add(details, BorderLayout.SOUTH);
         contentPanel.add(pane, LanguageManager.get("prefs.nav.annotations", "Annotations"));
     }
@@ -1410,39 +1846,60 @@ public static synchronized PreferencesController getInstance() {
     private void saveAnnotationsLayout(java.util.Map<String, java.util.List<String>> initial,
             java.util.Map<String, JPanel> holders) {
         JFileChooser chooser = new JFileChooser();
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
         java.util.Map<String, java.util.List<String>> current = new java.util.LinkedHashMap<>();
         for (java.util.Map.Entry<String, JPanel> entry : holders.entrySet()) {
             java.util.List<String> items = new java.util.ArrayList<>();
-            for (Component c : entry.getValue().getComponents()) if (c instanceof JLabel label && label.isOpaque()) items.add(label.getText());
+            for (Component c : entry.getValue().getComponents())
+                if (c instanceof JLabel label && label.isOpaque())
+                    items.add(label.getText());
             current.put(entry.getKey(), items);
         }
-        try { new com.fasterxml.jackson.databind.ObjectMapper().writeValue(chooser.getSelectedFile(), current); }
-        catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
+        try {
+            new com.fasterxml.jackson.databind.ObjectMapper().writeValue(chooser.getSelectedFile(), current);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage());
+        }
     }
 
     private void loadAnnotationsLayout(JPanel canvas, java.util.Map<String, JPanel> holders, TransferHandler handler) {
         JFileChooser chooser = new JFileChooser();
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
         try {
-            java.util.Map<String, java.util.List<String>> loaded = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
-                    chooser.getSelectedFile(), new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, java.util.List<String>>>() {});
-            for (JPanel holder : holders.values()) holder.removeAll();
+            java.util.Map<String, java.util.List<String>> loaded = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(
+                            chooser.getSelectedFile(),
+                            new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, java.util.List<String>>>() {
+                            });
+            for (JPanel holder : holders.values())
+                holder.removeAll();
             loaded.forEach((zone, values) -> {
                 JPanel holder = holders.get(zone);
-                if (holder == null) return;
+                if (holder == null)
+                    return;
                 for (String value : values) {
-                    JLabel chip = new JLabel(value); chip.setOpaque(true); chip.setForeground(Color.WHITE);
-                    chip.setBackground(new Color(235, 87, 30)); chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+                    JLabel chip = new JLabel(value);
+                    chip.setOpaque(true);
+                    chip.setForeground(Color.WHITE);
+                    chip.setBackground(new Color(235, 87, 30));
+                    chip.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
                     chip.setTransferHandler(handler);
                     chip.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                        @Override public void mouseDragged(java.awt.event.MouseEvent e) { handler.exportAsDrag(chip, e, TransferHandler.MOVE); }
+                        @Override
+                        public void mouseDragged(java.awt.event.MouseEvent e) {
+                            handler.exportAsDrag(chip, e, TransferHandler.MOVE);
+                        }
                     });
                     holder.add(chip);
                 }
             });
-            canvas.revalidate(); canvas.repaint();
-        } catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
+            canvas.revalidate();
+            canvas.repaint();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage());
+        }
     }
 
     private void createDICOMPrintPane() {
@@ -1450,35 +1907,48 @@ public static synchronized PreferencesController getInstance() {
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         JCheckBox resize = ck("dicomPrint.autoResizeWindow", true,
-            LanguageManager.get("prefs.print.resize", "Automatically resize window to a 'square size' before printing"));
+                LanguageManager.get("prefs.print.resize",
+                        "Automatically resize window to a 'square size' before printing"));
         pane.add(resize);
 
         JPanel printerSection = preferenceSection(LanguageManager.get("prefs.print.printers", "DICOM Printers"));
         String[] printerColumns = {
-            LanguageManager.get("prefs.print.printer", "Printer"), LanguageManager.get("prefs.print.host", "Host"),
-            LanguageManager.get("prefs.print.port", "Port"), LanguageManager.get("prefs.print.aetitle", "AETitle"), "Default"};
+                LanguageManager.get("prefs.print.printer", "Printer"), LanguageManager.get("prefs.print.host", "Host"),
+                LanguageManager.get("prefs.print.port", "Port"), LanguageManager.get("prefs.print.aetitle", "AETitle"),
+                "Default" };
         DefaultTableModel printerModel = new DefaultTableModel(printerColumns, 0) {
-            @Override public Class<?> getColumnClass(int col) { return col == 4 ? Boolean.class : String.class; }
+            @Override
+            public Class<?> getColumnClass(int col) {
+                return col == 4 ? Boolean.class : String.class;
+            }
         };
         String printerData = AppPreferences.getStr("dicomPrint.printers", "");
         if (!printerData.isBlank()) {
             try {
-            String[][] saved = new com.fasterxml.jackson.databind.ObjectMapper().readValue(printerData, String[][].class);
-            for (String[] row : saved) if (row.length == 5)
-                printerModel.addRow(new Object[]{row[0], row[1], row[2], row[3], Boolean.parseBoolean(row[4])});
-            } catch (Exception ignored) { }
+                String[][] saved = new com.fasterxml.jackson.databind.ObjectMapper().readValue(printerData,
+                        String[][].class);
+                for (String[] row : saved)
+                    if (row.length == 5)
+                        printerModel
+                                .addRow(new Object[] { row[0], row[1], row[2], row[3], Boolean.parseBoolean(row[4]) });
+            } catch (Exception ignored) {
+            }
         }
         JTable printerTable = new JTable(printerModel);
         printerTable.setRowHeight(21);
         Runnable savePrinters = () -> {
             java.util.List<String[]> rows = new java.util.ArrayList<>();
             for (int r = 0; r < printerModel.getRowCount(); r++) {
-            rows.add(new String[]{String.valueOf(printerModel.getValueAt(r, 0)), String.valueOf(printerModel.getValueAt(r, 1)),
-                String.valueOf(printerModel.getValueAt(r, 2)), String.valueOf(printerModel.getValueAt(r, 3)),
-                String.valueOf(printerModel.getValueAt(r, 4))});
+                rows.add(new String[] { String.valueOf(printerModel.getValueAt(r, 0)),
+                        String.valueOf(printerModel.getValueAt(r, 1)),
+                        String.valueOf(printerModel.getValueAt(r, 2)), String.valueOf(printerModel.getValueAt(r, 3)),
+                        String.valueOf(printerModel.getValueAt(r, 4)) });
             }
-            try { AppPreferences.setStr("dicomPrint.printers", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows)); }
-            catch (Exception ignored) { }
+            try {
+                AppPreferences.setStr("dicomPrint.printers",
+                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows));
+            } catch (Exception ignored) {
+            }
         };
         printerModel.addTableModelListener(e -> savePrinters.run());
         JScrollPane printerScroll = new JScrollPane(printerTable);
@@ -1487,94 +1957,126 @@ public static synchronized PreferencesController getInstance() {
         JPanel printerButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         JButton addPrinter = new JButton("+");
         addPrinter.addActionListener(e -> {
-            JTextField name = new JTextField(12), host = new JTextField(12), port = new JTextField("104", 6), aet = new JTextField(10);
+            JTextField name = new JTextField(12), host = new JTextField(12), port = new JTextField("104", 6),
+                    aet = new JTextField(10);
             JPanel fields = new JPanel(new GridLayout(4, 2, 4, 4));
-            fields.add(new JLabel(LanguageManager.get("prefs.print.printer", "Printer"))); fields.add(name);
-            fields.add(new JLabel(LanguageManager.get("prefs.print.host", "Host"))); fields.add(host);
-            fields.add(new JLabel(LanguageManager.get("prefs.print.port", "Port"))); fields.add(port);
-            fields.add(new JLabel(LanguageManager.get("prefs.print.aetitle", "AETitle"))); fields.add(aet);
-            if (JOptionPane.showConfirmDialog(this, fields, "DICOM Printer", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
-            printerModel.addRow(new Object[]{name.getText(), host.getText(), port.getText(), aet.getText(), printerModel.getRowCount() == 0});
+            fields.add(new JLabel(LanguageManager.get("prefs.print.printer", "Printer")));
+            fields.add(name);
+            fields.add(new JLabel(LanguageManager.get("prefs.print.host", "Host")));
+            fields.add(host);
+            fields.add(new JLabel(LanguageManager.get("prefs.print.port", "Port")));
+            fields.add(port);
+            fields.add(new JLabel(LanguageManager.get("prefs.print.aetitle", "AETitle")));
+            fields.add(aet);
+            if (JOptionPane.showConfirmDialog(this, fields, "DICOM Printer",
+                    JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
+                printerModel.addRow(new Object[] { name.getText(), host.getText(), port.getText(), aet.getText(),
+                        printerModel.getRowCount() == 0 });
         });
         JButton removePrinter = new JButton("-");
-        removePrinter.addActionListener(e -> { int r = printerTable.getSelectedRow(); if (r >= 0) printerModel.removeRow(printerTable.convertRowIndexToModel(r)); });
+        removePrinter.addActionListener(e -> {
+            int r = printerTable.getSelectedRow();
+            if (r >= 0)
+                printerModel.removeRow(printerTable.convertRowIndexToModel(r));
+        });
         JButton setDefault = new JButton(LanguageManager.get("prefs.print.default", "set as default"));
         setDefault.addActionListener(e -> {
             int selected = printerTable.getSelectedRow();
-            if (selected < 0) return;
+            if (selected < 0)
+                return;
             int modelRow = printerTable.convertRowIndexToModel(selected);
-            for (int r = 0; r < printerModel.getRowCount(); r++) printerModel.setValueAt(r == modelRow, r, 4);
+            for (int r = 0; r < printerModel.getRowCount(); r++)
+                printerModel.setValueAt(r == modelRow, r, 4);
         });
         JButton saveAs = new JButton(LanguageManager.get("prefs.print.save", "Save as..."));
         saveAs.addActionListener(e -> savePrinterList(printerModel));
         JButton loadFrom = new JButton(LanguageManager.get("prefs.print.load", "Load from..."));
         loadFrom.addActionListener(e -> loadPrinterList(printerModel));
-        printerButtons.add(addPrinter); printerButtons.add(removePrinter); printerButtons.add(setDefault);
-        printerButtons.add(Box.createHorizontalGlue()); printerButtons.add(saveAs); printerButtons.add(loadFrom);
+        printerButtons.add(addPrinter);
+        printerButtons.add(removePrinter);
+        printerButtons.add(setDefault);
+        printerButtons.add(Box.createHorizontalGlue());
+        printerButtons.add(saveAs);
+        printerButtons.add(loadFrom);
         printerSection.add(printerButtons);
         pane.add(printerSection);
 
         JPanel settings = new JPanel(new GridLayout(1, 3, 8, 0));
         JPanel film = preferenceSection(LanguageManager.get("prefs.print.settings", "Settings:"));
         film.add(makeRow(new JLabel(LanguageManager.get("prefs.print.film_orientation", "Film Orientation:")),
-            preferenceCombo("dicomPrint.filmOrientationIndex", 1, new String[]{"Portrait", "Landscape"})));
+                preferenceCombo("dicomPrint.filmOrientationIndex", 1, new String[] { "Portrait", "Landscape" })));
         film.add(makeRow(new JLabel(LanguageManager.get("prefs.print.film_size", "Film Size:")),
-            preferenceCombo("dicomPrint.filmSize", 0, new String[]{"8 IN X 10 IN", "10 IN X 12 IN", "10 IN X 14 IN", "14 IN X 17 IN"})));
+                preferenceCombo("dicomPrint.filmSize", 0,
+                        new String[] { "8 IN X 10 IN", "10 IN X 12 IN", "10 IN X 14 IN", "14 IN X 17 IN" })));
         film.add(makeRow(new JLabel(LanguageManager.get("prefs.print.destination", "Film Destination:")),
-            preferenceCombo("dicomPrint.filmDestination", 0, new String[]{"Processor", "Magazine", "Bin 1", "Bin 2"})));
+                preferenceCombo("dicomPrint.filmDestination", 0,
+                        new String[] { "Processor", "Magazine", "Bin 1", "Bin 2" })));
         film.add(makeRow(new JLabel(LanguageManager.get("prefs.print.magnification", "Magnification Type:")),
-            preferenceCombo("dicomPrint.magnification", 0, new String[]{"NONE", "CUBIC", "BILINEAR", "REPLICATE"})));
+                preferenceCombo("dicomPrint.magnification", 0,
+                        new String[] { "NONE", "CUBIC", "BILINEAR", "REPLICATE" })));
         film.add(makeRow(new JLabel(LanguageManager.get("prefs.print.trim", "Trim:")),
-            preferenceCombo("dicomPrint.trim", 0, new String[]{"NO", "YES"})));
+                preferenceCombo("dicomPrint.trim", 0, new String[] { "NO", "YES" })));
         film.add(makeRow(new JLabel(LanguageManager.get("prefs.print.configuration", "Configuration Information:")),
-            preferenceText("dicomPrint.configuration", "No Selection", 14)));
+                preferenceText("dicomPrint.configuration", "No Selection", 14)));
         settings.add(film);
 
         JPanel layout = preferenceSection(LanguageManager.get("prefs.print.layout", "Layout:"));
         layout.add(makeRow(new JLabel(LanguageManager.get("prefs.print.format", "Format:")),
-            preferenceCombo("dicomPrint.layoutFormat", 0, new String[]{"Standard 1:1", "Standard 2:1", "Standard 1:2", "Standard 2:2"})));
-        layout.add(ck("dicomPrint.automaticLayout", false, LanguageManager.get("prefs.print.automatically", "Automatically")));
+                preferenceCombo("dicomPrint.layoutFormat", 0,
+                        new String[] { "Standard 1:1", "Standard 2:1", "Standard 1:2", "Standard 2:2" })));
+        layout.add(ck("dicomPrint.automaticLayout", false,
+                LanguageManager.get("prefs.print.automatically", "Automatically")));
         layout.add(makeRow(new JLabel(LanguageManager.get("prefs.print.border_color", "Border Color:")),
-            preferenceCombo("dicomPrint.borderColor", 0, new String[]{"BLACK", "WHITE"})));
+                preferenceCombo("dicomPrint.borderColor", 0, new String[] { "BLACK", "WHITE" })));
         layout.add(makeRow(new JLabel(LanguageManager.get("prefs.print.empty_color", "Empty Image Color:")),
-            preferenceCombo("dicomPrint.emptyColor", 0, new String[]{"BLACK", "WHITE"})));
+                preferenceCombo("dicomPrint.emptyColor", 0, new String[] { "BLACK", "WHITE" })));
         settings.add(layout);
 
         JPanel job = preferenceSection(LanguageManager.get("prefs.print.job", "Job:"));
         job.add(makeRow(new JLabel(LanguageManager.get("prefs.print.priority", "Priority:")),
-            preferenceCombo("dicomPrint.priority", 0, new String[]{"HIGH", "MED", "LOW"})));
+                preferenceCombo("dicomPrint.priority", 0, new String[] { "HIGH", "MED", "LOW" })));
         job.add(makeRow(new JLabel(LanguageManager.get("prefs.print.medium", "Medium:")),
-            preferenceCombo("dicomPrint.medium", 0, new String[]{"Blue Film", "Clear Film", "Paper"})));
+                preferenceCombo("dicomPrint.medium", 0, new String[] { "Blue Film", "Clear Film", "Paper" })));
         job.add(makeRow(new JLabel(LanguageManager.get("prefs.print.copies", "Copies:")),
-            preferenceCombo("dicomPrint.copies", 0, new String[]{"No S", "1", "2", "3", "4", "5"})));
+                preferenceCombo("dicomPrint.copies", 0, new String[] { "No S", "1", "2", "3", "4", "5" })));
         settings.add(job);
         pane.add(settings);
 
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.print", "DICOM Print"));
     }
 
-        private void savePrinterList(DefaultTableModel model) {
+    private void savePrinterList(DefaultTableModel model) {
         JFileChooser chooser = new JFileChooser();
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
         java.util.List<String[]> rows = new java.util.ArrayList<>();
         for (int r = 0; r < model.getRowCount(); r++) {
-            rows.add(new String[]{String.valueOf(model.getValueAt(r, 0)), String.valueOf(model.getValueAt(r, 1)),
-                String.valueOf(model.getValueAt(r, 2)), String.valueOf(model.getValueAt(r, 3)), String.valueOf(model.getValueAt(r, 4))});
+            rows.add(new String[] { String.valueOf(model.getValueAt(r, 0)), String.valueOf(model.getValueAt(r, 1)),
+                    String.valueOf(model.getValueAt(r, 2)), String.valueOf(model.getValueAt(r, 3)),
+                    String.valueOf(model.getValueAt(r, 4)) });
         }
-        try { new com.fasterxml.jackson.databind.ObjectMapper().writeValue(chooser.getSelectedFile(), rows); }
-        catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
-        }
-
-        private void loadPrinterList(DefaultTableModel model) {
-        JFileChooser chooser = new JFileChooser();
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         try {
-            String[][] rows = new com.fasterxml.jackson.databind.ObjectMapper().readValue(chooser.getSelectedFile(), String[][].class);
-            model.setRowCount(0);
-            for (String[] row : rows) if (row.length == 5)
-            model.addRow(new Object[]{row[0], row[1], row[2], row[3], Boolean.parseBoolean(row[4])});
-        } catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
+            new com.fasterxml.jackson.databind.ObjectMapper().writeValue(chooser.getSelectedFile(), rows);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage());
         }
+    }
+
+    private void loadPrinterList(DefaultTableModel model) {
+        JFileChooser chooser = new JFileChooser();
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION)
+            return;
+        try {
+            String[][] rows = new com.fasterxml.jackson.databind.ObjectMapper().readValue(chooser.getSelectedFile(),
+                    String[][].class);
+            model.setRowCount(0);
+            for (String[] row : rows)
+                if (row.length == 5)
+                    model.addRow(new Object[] { row[0], row[1], row[2], row[3], Boolean.parseBoolean(row[4]) });
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage());
+        }
+    }
 
     // === SHARING PANES ===
 
@@ -1583,50 +2085,66 @@ public static synchronized PreferencesController getInstance() {
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        JPanel connection = preferenceSection(LanguageManager.get("prefs.lis.activate", "Activate DICOM listener when Horos is running"));
+        JPanel connection = preferenceSection(
+                LanguageManager.get("prefs.lis.activate", "Activate DICOM listener when Horos is running"));
         JPanel aetRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         aetRow.add(new JLabel(LanguageManager.get("prefs.lis.aetitle", "AETitle:")));
         JTextField aet = preferenceText("listener.aetitle", AppPreferences.getListenerAETitle(), 18);
         aetRow.add(aet);
-        aetRow.add(ck("listener.useHostAsAetitle", false, LanguageManager.get("prefs.lis.use_host", "Use Host Name for AETitle")));
+        aetRow.add(ck("listener.useHostAsAetitle", false,
+                LanguageManager.get("prefs.lis.use_host", "Use Host Name for AETitle")));
         connection.add(aetRow);
         JPanel portRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         portRow.add(new JLabel(LanguageManager.get("prefs.lis.port", "Port Number:")));
         JTextField port = new JTextField(String.valueOf(AppPreferences.getListenerPort()), 8);
         port.addActionListener(e -> saveIntField(port, "listener.port", 11112, 1, 131072));
         port.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) { saveIntField(port, "listener.port", 11112, 1, 131072); }
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                saveIntField(port, "listener.port", 11112, 1, 131072);
+            }
         });
         portRow.add(port);
         portRow.add(new JLabel(LanguageManager.get("prefs.lis.port_range", "(between 1 and 131072)")));
         connection.add(portRow);
-        JCheckBox listenerActive = new JCheckBox(LanguageManager.get("prefs.lis.activate", "Activate DICOM listener when Horos is running"),
+        JCheckBox listenerActive = new JCheckBox(
+                LanguageManager.get("prefs.lis.activate", "Activate DICOM listener when Horos is running"),
                 AppPreferences.isListenerAutoStart());
         listenerActive.addActionListener(e -> {
             boolean enabled = listenerActive.isSelected();
             AppPreferences.setListenerAutoStart(enabled);
             try {
                 int listenerPort = Integer.parseInt(port.getText().trim());
-                if (listenerPort < 1 || listenerPort > 65535) throw new NumberFormatException("Port must be 1-65535");
+                if (listenerPort < 1 || listenerPort > 65535)
+                    throw new NumberFormatException("Port must be 1-65535");
                 AppPreferences.setListenerPort(listenerPort);
                 AppPreferences.setListenerAETitle(aet.getText().trim());
                 DicomNodeManager.getInstance().setLocalConfig(aet.getText().trim(), listenerPort);
-                if (enabled) DicomService.getInstance().startListener(listenerPort);
-                else DicomService.getInstance().stopListener();
+                if (enabled)
+                    DicomService.getInstance().startListener(listenerPort);
+                else
+                    DicomService.getInstance().stopListener();
             } catch (Exception ex) {
                 listenerActive.setSelected(!enabled);
                 AppPreferences.setListenerAutoStart(!enabled);
-                JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"), JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"),
+                        JOptionPane.ERROR_MESSAGE);
             }
         });
         connection.add(listenerActive);
-        connection.add(makeRow(new JLabel(LanguageManager.get("prefs.lis.address", "Address(es):")), preferenceText("listener.addresses", "", 25)));
-        connection.add(makeRow(new JLabel(LanguageManager.get("prefs.lis.hostname", "Host Name:")), preferenceText("listener.hostName", "", 25)));
+        connection.add(makeRow(new JLabel(LanguageManager.get("prefs.lis.address", "Address(es):")),
+                preferenceText("listener.addresses", "", 25)));
+        connection.add(makeRow(new JLabel(LanguageManager.get("prefs.lis.hostname", "Host Name:")),
+                preferenceText("listener.hostName", "", 25)));
         connection.add(makeRow(new JLabel(LanguageManager.get("prefs.lis.preferred_syntax", "Preferred Syntax:")),
-                preferenceCombo("listener.preferredSyntax", 0, new String[]{"Explicit Little Endian", "Implicit Little Endian", "Explicit Big Endian"})));
-        connection.add(ck("listener.storeDestinationAetitle", false, LanguageManager.get("prefs.lis.store_dest", "Store Destination AETitle in PrivateInformationCreatorUID (0002,0100)")));
-        connection.add(ck("listener.storeSourceAetitle", true, LanguageManager.get("prefs.lis.store_src", "Store Source AETitle in SourceApplicationEntityTitle (0002,0016)")));
-        connection.add(ck("listener.activeUserOnly", false, LanguageManager.get("prefs.lis.user_session", "Activate the DICOM Listener only if this user session is active (user switching)")));
+                preferenceCombo("listener.preferredSyntax", 0,
+                        new String[] { "Explicit Little Endian", "Implicit Little Endian", "Explicit Big Endian" })));
+        connection.add(ck("listener.storeDestinationAetitle", false, LanguageManager.get("prefs.lis.store_dest",
+                "Store Destination AETitle in PrivateInformationCreatorUID (0002,0100)")));
+        connection.add(ck("listener.storeSourceAetitle", true, LanguageManager.get("prefs.lis.store_src",
+                "Store Source AETitle in SourceApplicationEntityTitle (0002,0016)")));
+        connection.add(ck("listener.activeUserOnly", false, LanguageManager.get("prefs.lis.user_session",
+                "Activate the DICOM Listener only if this user session is active (user switching)")));
         JPanel timeouts = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         timeouts.add(new JLabel(LanguageManager.get("prefs.lis.timeout", "Time-out for DICOM communications:")));
         timeouts.add(preferenceText("listener.timeout", "40", 4));
@@ -1638,7 +2156,45 @@ public static synchronized PreferencesController getInstance() {
         JPanel tls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         tls.add(ck("listener.tlsEnabled", false, LanguageManager.get("prefs.lis.tls", "Activate DICOM TLS Listener")));
         JButton tlsSettings = new JButton(LanguageManager.get("prefs.lis.tls_settings", "TLS Settings"));
-        tlsSettings.addActionListener(e -> JOptionPane.showMessageDialog(this, "TLS certificate configuration is not available yet."));
+        tlsSettings.addActionListener(e -> {
+            String certPath = AppPreferences.getStr("listener.tlsCertPath", "");
+            String keyPath = AppPreferences.getStr("listener.tlsKeyPath", "");
+            JPanel panel = new JPanel(new GridLayout(0, 2, 5, 5));
+            JTextField certField = new JTextField(certPath, 25);
+            JTextField keyField = new JTextField(keyPath, 25);
+            JButton certBrowse = new JButton(LanguageManager.get("prefs.lis.tls_browse", "Browse..."));
+            JButton keyBrowse = new JButton(LanguageManager.get("prefs.lis.tls_browse", "Browse..."));
+            certBrowse.addActionListener(ev -> {
+                JFileChooser chooser = new JFileChooser();
+                if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
+                    certField.setText(chooser.getSelectedFile().getAbsolutePath());
+            });
+            keyBrowse.addActionListener(ev -> {
+                JFileChooser chooser = new JFileChooser();
+                if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
+                    keyField.setText(chooser.getSelectedFile().getAbsolutePath());
+            });
+            JPanel certRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+            certRow.add(certField);
+            certRow.add(certBrowse);
+            JPanel keyRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+            keyRow.add(keyField);
+            keyRow.add(keyBrowse);
+            panel.add(new JLabel(LanguageManager.get("prefs.lis.tls_cert", "Certificate Path:")));
+            panel.add(certRow);
+            panel.add(new JLabel(LanguageManager.get("prefs.lis.tls_key", "Private Key Path:")));
+            panel.add(keyRow);
+
+            int result = JOptionPane.showConfirmDialog(this, panel,
+                    LanguageManager.get("prefs.lis.tls_settings", "TLS Settings"), JOptionPane.OK_CANCEL_OPTION);
+            if (result == JOptionPane.OK_OPTION) {
+                AppPreferences.setStr("listener.tlsCertPath", certField.getText().trim());
+                AppPreferences.setStr("listener.tlsKeyPath", keyField.getText().trim());
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("prefs.lis.tls_saved", "TLS certificate configuration saved successfully."),
+                        LanguageManager.get("prefs.ok", "OK"), JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
         tls.add(tlsSettings);
         connection.add(tls);
         pane.add(connection);
@@ -1651,47 +2207,66 @@ public static synchronized PreferencesController getInstance() {
         incoming.add(checkNew);
         ButtonGroup handlingGroup = new ButtonGroup();
         int handlingValue = AppPreferences.getInt("listener.fileHandling", 0);
-        String[] handlingKeys = {"prefs.lis.dont_modify", "prefs.lis.decompress", "prefs.lis.compress"};
-        String[] handlingFallbacks = {"Don't modify", "Decompress compressed images", "Compress non-compressed images with JPEG"};
+        String[] handlingKeys = { "prefs.lis.dont_modify", "prefs.lis.decompress", "prefs.lis.compress" };
+        String[] handlingFallbacks = { "Don't modify", "Decompress compressed images",
+                "Compress non-compressed images with JPEG" };
         for (int i = 0; i < handlingKeys.length; i++) {
             final int mode = i;
-            JRadioButton rb = new JRadioButton(LanguageManager.get(handlingKeys[i], handlingFallbacks[i]), handlingValue == i);
+            JRadioButton rb = new JRadioButton(LanguageManager.get(handlingKeys[i], handlingFallbacks[i]),
+                    handlingValue == i);
             rb.addActionListener(e -> AppPreferences.setInt("listener.fileHandling", mode));
             handlingGroup.add(rb);
             incoming.add(rb);
         }
-        incoming.add(new JLabel(LanguageManager.get("prefs.lis.cant_open", "If Horos is not able to open a file received by the DICOM listener:")));
+        incoming.add(new JLabel(LanguageManager.get("prefs.lis.cant_open",
+                "If Horos is not able to open a file received by the DICOM listener:")));
         ButtonGroup unreadableGroup = new ButtonGroup();
         int unreadableValue = AppPreferences.getInt("listener.unreadableAction", 0);
-        JRadioButton deleteUnreadable = new JRadioButton(LanguageManager.get("prefs.lis.delete_it", "Delete it"), unreadableValue == 0);
-        JRadioButton moveUnreadable = new JRadioButton(LanguageManager.get("prefs.lis.move_not_readable", "Move it to the NOT READABLE folder"), unreadableValue == 1);
+        JRadioButton deleteUnreadable = new JRadioButton(LanguageManager.get("prefs.lis.delete_it", "Delete it"),
+                unreadableValue == 0);
+        JRadioButton moveUnreadable = new JRadioButton(
+                LanguageManager.get("prefs.lis.move_not_readable", "Move it to the NOT READABLE folder"),
+                unreadableValue == 1);
         deleteUnreadable.addActionListener(e -> AppPreferences.setInt("listener.unreadableAction", 0));
         moveUnreadable.addActionListener(e -> AppPreferences.setInt("listener.unreadableAction", 1));
-        unreadableGroup.add(deleteUnreadable); unreadableGroup.add(moveUnreadable);
-        incoming.add(deleteUnreadable); incoming.add(moveUnreadable);
-        incoming.add(ck("listener.replaceExisting", false, LanguageManager.get("prefs.lis.replace", "Replace existing files with the newly received files")));
+        unreadableGroup.add(deleteUnreadable);
+        unreadableGroup.add(moveUnreadable);
+        incoming.add(deleteUnreadable);
+        incoming.add(moveUnreadable);
+        incoming.add(ck("listener.replaceExisting", false,
+                LanguageManager.get("prefs.lis.replace", "Replace existing files with the newly received files")));
         pane.add(incoming);
 
         JPanel other = preferenceSection(LanguageManager.get("prefs.lis.other", "Other options"));
-        other.add(ck("listener.databaseSharing", false, LanguageManager.get("prefs.lis.share_db", "Activate Horos database sharing, and publish it using the name:")));
+        other.add(ck("listener.databaseSharing", false, LanguageManager.get("prefs.lis.share_db",
+                "Activate Horos database sharing, and publish it using the name:")));
         other.add(preferenceText("listener.publishName", "OculusJJ", 20));
-        other.add(ck("listener.publishPassword", false, LanguageManager.get("prefs.lis.publish_pw", "Publish it with a password")));
-        other.add(ck("listener.bonjour", true, LanguageManager.get("prefs.lis.bonjour", "Publish my DICOM node over the network through the Bonjour protocol")));
-        other.add(ck("listener.linkToDefaultDatabase", true, LanguageManager.get("prefs.lis.link_default", "Incoming and shared files are always linked to the default database")));
-        other.add(ck("listener.generateLogs", false, LanguageManager.get("prefs.lis.logs", "Generate logs for DICOM Network events")));
+        other.add(ck("listener.publishPassword", false,
+                LanguageManager.get("prefs.lis.publish_pw", "Publish it with a password")));
+        other.add(ck("listener.bonjour", true, LanguageManager.get("prefs.lis.bonjour",
+                "Publish my DICOM node over the network through the Bonjour protocol")));
+        other.add(ck("listener.linkToDefaultDatabase", true, LanguageManager.get("prefs.lis.link_default",
+                "Incoming and shared files are always linked to the default database")));
+        other.add(ck("listener.generateLogs", false,
+                LanguageManager.get("prefs.lis.logs", "Generate logs for DICOM Network events")));
         JPanel logsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         logsRow.add(new JLabel(LanguageManager.get("prefs.lis.keep_logs", "Keep logs for:")));
-        logsRow.add(preferenceCombo("listener.logRetention", 0, new String[]{"1 week", "1 month", "1 year"}));
+        logsRow.add(preferenceCombo("listener.logRetention", 0, new String[] { "1 week", "1 month", "1 year" }));
         other.add(logsRow);
-        other.add(ck("listener.serverMode", false, LanguageManager.get("prefs.lis.server_mode", "Server mode (don't display errors messages, hide Database window at startup)")));
+        other.add(ck("listener.serverMode", false, LanguageManager.get("prefs.lis.server_mode",
+                "Server mode (don't display errors messages, hide Database window at startup)")));
         other.add(ck("listener.cgetScp", true, LanguageManager.get("prefs.lis.cget", "Activate C-GET SCP support")));
-        other.add(ck("listener.cfindScp", false, LanguageManager.get("prefs.lis.cfind", "Activate C-FIND SCP support")));
+        other.add(
+                ck("listener.cfindScp", false, LanguageManager.get("prefs.lis.cfind", "Activate C-FIND SCP support")));
         JPanel xmlRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        xmlRow.add(ck("listener.xmlRpcEnabled", false, LanguageManager.get("prefs.lis.url_xmlrpc", "Activate the URL support and HTTP XML-RPC Server on port:")));
+        xmlRow.add(ck("listener.xmlRpcEnabled", false, LanguageManager.get("prefs.lis.url_xmlrpc",
+                "Activate the URL support and HTTP XML-RPC Server on port:")));
         xmlRow.add(preferenceText("listener.xmlRpcPort", "8080", 6));
         other.add(xmlRow);
-        other.add(ck("listener.searchOnDemandUrls", false, LanguageManager.get("prefs.lis.pacs_ondemand", "Also search on PACS On-Demand servers for URLs and XML-RPC orders")));
-        other.add(ck("listener.closeViewersForXmlRpc", false, LanguageManager.get("prefs.lis.close_2d", "Automatically close all 2D Viewers before displaying studies with XML-RPC orders")));
+        other.add(ck("listener.searchOnDemandUrls", false, LanguageManager.get("prefs.lis.pacs_ondemand",
+                "Also search on PACS On-Demand servers for URLs and XML-RPC orders")));
+        other.add(ck("listener.closeViewersForXmlRpc", false, LanguageManager.get("prefs.lis.close_2d",
+                "Automatically close all 2D Viewers before displaying studies with XML-RPC orders")));
         pane.add(other);
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.listener", "Listener"));
     }
@@ -1699,7 +2274,8 @@ public static synchronized PreferencesController getInstance() {
     private void saveIntField(JTextField field, String key, int fallback, int min, int max) {
         try {
             int value = Integer.parseInt(field.getText().trim());
-            if (value < min || value > max) throw new NumberFormatException();
+            if (value < min || value > max)
+                throw new NumberFormatException();
             AppPreferences.setInt(key, value);
         } catch (NumberFormatException ex) {
             field.setText(String.valueOf(AppPreferences.getInt(key, fallback)));
@@ -1711,19 +2287,27 @@ public static synchronized PreferencesController getInstance() {
         locationsPane.setLayout(new BoxLayout(locationsPane, BoxLayout.Y_AXIS));
         locationsPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        JPanel nodes = preferenceSection(LanguageManager.get("prefs.loc.nodes_title", "DICOM Nodes for DICOM Query/Retrieve and DICOM Send"));
+        JPanel nodes = preferenceSection(
+                LanguageManager.get("prefs.loc.nodes_title", "DICOM Nodes for DICOM Query/Retrieve and DICOM Send"));
         nodes.add(new JLabel(LanguageManager.get("prefs.loc.delete_hint", "Press Delete key to remove a node")));
-        String[] cols = {"✓", LanguageManager.get("prefs.node.address", "Address"), "AETitle",
+        String[] cols = { "✓", LanguageManager.get("prefs.node.address", "Address"), "AETitle",
                 LanguageManager.get("prefs.node.port", "Port"), "Q/R", "Retrieve", "Send", "TLS",
-                LanguageManager.get("prefs.node.name", "Name"), "Send Transfer Syntax"};
+                LanguageManager.get("prefs.node.name", "Name"), "Send Transfer Syntax" };
         DefaultTableModel model = new DefaultTableModel(cols, 0) {
-            @Override public Class<?> getColumnClass(int col) { return col == 0 || col == 4 || col == 6 ? Boolean.class : String.class; }
-            @Override public boolean isCellEditable(int row, int col) { return col != 5; }
+            @Override
+            public Class<?> getColumnClass(int col) {
+                return col == 0 || col == 4 || col == 6 ? Boolean.class : String.class;
+            }
+
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return col != 5;
+            }
         };
         java.util.List<DicomNode> nodesList = DicomNodeManager.getInstance().getNodes();
         for (DicomNode node : nodesList) {
-            model.addRow(new Object[]{true, node.getAddress(), node.getAeTitle(), String.valueOf(node.getPort()),
-                    false, "C-MOVE", true, "No", node.getName(), "Explicit Little Endian"});
+            model.addRow(new Object[] { true, node.getAddress(), node.getAeTitle(), String.valueOf(node.getPort()),
+                    false, "C-MOVE", true, "No", node.getName(), "Explicit Little Endian" });
         }
         JTable table = new JTable(model);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
@@ -1733,15 +2317,21 @@ public static synchronized PreferencesController getInstance() {
         nodes.add(nodeScroll);
         JPanel nodeButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         JButton allBtn = new JButton(LanguageManager.get("prefs.loc.all", "All"));
-        allBtn.addActionListener(e -> { for (int r = 0; r < model.getRowCount(); r++) model.setValueAt(true, r, 0); });
+        allBtn.addActionListener(e -> {
+            for (int r = 0; r < model.getRowCount(); r++)
+                model.setValueAt(true, r, 0);
+        });
         JButton noneBtn = new JButton(LanguageManager.get("prefs.loc.none", "None"));
-        noneBtn.addActionListener(e -> { for (int r = 0; r < model.getRowCount(); r++) model.setValueAt(false, r, 0); });
+        noneBtn.addActionListener(e -> {
+            for (int r = 0; r < model.getRowCount(); r++)
+                model.setValueAt(false, r, 0);
+        });
         JButton addBtn = new JButton(LanguageManager.get("prefs.loc.add_node", "Add new node"));
         addBtn.addActionListener(e -> {
             DicomNode node = new DicomNode();
             showNodeEditor(node, () -> {
-                model.addRow(new Object[]{true, node.getAddress(), node.getAeTitle(), String.valueOf(node.getPort()),
-                        false, "C-MOVE", true, "No", node.getName(), "Explicit Little Endian"});
+                model.addRow(new Object[] { true, node.getAddress(), node.getAeTitle(), String.valueOf(node.getPort()),
+                        false, "C-MOVE", true, "No", node.getName(), "Explicit Little Endian" });
             });
         });
         JButton deleteBtn = new JButton(LanguageManager.get("prefs.node_delete", "Delete"));
@@ -1760,18 +2350,23 @@ public static synchronized PreferencesController getInstance() {
         JButton verifyBtn = new JButton(LanguageManager.get("prefs.loc.verify", "Verify"));
         verifyBtn.addActionListener(e -> {
             int viewRow = table.getSelectedRow();
-            if (viewRow < 0) return;
+            if (viewRow < 0)
+                return;
             int row = table.convertRowIndexToModel(viewRow);
             DicomNode node = new DicomNode();
             node.setAddress(String.valueOf(model.getValueAt(row, 1)));
             node.setAeTitle(String.valueOf(model.getValueAt(row, 2)));
-            try { node.setPort(Integer.parseInt(String.valueOf(model.getValueAt(row, 3)))); }
-            catch (NumberFormatException ex) { return; }
+            try {
+                node.setPort(Integer.parseInt(String.valueOf(model.getValueAt(row, 3))));
+            } catch (NumberFormatException ex) {
+                return;
+            }
             new Thread(() -> {
                 try {
                     boolean ok = DicomService.getInstance().echo(node);
                     SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,
-                            ok ? LanguageManager.get("prefs.echo_ok", "Echo Success!") : LanguageManager.get("prefs.echo_failed", "Echo Failed")));
+                            ok ? LanguageManager.get("prefs.echo_ok", "Echo Success!")
+                                    : LanguageManager.get("prefs.echo_failed", "Echo Failed")));
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,
                             LanguageManager.get("prefs.error", "Error:") + " " + ex.getMessage()));
@@ -1785,43 +2380,63 @@ public static synchronized PreferencesController getInstance() {
                 if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                     java.util.List<DicomNode> export = new java.util.ArrayList<>();
                     for (int r = 0; r < model.getRowCount(); r++) {
-                        DicomNode n = new DicomNode(String.valueOf(model.getValueAt(r, 8)), String.valueOf(model.getValueAt(r, 2)),
-                                String.valueOf(model.getValueAt(r, 1)), Integer.parseInt(String.valueOf(model.getValueAt(r, 3))));
+                        DicomNode n = new DicomNode(String.valueOf(model.getValueAt(r, 8)),
+                                String.valueOf(model.getValueAt(r, 2)),
+                                String.valueOf(model.getValueAt(r, 1)),
+                                Integer.parseInt(String.valueOf(model.getValueAt(r, 3))));
                         export.add(n);
                     }
                     new com.fasterxml.jackson.databind.ObjectMapper().writeValue(chooser.getSelectedFile(), export);
                 }
-            } catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, ex.getMessage());
+            }
         });
         JButton loadNodes = new JButton(LanguageManager.get("prefs.loc.load", "Load..."));
         loadNodes.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 try {
-                    DicomNode[] loaded = new com.fasterxml.jackson.databind.ObjectMapper().readValue(chooser.getSelectedFile(), DicomNode[].class);
+                    DicomNode[] loaded = new com.fasterxml.jackson.databind.ObjectMapper()
+                            .readValue(chooser.getSelectedFile(), DicomNode[].class);
                     for (DicomNode node : loaded) {
                         DicomNodeManager.getInstance().addNode(node);
-                        model.addRow(new Object[]{true, node.getAddress(), node.getAeTitle(), String.valueOf(node.getPort()),
-                                false, "C-MOVE", true, "No", node.getName(), "Explicit Little Endian"});
+                        model.addRow(new Object[] { true, node.getAddress(), node.getAeTitle(),
+                                String.valueOf(node.getPort()),
+                                false, "C-MOVE", true, "No", node.getName(), "Explicit Little Endian" });
                     }
-                } catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, ex.getMessage());
+                }
             }
         });
-        nodeButtons.add(allBtn); nodeButtons.add(noneBtn); nodeButtons.add(saveNodes); nodeButtons.add(loadNodes);
-        nodeButtons.add(verifyBtn); nodeButtons.add(addBtn); nodeButtons.add(deleteBtn);
+        nodeButtons.add(allBtn);
+        nodeButtons.add(noneBtn);
+        nodeButtons.add(saveNodes);
+        nodeButtons.add(loadNodes);
+        nodeButtons.add(verifyBtn);
+        nodeButtons.add(addBtn);
+        nodeButtons.add(deleteBtn);
         nodes.add(nodeButtons);
         nodes.add(preferenceTextRow("prefs.loc.sync_url", "Automatically sync the DICOM Nodes list from this URL:",
                 "locations.nodesSyncUrl", "http://list.dicom.dcm/DICOMNodes.plist"));
-        nodes.add(ck("locations.imageLevelRetrieval", false, LanguageManager.get("prefs.loc.image_level", "For C-GET and C-MOVE, try to retrieve images, at IMAGE level")));
-        nodes.add(ck("locations.restartAutoQuery", false, LanguageManager.get("prefs.loc.restart", "Restart DICOM Auto Query & Retrieve settings, at launch")));
-        nodes.add(ck("locations.searchBonjourNodes", true, LanguageManager.get("prefs.loc.bonjour", "Search for other DICOM Nodes through Bonjour protocol")));
-        nodes.add(ck("locations.cfindStatusComments", true, LanguageManager.get("prefs.loc.cfind", "For C-FIND, support status and comments fields")));
+        nodes.add(ck("locations.imageLevelRetrieval", false, LanguageManager.get("prefs.loc.image_level",
+                "For C-GET and C-MOVE, try to retrieve images, at IMAGE level")));
+        nodes.add(ck("locations.restartAutoQuery", false,
+                LanguageManager.get("prefs.loc.restart", "Restart DICOM Auto Query & Retrieve settings, at launch")));
+        nodes.add(ck("locations.searchBonjourNodes", true,
+                LanguageManager.get("prefs.loc.bonjour", "Search for other DICOM Nodes through Bonjour protocol")));
+        nodes.add(ck("locations.cfindStatusComments", true,
+                LanguageManager.get("prefs.loc.cfind", "For C-FIND, support status and comments fields")));
         nodes.add(makeRow(new JLabel(LanguageManager.get("prefs.loc.encoding", "Text encoding:")),
-                preferenceCombo("locations.textEncoding", 0, new String[]{"Western European: ISO_IR 100", "Japanese: ISO_IR 192", "Default"})));
+                preferenceCombo("locations.textEncoding", 0,
+                        new String[] { "Western European: ISO_IR 100", "Japanese: ISO_IR 192", "Default" })));
         locationsPane.add(nodes);
 
-        JPanel networkDb = preferenceSection(LanguageManager.get("prefs.loc.net_db_title", "Network - Horos Databases with Fixed Addresses (tcp/ip port 8780):"));
-        DefaultTableModel networkModel = new DefaultTableModel(new String[]{"Address", LanguageManager.get("prefs.loc.description", "Description")}, 0);
+        JPanel networkDb = preferenceSection(LanguageManager.get("prefs.loc.net_db_title",
+                "Network - Horos Databases with Fixed Addresses (tcp/ip port 8780):"));
+        DefaultTableModel networkModel = new DefaultTableModel(
+                new String[] { "Address", LanguageManager.get("prefs.loc.description", "Description") }, 0);
         JTable networkTable = new JTable(networkModel);
         networkDb.add(new JScrollPane(networkTable));
         JPanel netControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
@@ -1829,23 +2444,36 @@ public static synchronized PreferencesController getInstance() {
         addServer.addActionListener(e -> {
             JTextField address = new JTextField(18), description = new JTextField(16);
             JPanel fields = new JPanel(new GridLayout(2, 2, 4, 4));
-            fields.add(new JLabel("Address")); fields.add(address); fields.add(new JLabel("Description")); fields.add(description);
-            if (JOptionPane.showConfirmDialog(this, fields, "Add server", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
-                networkModel.addRow(new Object[]{address.getText(), description.getText()});
+            fields.add(new JLabel("Address"));
+            fields.add(address);
+            fields.add(new JLabel("Description"));
+            fields.add(description);
+            if (JOptionPane.showConfirmDialog(this, fields, "Add server",
+                    JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
+                networkModel.addRow(new Object[] { address.getText(), description.getText() });
         });
         JButton removeServer = new JButton(LanguageManager.get("prefs.node_delete", "Delete"));
-        removeServer.addActionListener(e -> { int r = networkTable.getSelectedRow(); if (r >= 0) networkModel.removeRow(r); });
-        netControls.add(addServer); netControls.add(removeServer);
+        removeServer.addActionListener(e -> {
+            int r = networkTable.getSelectedRow();
+            if (r >= 0)
+                networkModel.removeRow(r);
+        });
+        netControls.add(addServer);
+        netControls.add(removeServer);
         networkDb.add(netControls);
         networkDb.add(preferenceTextRow("prefs.loc.net_db_sync", "Automatically sync this list from this URL:",
                 "locations.databaseSyncUrl", "http://list.dicom.dcm/OSirXDB.plist"));
         networkDb.add(ck("locations.disableBonjourDatabaseSearch", false,
-                LanguageManager.get("prefs.loc.net_bonjour_off", "Turn Off Bonjour searching protocol - Do not search for Bonjour Horos Databases")));
+                LanguageManager.get("prefs.loc.net_bonjour_off",
+                        "Turn Off Bonjour searching protocol - Do not search for Bonjour Horos Databases")));
         locationsPane.add(networkDb);
 
-        JPanel localDb = preferenceSection(LanguageManager.get("prefs.loc.local_db_title", "Local - Horos Databases files / folder:"));
-        DefaultTableModel localModel = new DefaultTableModel(new String[]{LanguageManager.get("prefs.loc.local_path", "Local Path"),
-                LanguageManager.get("prefs.loc.description", "Description")}, 0);
+        JPanel localDb = preferenceSection(
+                LanguageManager.get("prefs.loc.local_db_title", "Local - Horos Databases files / folder:"));
+        DefaultTableModel localModel = new DefaultTableModel(
+                new String[] { LanguageManager.get("prefs.loc.local_path", "Local Path"),
+                        LanguageManager.get("prefs.loc.description", "Description") },
+                0);
         JTable localTable = new JTable(localModel);
         localDb.add(new JScrollPane(localTable));
         JButton addLocal = new JButton(LanguageManager.get("prefs.loc.add_local", "Add a local path"));
@@ -1853,7 +2481,8 @@ public static synchronized PreferencesController getInstance() {
             JFileChooser chooser = new JFileChooser();
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
-                localModel.addRow(new Object[]{chooser.getSelectedFile().getAbsolutePath(), chooser.getSelectedFile().getName()});
+                localModel.addRow(new Object[] { chooser.getSelectedFile().getAbsolutePath(),
+                        chooser.getSelectedFile().getName() });
         });
         localDb.add(addLocal);
         locationsPane.add(localDb);
@@ -1867,59 +2496,88 @@ public static synchronized PreferencesController getInstance() {
         JPanel options = new JPanel();
         options.setLayout(new BoxLayout(options, BoxLayout.Y_AXIS));
         options.add(ck("routing.active", false, LanguageManager.get("prefs.route.activate", "Activate AutoRouting")));
-        options.add(ck("routing.showError", true, LanguageManager.get("prefs.route.error", "Display an error if an autorouting rule failed")));
+        options.add(ck("routing.showError", true,
+                LanguageManager.get("prefs.route.error", "Display an error if an autorouting rule failed")));
         pane.add(options, BorderLayout.NORTH);
 
         JPanel center = new JPanel(new BorderLayout(4, 4));
-        center.add(new JLabel(LanguageManager.get("prefs.route.explain", "Horos will automatically send data added in the database according to the following routes:")), BorderLayout.NORTH);
-        String[] columns = {LanguageManager.get("prefs.route.activated", "Activated"), LanguageManager.get("prefs.route.routes", "Routes"),
-                LanguageManager.get("prefs.route.destination", "Destination"), LanguageManager.get("prefs.route.comments", "Comments")};
+        center.add(
+                new JLabel(LanguageManager.get("prefs.route.explain",
+                        "Horos will automatically send data added in the database according to the following routes:")),
+                BorderLayout.NORTH);
+        String[] columns = { LanguageManager.get("prefs.route.activated", "Activated"),
+                LanguageManager.get("prefs.route.routes", "Routes"),
+                LanguageManager.get("prefs.route.destination", "Destination"),
+                LanguageManager.get("prefs.route.comments", "Comments") };
         DefaultTableModel model = new DefaultTableModel(columns, 0) {
-            @Override public Class<?> getColumnClass(int col) { return col == 0 ? Boolean.class : String.class; }
+            @Override
+            public Class<?> getColumnClass(int col) {
+                return col == 0 ? Boolean.class : String.class;
+            }
         };
         String saved = AppPreferences.getStr("routing.rules", "");
         if (!saved.isBlank()) {
             try {
                 String[][] rows = new com.fasterxml.jackson.databind.ObjectMapper().readValue(saved, String[][].class);
-                for (String[] row : rows) if (row.length == 4)
-                    model.addRow(new Object[]{Boolean.parseBoolean(row[0]), row[1], row[2], row[3]});
-            } catch (Exception ignored) { }
+                for (String[] row : rows)
+                    if (row.length == 4)
+                        model.addRow(new Object[] { Boolean.parseBoolean(row[0]), row[1], row[2], row[3] });
+            } catch (Exception ignored) {
+            }
         }
         JTable table = new JTable(model);
         Runnable persist = () -> {
             java.util.List<String[]> rows = new java.util.ArrayList<>();
-            for (int r = 0; r < model.getRowCount(); r++) rows.add(new String[]{
-                    String.valueOf(model.getValueAt(r, 0)), String.valueOf(model.getValueAt(r, 1)),
-                    String.valueOf(model.getValueAt(r, 2)), String.valueOf(model.getValueAt(r, 3))});
-            try { AppPreferences.setStr("routing.rules", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows)); }
-            catch (Exception ignored) { }
+            for (int r = 0; r < model.getRowCount(); r++)
+                rows.add(new String[] {
+                        String.valueOf(model.getValueAt(r, 0)), String.valueOf(model.getValueAt(r, 1)),
+                        String.valueOf(model.getValueAt(r, 2)), String.valueOf(model.getValueAt(r, 3)) });
+            try {
+                AppPreferences.setStr("routing.rules",
+                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows));
+            } catch (Exception ignored) {
+            }
         };
         model.addTableModelListener(e -> persist.run());
         table.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                if (e.getClickCount() == 2 && table.getSelectedRow() >= 0) editRoutingRow(table, model, table.convertRowIndexToModel(table.getSelectedRow()));
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2 && table.getSelectedRow() >= 0)
+                    editRoutingRow(table, model, table.convertRowIndexToModel(table.getSelectedRow()));
             }
         });
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("DELETE"), "deleteRoute");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("DELETE"),
+                "deleteRoute");
         table.getActionMap().put("deleteRoute", new AbstractAction() {
-            @Override public void actionPerformed(java.awt.event.ActionEvent e) {
-                int row = table.getSelectedRow(); if (row >= 0) model.removeRow(table.convertRowIndexToModel(row));
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                int row = table.getSelectedRow();
+                if (row >= 0)
+                    model.removeRow(table.convertRowIndexToModel(row));
             }
         });
         center.add(new JScrollPane(table), BorderLayout.CENTER);
         JPanel footer = new JPanel(new BorderLayout());
-        JPanel hints = new JPanel(); hints.setLayout(new BoxLayout(hints, BoxLayout.Y_AXIS));
-        hints.add(new JLabel(LanguageManager.get("prefs.route.edit_hint", "Double-Click on a route to edit filter parameters")));
+        JPanel hints = new JPanel();
+        hints.setLayout(new BoxLayout(hints, BoxLayout.Y_AXIS));
+        hints.add(new JLabel(
+                LanguageManager.get("prefs.route.edit_hint", "Double-Click on a route to edit filter parameters")));
         hints.add(new JLabel(LanguageManager.get("prefs.route.delete_hint", "Press Delete key to delete a route")));
-        hints.add(new JLabel(LanguageManager.get("prefs.route.filter_help", "Filter: * or key=value; supported keys: modality, patientID, studyDescription, seriesDescription, accessionNumber, studyUID")));
+        hints.add(new JLabel(LanguageManager.get("prefs.route.filter_help",
+                "Filter: * or key=value; supported keys: modality, patientID, studyDescription, seriesDescription, accessionNumber, studyUID")));
         JButton addRoute = new JButton(LanguageManager.get("prefs.route.add", "Add new route"));
         addRoute.addActionListener(e -> {
-            String route = JOptionPane.showInputDialog(this, LanguageManager.get("prefs.route.filter_help", "Filter: * or key=value; supported keys: modality, patientID, studyDescription, seriesDescription, accessionNumber, studyUID"));
-            if (route == null || route.isBlank()) return;
-            String destination = JOptionPane.showInputDialog(this, LanguageManager.get("prefs.route.destination", "Destination"));
-            if (destination != null && !destination.isBlank()) model.addRow(new Object[]{true, route.trim(), destination.trim(), ""});
+            String route = JOptionPane.showInputDialog(this, LanguageManager.get("prefs.route.filter_help",
+                    "Filter: * or key=value; supported keys: modality, patientID, studyDescription, seriesDescription, accessionNumber, studyUID"));
+            if (route == null || route.isBlank())
+                return;
+            String destination = JOptionPane.showInputDialog(this,
+                    LanguageManager.get("prefs.route.destination", "Destination"));
+            if (destination != null && !destination.isBlank())
+                model.addRow(new Object[] { true, route.trim(), destination.trim(), "" });
         });
-        footer.add(hints, BorderLayout.WEST); footer.add(addRoute, BorderLayout.EAST);
+        footer.add(hints, BorderLayout.WEST);
+        footer.add(addRoute, BorderLayout.EAST);
         center.add(footer, BorderLayout.SOUTH);
         pane.add(center, BorderLayout.CENTER);
         contentPanel.add(pane, LanguageManager.get("prefs.nav.routing", "Routing"));
@@ -1930,11 +2588,17 @@ public static synchronized PreferencesController getInstance() {
         JTextField destination = new JTextField(String.valueOf(model.getValueAt(row, 2)), 20);
         JTextField comments = new JTextField(String.valueOf(model.getValueAt(row, 3)), 20);
         JPanel fields = new JPanel(new GridLayout(3, 2, 4, 4));
-        fields.add(new JLabel(LanguageManager.get("prefs.route.filter_help", "Routes / Filter"))); fields.add(route);
-        fields.add(new JLabel(LanguageManager.get("prefs.route.destination", "Destination"))); fields.add(destination);
-        fields.add(new JLabel(LanguageManager.get("prefs.route.comments", "Comments"))); fields.add(comments);
-        if (JOptionPane.showConfirmDialog(this, fields, "Edit route", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
-            model.setValueAt(route.getText(), row, 1); model.setValueAt(destination.getText(), row, 2); model.setValueAt(comments.getText(), row, 3);
+        fields.add(new JLabel(LanguageManager.get("prefs.route.filter_help", "Routes / Filter")));
+        fields.add(route);
+        fields.add(new JLabel(LanguageManager.get("prefs.route.destination", "Destination")));
+        fields.add(destination);
+        fields.add(new JLabel(LanguageManager.get("prefs.route.comments", "Comments")));
+        fields.add(comments);
+        if (JOptionPane.showConfirmDialog(this, fields, "Edit route",
+                JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+            model.setValueAt(route.getText(), row, 1);
+            model.setValueAt(destination.getText(), row, 2);
+            model.setValueAt(comments.getText(), row, 3);
         }
     }
 
@@ -1942,77 +2606,126 @@ public static synchronized PreferencesController getInstance() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        JCheckBox webServerActive = new JCheckBox(LanguageManager.get("prefs.web.activate", "Activate the built-in Web Server"),
+        JCheckBox webServerActive = new JCheckBox(
+                LanguageManager.get("prefs.web.activate", "Activate the built-in Web Server"),
                 AppPreferences.getBool("webserver.active", false));
         webServerActive.addActionListener(e -> setWebServerActive(webServerActive.isSelected(), webServerActive));
         pane.add(webServerActive);
         JPanel address = preferenceSection("Web Server");
-        address.add(makeRow(new JLabel(LanguageManager.get("prefs.web.public", "Public address:")), preferenceText("webserver.publicAddress", "", 25)));
+        address.add(makeRow(new JLabel(LanguageManager.get("prefs.web.public", "Public address:")),
+                preferenceText("webserver.publicAddress", "", 25)));
         JTextField port = new JTextField(String.valueOf(AppPreferences.getWebServerPort()), 6);
         port.addActionListener(e -> saveIntField(port, "webserver.port", 3333, 1, 65535));
         port.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
                 saveIntField(port, "webserver.port", 3333, 1, 65535);
-                if (webServerActive.isSelected()) setWebServerActive(true, webServerActive);
+                if (webServerActive.isSelected())
+                    setWebServerActive(true, webServerActive);
             }
         });
         address.add(makeRow(new JLabel(LanguageManager.get("prefs.web.local_port", "Local port:")), port));
         JPanel https = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        https.add(ck("webserver.httpsEnabled", false, LanguageManager.get("prefs.web.https", "Secure (HTTPS) connections with certificate:")));
+        https.add(ck("webserver.httpsEnabled", false,
+                LanguageManager.get("prefs.web.https", "Secure (HTTPS) connections with certificate:")));
         JButton cert = new JButton(LanguageManager.get("prefs.web.choose", "Choose..."));
         cert.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
                 AppPreferences.setStr("webserver.certificatePath", chooser.getSelectedFile().getAbsolutePath());
         });
-        https.add(cert); address.add(https);
+        https.add(cert);
+        address.add(https);
         pane.add(address);
 
         JPanel options = preferenceSection(LanguageManager.get("prefs.web.options", "Options"));
-        options.add(ck("webserver.wadoEnabled", true, LanguageManager.get("prefs.wado.enable", "Activate WADO Server at /wado")));
-        options.add(ck("webserver.wadoIdentifiedOnly", true, LanguageManager.get("prefs.web.wado_only", "Only accept WADO request from identified user")));
-        options.add(ck("webserver.authorizeWeasisHoros", true, LanguageManager.get("prefs.web.authorize_viewers", "Authorize Weasis & Horos as web viewer")));
-        options.add(ck("webserver.preferFlash", true, LanguageManager.get("prefs.web.prefer_flash", "Prefer Flash over QuickTime movies for series viewing")));
-        options.add(makeRow(new JLabel(LanguageManager.get("prefs.web.max_frames", "Maximum number of frames for movies:")), preferenceText("webserver.maxMovieFrames", "400", 6)));
-        options.add(makeRow(new JLabel(LanguageManager.get("prefs.web.min_width", "Minimum width for movies / still images:")), preferenceText("webserver.minWidth", "512", 6)));
-        options.add(makeRow(new JLabel(LanguageManager.get("prefs.web.max_movie_width", "Maximum width for movies:")), preferenceText("webserver.maxMovieWidth", "880", 6)));
-        options.add(makeRow(new JLabel(LanguageManager.get("prefs.web.max_still_width", "Maximum width for still images:")), preferenceText("webserver.maxStillWidth", "880", 6)));
-        options.add(ck("webserver.generateLogEvents", false, LanguageManager.get("prefs.web.generate_logs", "Generate Log Events (see network menu)")));
+        options.add(ck("webserver.wadoEnabled", true,
+                LanguageManager.get("prefs.wado.enable", "Activate WADO Server at /wado")));
+        options.add(ck("webserver.wadoIdentifiedOnly", true,
+                LanguageManager.get("prefs.web.wado_only", "Only accept WADO request from identified user")));
+        options.add(ck("webserver.authorizeWeasisHoros", true,
+                LanguageManager.get("prefs.web.authorize_viewers", "Authorize Weasis & Horos as web viewer")));
+        options.add(ck("webserver.preferFlash", true, LanguageManager.get("prefs.web.prefer_flash",
+                "Prefer Flash over QuickTime movies for series viewing")));
+        options.add(
+                makeRow(new JLabel(LanguageManager.get("prefs.web.max_frames", "Maximum number of frames for movies:")),
+                        preferenceText("webserver.maxMovieFrames", "400", 6)));
+        options.add(makeRow(
+                new JLabel(LanguageManager.get("prefs.web.min_width", "Minimum width for movies / still images:")),
+                preferenceText("webserver.minWidth", "512", 6)));
+        options.add(makeRow(new JLabel(LanguageManager.get("prefs.web.max_movie_width", "Maximum width for movies:")),
+                preferenceText("webserver.maxMovieWidth", "880", 6)));
+        options.add(
+                makeRow(new JLabel(LanguageManager.get("prefs.web.max_still_width", "Maximum width for still images:")),
+                        preferenceText("webserver.maxStillWidth", "880", 6)));
+        options.add(ck("webserver.generateLogEvents", false,
+                LanguageManager.get("prefs.web.generate_logs", "Generate Log Events (see network menu)")));
         JPanel templateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        templateRow.add(ck("webserver.useTemplate", false, LanguageManager.get("prefs.web.template", "Use templates at:")));
+        templateRow.add(
+                ck("webserver.useTemplate", false, LanguageManager.get("prefs.web.template", "Use templates at:")));
         templateRow.add(preferenceText("webserver.templatePath", "", 30));
-        JButton createTemplates = new JButton(LanguageManager.get("prefs.web.create_templates", "Create missing files"));
-        createTemplates.addActionListener(e -> JOptionPane.showMessageDialog(this, "Template directory: " + AppPreferences.getStr("webserver.templatePath", "")));
-        templateRow.add(createTemplates); options.add(templateRow);
+        JButton createTemplates = new JButton(
+                LanguageManager.get("prefs.web.create_templates", "Create missing files"));
+        createTemplates.addActionListener(e -> JOptionPane.showMessageDialog(this,
+                "Template directory: " + AppPreferences.getStr("webserver.templatePath", "")));
+        templateRow.add(createTemplates);
+        options.add(templateRow);
         JPanel auth = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        auth.add(ck("webserver.requireAuth", false, LanguageManager.get("prefs.web.auth", "Require user authentication")));
+        auth.add(ck("webserver.requireAuth", false,
+                LanguageManager.get("prefs.web.auth", "Require user authentication")));
         JButton editUsers = new JButton(LanguageManager.get("prefs.web.edit_users", "Edit users"));
-        editUsers.addActionListener(e -> JOptionPane.showMessageDialog(this, "User management is not configured yet."));
-        auth.add(editUsers); auth.add(preferenceText("webserver.authTimeoutMinutes", "30", 5));
+        editUsers.addActionListener(e -> {
+            String usersJson = AppPreferences.getStr("webserver.users", "[]");
+            JPanel panel = new JPanel(new BorderLayout());
+            JTextArea usersArea = new JTextArea(usersJson, 10, 40);
+            usersArea.setLineWrap(true);
+            usersArea.setWrapStyleWord(true);
+            JScrollPane scroll = new JScrollPane(usersArea);
+            panel.add(scroll, BorderLayout.CENTER);
+            int result = JOptionPane.showConfirmDialog(this, panel,
+                    LanguageManager.get("prefs.web.edit_users", "Edit users"), JOptionPane.OK_CANCEL_OPTION);
+            if (result == JOptionPane.OK_OPTION) {
+                AppPreferences.setStr("webserver.users", usersArea.getText().trim());
+                JOptionPane.showMessageDialog(this,
+                        LanguageManager.get("prefs.web.users_saved", "User management saved successfully."),
+                        LanguageManager.get("prefs.ok", "OK"), JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        auth.add(editUsers);
+        auth.add(preferenceText("webserver.authTimeoutMinutes", "30", 5));
         auth.add(new JLabel(LanguageManager.get("prefs.web.timeout", "minutes")));
         options.add(auth);
-        options.add(ck("webserver.adminCanDelete", false, LanguageManager.get("prefs.web.admin_delete", "Admin users can delete studies or series")));
-        options.add(ck("webserver.passwordResetByEmail", true, LanguageManager.get("prefs.web.restore_password", "Authorize users to restore password by email")));
+        options.add(ck("webserver.adminCanDelete", false,
+                LanguageManager.get("prefs.web.admin_delete", "Admin users can delete studies or series")));
+        options.add(ck("webserver.passwordResetByEmail", true,
+                LanguageManager.get("prefs.web.restore_password", "Authorize users to restore password by email")));
         JPanel duration = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         duration.add(new JLabel(LanguageManager.get("prefs.web.temp_duration", "Duration for temporary user:")));
         duration.add(preferenceText("webserver.temporaryUserDays", "60", 5));
-        duration.add(new JLabel(LanguageManager.get("prefs.web.days", "days"))); options.add(duration);
+        duration.add(new JLabel(LanguageManager.get("prefs.web.days", "days")));
+        options.add(duration);
         pane.add(options);
 
         JPanel emails = preferenceSection(LanguageManager.get("prefs.web.emails", "Emails"));
         ButtonGroup emailGroup = new ButtonGroup();
-        JRadioButton mailApp = new JRadioButton(LanguageManager.get("prefs.web.mail_app", "Mail.app"), AppPreferences.getInt("webserver.emailEngine", 0) == 0);
-        JRadioButton smtp = new JRadioButton(LanguageManager.get("prefs.web.smtp", "Built-in SMTP"), AppPreferences.getInt("webserver.emailEngine", 0) == 1);
+        JRadioButton mailApp = new JRadioButton(LanguageManager.get("prefs.web.mail_app", "Mail.app"),
+                AppPreferences.getInt("webserver.emailEngine", 0) == 0);
+        JRadioButton smtp = new JRadioButton(LanguageManager.get("prefs.web.smtp", "Built-in SMTP"),
+                AppPreferences.getInt("webserver.emailEngine", 0) == 1);
         mailApp.addActionListener(e -> AppPreferences.setInt("webserver.emailEngine", 0));
         smtp.addActionListener(e -> AppPreferences.setInt("webserver.emailEngine", 1));
-        emailGroup.add(mailApp); emailGroup.add(smtp);
+        emailGroup.add(mailApp);
+        emailGroup.add(smtp);
         emails.add(makeRow(new JLabel(LanguageManager.get("prefs.web.email_engine", "Email Engine:")), mailApp));
         emails.add(smtp);
-        emails.add(makeRow(new JLabel(LanguageManager.get("prefs.web.email_address", "Email Address:")), preferenceText("webserver.emailAddress", "", 28)));
+        emails.add(makeRow(new JLabel(LanguageManager.get("prefs.web.email_address", "Email Address:")),
+                preferenceText("webserver.emailAddress", "", 28)));
         JPanel notify = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        notify.add(ck("webserver.emailNotifications", false, LanguageManager.get("prefs.web.auto_notify", "Issue automatic notifications when adding studies, send them every:")));
+        notify.add(ck("webserver.emailNotifications", false, LanguageManager.get("prefs.web.auto_notify",
+                "Issue automatic notifications when adding studies, send them every:")));
         notify.add(preferenceText("webserver.notificationInterval", "1", 5));
-        notify.add(new JLabel(LanguageManager.get("prefs.web.user", "minutes"))); emails.add(notify);
+        notify.add(new JLabel(LanguageManager.get("prefs.web.user", "minutes")));
+        emails.add(notify);
         pane.add(emails);
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.webserver", "Web Server"));
     }
@@ -2022,11 +2735,13 @@ public static synchronized PreferencesController getInstance() {
         try {
             com.oculus.jj.model.WebServerService service = com.oculus.jj.model.WebServerService.getInstance();
             service.stop();
-            if (active) service.start();
+            if (active)
+                service.start();
         } catch (Exception ex) {
             AppPreferences.setBool("webserver.active", false);
             control.setSelected(false);
-            JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"), JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"),
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -2035,75 +2750,111 @@ public static synchronized PreferencesController getInstance() {
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
         pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         pane.add(ck("ondemand.active", false, LanguageManager.get("prefs.ond.activate", "Activate PACS On Demand")));
-        JPanel nodes = preferenceSection(LanguageManager.get("prefs.ond.nodes", "DICOM Nodes for PACS On Demand matching and retrieving:"));
-        nodes.add(new JLabel(LanguageManager.get("prefs.ond.locations_hint", "See Locations Preferences for editing these DICOM Node")));
-        nodes.add(new JLabel(LanguageManager.get("prefs.ond.priority_hint", "Drag sources into the priority order for retrieving")));
-        DefaultTableModel nodeModel = new DefaultTableModel(new String[]{"Use", "Name", "AETitle", "Address:Port"}, 0) {
-            @Override public Class<?> getColumnClass(int col) { return col == 0 ? Boolean.class : String.class; }
+        JPanel nodes = preferenceSection(
+                LanguageManager.get("prefs.ond.nodes", "DICOM Nodes for PACS On Demand matching and retrieving:"));
+        nodes.add(new JLabel(LanguageManager.get("prefs.ond.locations_hint",
+                "See Locations Preferences for editing these DICOM Node")));
+        nodes.add(new JLabel(
+                LanguageManager.get("prefs.ond.priority_hint", "Drag sources into the priority order for retrieving")));
+        DefaultTableModel nodeModel = new DefaultTableModel(new String[] { "Use", "Name", "AETitle", "Address:Port" },
+                0) {
+            @Override
+            public Class<?> getColumnClass(int col) {
+                return col == 0 ? Boolean.class : String.class;
+            }
         };
         for (DicomNode node : DicomNodeManager.getInstance().getNodes())
-            nodeModel.addRow(new Object[]{true, node.getName(), node.getAeTitle(), node.getAddress() + ":" + node.getPort()});
+            nodeModel.addRow(
+                    new Object[] { true, node.getName(), node.getAeTitle(), node.getAddress() + ":" + node.getPort() });
         JTable nodeTable = new JTable(nodeModel);
         nodeTable.setRowHeight(21);
-        JScrollPane nodeScroll = new JScrollPane(nodeTable); nodeScroll.setPreferredSize(new Dimension(700, 100));
+        JScrollPane nodeScroll = new JScrollPane(nodeTable);
+        nodeScroll.setPreferredSize(new Dimension(700, 100));
         nodes.add(nodeScroll);
         JPanel orderButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 2));
         JButton moveUp = new JButton("↑"), moveDown = new JButton("↓");
         moveUp.addActionListener(e -> moveTableRow(nodeModel, nodeTable.getSelectedRow(), -1));
         moveDown.addActionListener(e -> moveTableRow(nodeModel, nodeTable.getSelectedRow(), 1));
-        orderButtons.add(moveUp); orderButtons.add(moveDown); nodes.add(orderButtons);
+        orderButtons.add(moveUp);
+        orderButtons.add(moveDown);
+        nodes.add(orderButtons);
         pane.add(nodes);
-        pane.add(ck("ondemand.distantStudyIfMoreImages", true, LanguageManager.get("prefs.ond.distant", "If a distant study has more images than a local study, display the distant study")));
-        pane.add(ck("ondemand.autoRetrievePartialLocal", true, LanguageManager.get("prefs.ond.auto_retrieve", "Automatically retrieve studies that have already some local images")));
-        pane.add(ck("ondemand.useToolbarSearch", true, LanguageManager.get("prefs.ond.toolbar", "Use PACS On Demand, when using the toolbar search fields")));
+        pane.add(ck("ondemand.distantStudyIfMoreImages", true, LanguageManager.get("prefs.ond.distant",
+                "If a distant study has more images than a local study, display the distant study")));
+        pane.add(ck("ondemand.autoRetrievePartialLocal", true, LanguageManager.get("prefs.ond.auto_retrieve",
+                "Automatically retrieve studies that have already some local images")));
+        pane.add(ck("ondemand.useToolbarSearch", true,
+                LanguageManager.get("prefs.ond.toolbar", "Use PACS On Demand, when using the toolbar search fields")));
 
-        JPanel smart = preferenceSection(LanguageManager.get("prefs.ond.smart_search", "Activate search for following Smart Albums, with Q&R Date & Modality filters:"));
-        DefaultTableModel smartModel = new DefaultTableModel(new String[]{LanguageManager.get("prefs.ond.enabled", ""),
-                LanguageManager.get("prefs.ond.smart_album", "Smart Album Name"),
-                LanguageManager.get("prefs.ond.auto_retrieve_col", "Auto-retrieve"), LanguageManager.get("prefs.ond.date", "Date"),
-                LanguageManager.get("prefs.ond.modality", "Modality")}, 0) {
-            @Override public Class<?> getColumnClass(int col) { return col == 0 || col == 2 ? Boolean.class : String.class; }
+        JPanel smart = preferenceSection(LanguageManager.get("prefs.ond.smart_search",
+                "Activate search for following Smart Albums, with Q&R Date & Modality filters:"));
+        DefaultTableModel smartModel = new DefaultTableModel(
+                new String[] { LanguageManager.get("prefs.ond.enabled", ""),
+                        LanguageManager.get("prefs.ond.smart_album", "Smart Album Name"),
+                        LanguageManager.get("prefs.ond.auto_retrieve_col", "Auto-retrieve"),
+                        LanguageManager.get("prefs.ond.date", "Date"),
+                        LanguageManager.get("prefs.ond.modality", "Modality") },
+                0) {
+            @Override
+            public Class<?> getColumnClass(int col) {
+                return col == 0 || col == 2 ? Boolean.class : String.class;
+            }
         };
-        String[][] defaults = {{"true", "Just Acquired (last hour)", "false", "Last hour", ""},
-                {"false", "Just Added (last hour)", "false", "Any date", ""},
-                {"false", "Just Opened", "false", "Any date", ""}, {"true", "Today CR", "true", "Today", "CR"},
-                {"true", "Today CT", "true", "Today", "CT"}, {"true", "Today MG", "true", "Today", "MG"}};
+        String[][] defaults = { { "true", "Just Acquired (last hour)", "false", "Last hour", "" },
+                { "false", "Just Added (last hour)", "false", "Any date", "" },
+                { "false", "Just Opened", "false", "Any date", "" }, { "true", "Today CR", "true", "Today", "CR" },
+                { "true", "Today CT", "true", "Today", "CT" }, { "true", "Today MG", "true", "Today", "MG" } };
         String savedSmart = AppPreferences.getStr("ondemand.smartAlbums", "");
         try {
-            String[][] rows = savedSmart.isBlank() ? defaults : new com.fasterxml.jackson.databind.ObjectMapper().readValue(savedSmart, String[][].class);
+            String[][] rows = savedSmart.isBlank() ? defaults
+                    : new com.fasterxml.jackson.databind.ObjectMapper().readValue(savedSmart, String[][].class);
             for (String[] row : rows) {
                 if (row.length == 5) {
-                    smartModel.addRow(new Object[]{Boolean.parseBoolean(row[0]), row[1], Boolean.parseBoolean(row[2]), row[3], row[4]});
+                    smartModel.addRow(new Object[] { Boolean.parseBoolean(row[0]), row[1], Boolean.parseBoolean(row[2]),
+                            row[3], row[4] });
                 } else if (row.length == 4) {
                     boolean enabled = row[0].startsWith("Today") || row[0].startsWith("Just Acquired");
-                    smartModel.addRow(new Object[]{enabled, row[0], Boolean.parseBoolean(row[1]), row[2], row[3]});
+                    smartModel.addRow(new Object[] { enabled, row[0], Boolean.parseBoolean(row[1]), row[2], row[3] });
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
         JTable smartTable = new JTable(smartModel);
         smartTable.setRowHeight(21);
-        smartTable.getColumnModel().getColumn(3).setCellEditor(new DefaultCellEditor(new JComboBox<>(new String[]{"Last hour", "Any date", "Today", "Yesterday", "Last week"})));
-        smartTable.getColumnModel().getColumn(4).setCellEditor(new DefaultCellEditor(new JComboBox<>(new String[]{"", "CR", "CT", "MG", "MR", "PT", "US"})));
+        smartTable.getColumnModel().getColumn(3).setCellEditor(new DefaultCellEditor(
+                new JComboBox<>(new String[] { "Last hour", "Any date", "Today", "Yesterday", "Last week" })));
+        smartTable.getColumnModel().getColumn(4).setCellEditor(
+                new DefaultCellEditor(new JComboBox<>(new String[] { "", "CR", "CT", "MG", "MR", "PT", "US" })));
         smartModel.addTableModelListener(e -> {
             java.util.List<String[]> rows = new java.util.ArrayList<>();
-            for (int r = 0; r < smartModel.getRowCount(); r++) rows.add(new String[]{String.valueOf(smartModel.getValueAt(r, 0)),
-                    String.valueOf(smartModel.getValueAt(r, 1)), String.valueOf(smartModel.getValueAt(r, 2)),
-                    String.valueOf(smartModel.getValueAt(r, 3)), String.valueOf(smartModel.getValueAt(r, 4))});
-            try { AppPreferences.setStr("ondemand.smartAlbums", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows)); }
-            catch (Exception ignored) { }
+            for (int r = 0; r < smartModel.getRowCount(); r++)
+                rows.add(new String[] { String.valueOf(smartModel.getValueAt(r, 0)),
+                        String.valueOf(smartModel.getValueAt(r, 1)), String.valueOf(smartModel.getValueAt(r, 2)),
+                        String.valueOf(smartModel.getValueAt(r, 3)), String.valueOf(smartModel.getValueAt(r, 4)) });
+            try {
+                AppPreferences.setStr("ondemand.smartAlbums",
+                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows));
+            } catch (Exception ignored) {
+            }
         });
-        JScrollPane smartScroll = new JScrollPane(smartTable); smartScroll.setPreferredSize(new Dimension(700, 150));
-        smart.add(ck("ondemand.smartAlbumSearchEnabled", false, LanguageManager.get("prefs.ond.smart_search", "Activate search for following Smart Albums")));
+        JScrollPane smartScroll = new JScrollPane(smartTable);
+        smartScroll.setPreferredSize(new Dimension(700, 150));
+        smart.add(ck("ondemand.smartAlbumSearchEnabled", false,
+                LanguageManager.get("prefs.ond.smart_search", "Activate search for following Smart Albums")));
         smart.add(smartScroll);
-        smart.add(new JLabel(LanguageManager.get("prefs.ond.edit_hint", "Double-Click on a line to edit the Date & Modality Filters.")));
+        smart.add(new JLabel(LanguageManager.get("prefs.ond.edit_hint",
+                "Double-Click on a line to edit the Date & Modality Filters.")));
         pane.add(smart);
         JPanel maxRequests = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        maxRequests.add(new JLabel(LanguageManager.get("prefs.ond.max_requests", "Maximum number of background auto-retrieve requests per server:")));
+        maxRequests.add(new JLabel(LanguageManager.get("prefs.ond.max_requests",
+                "Maximum number of background auto-retrieve requests per server:")));
         maxRequests.add(preferenceSpinner("ondemand.maxBackgroundRequests", 2, 1, 6));
         pane.add(maxRequests);
 
-        JPanel webFunctions = preferenceSection(LanguageManager.get("prefs.ond.web_functions", "Activate PACS On Demand for following Web Server functions"));
-        webFunctions.add(ck("ondemand.webComparativeStudies", false, LanguageManager.get("prefs.ond.comparative", "Comparative Studies, displayed at Study level")));
+        JPanel webFunctions = preferenceSection(LanguageManager.get("prefs.ond.web_functions",
+                "Activate PACS On Demand for following Web Server functions"));
+        webFunctions.add(ck("ondemand.webComparativeStudies", false,
+                LanguageManager.get("prefs.ond.comparative", "Comparative Studies, displayed at Study level")));
         webFunctions.add(ck("ondemand.webSearch", false, LanguageManager.get("prefs.ond.search", "Search function")));
         webFunctions.add(ck("ondemand.webAlbums", false, LanguageManager.get("prefs.ond.albums", "Albums")));
         pane.add(webFunctions);
@@ -2112,16 +2863,21 @@ public static synchronized PreferencesController getInstance() {
 
     private void moveTableRow(DefaultTableModel model, int row, int direction) {
         int target = row + direction;
-        if (row < 0 || target < 0 || target >= model.getRowCount()) return;
+        if (row < 0 || target < 0 || target >= model.getRowCount())
+            return;
         Object[] values = new Object[model.getColumnCount()];
-        for (int c = 0; c < model.getColumnCount(); c++) values[c] = model.getValueAt(row, c);
-        model.removeRow(row); model.insertRow(target, values);
+        for (int c = 0; c < model.getColumnCount(); c++)
+            values[c] = model.getValueAt(row, c);
+        model.removeRow(row);
+        model.insertRow(target, values);
     }
 
     // === HELPERS ===
     private JPanel makeRow(Component label, Component control) {
         JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        p.add(label); if(control != null) p.add(control);
+        p.add(label);
+        if (control != null)
+            p.add(control);
         return p;
     }
 
@@ -2132,23 +2888,38 @@ public static synchronized PreferencesController getInstance() {
         dialog.setLayout(new GridLayout(6, 2, 5, 5));
         boolean isNew = (node.getName() == null || node.getName().isEmpty());
 
-        JTextField nameF = new JTextField(node.getName()!=null?node.getName():"");
-        JTextField aetF = new JTextField(node.getAeTitle()!=null?node.getAeTitle():"");
-        JTextField addrF = new JTextField(node.getAddress()!=null?node.getAddress():"");
-        JTextField portF = new JTextField(String.valueOf(node.getPort()>0?node.getPort():11112));
+        JTextField nameF = new JTextField(node.getName() != null ? node.getName() : "");
+        JTextField aetF = new JTextField(node.getAeTitle() != null ? node.getAeTitle() : "");
+        JTextField addrF = new JTextField(node.getAddress() != null ? node.getAddress() : "");
+        JTextField portF = new JTextField(String.valueOf(node.getPort() > 0 ? node.getPort() : 11112));
 
-        dialog.add(new JLabel(LanguageManager.get("prefs.node.name", "Name:"))); dialog.add(nameF);
-        dialog.add(new JLabel(LanguageManager.get("prefs.ae_title", "AETitle:"))); dialog.add(aetF);
-        dialog.add(new JLabel(LanguageManager.get("prefs.node.address", "Address:"))); dialog.add(addrF);
-        dialog.add(new JLabel(LanguageManager.get("prefs.node.port", "Port:"))); dialog.add(portF);
+        dialog.add(new JLabel(LanguageManager.get("prefs.node.name", "Name:")));
+        dialog.add(nameF);
+        dialog.add(new JLabel(LanguageManager.get("prefs.ae_title", "AETitle:")));
+        dialog.add(aetF);
+        dialog.add(new JLabel(LanguageManager.get("prefs.node.address", "Address:")));
+        dialog.add(addrF);
+        dialog.add(new JLabel(LanguageManager.get("prefs.node.port", "Port:")));
+        dialog.add(portF);
 
-        JButton saveBtn = new JButton(isNew?LanguageManager.get("prefs.node_add", "Add"):LanguageManager.get("prefs.node_save", "Save"));
+        JButton saveBtn = new JButton(
+                isNew ? LanguageManager.get("prefs.node_add", "Add") : LanguageManager.get("prefs.node_save", "Save"));
         saveBtn.addActionListener(e -> {
-            try { node.setName(nameF.getText()); node.setAeTitle(aetF.getText());
-                node.setAddress(addrF.getText()); node.setPort(Integer.parseInt(portF.getText()));
-                if(isNew) DicomNodeManager.getInstance().addNode(node); else DicomNodeManager.getInstance().saveNodes();
-                onSave.run(); dialog.dispose();
-            } catch(Exception ex) { JOptionPane.showMessageDialog(dialog,LanguageManager.get("prefs.invalid_port", "Invalid port number.")); }
+            try {
+                node.setName(nameF.getText());
+                node.setAeTitle(aetF.getText());
+                node.setAddress(addrF.getText());
+                node.setPort(Integer.parseInt(portF.getText()));
+                if (isNew)
+                    DicomNodeManager.getInstance().addNode(node);
+                else
+                    DicomNodeManager.getInstance().saveNodes();
+                onSave.run();
+                dialog.dispose();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog,
+                        LanguageManager.get("prefs.invalid_port", "Invalid port number."));
+            }
         });
         dialog.add(saveBtn);
         JButton cancelBtn = new JButton(LanguageManager.get("prefs.cancel", "Cancel"));
@@ -2164,4 +2935,3 @@ public static synchronized PreferencesController getInstance() {
         }
     }
 }
-

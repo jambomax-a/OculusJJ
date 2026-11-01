@@ -7,6 +7,7 @@ import org.dcm4che3.data.UID;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.pdu.AAssociateRQ;
 import org.dcm4che3.net.pdu.PresentationContext;
+import org.dcm4che3.net.IncompatibleConnectionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,7 +66,8 @@ public class DicomService {
     }
 
     public synchronized void startListener(int port) throws IOException, GeneralSecurityException {
-        if (listenerStarted) return;
+        if (listenerStarted)
+            return;
         ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
         conn.setPort(port);
         device.bindConnections();
@@ -79,12 +81,15 @@ public class DicomService {
         });
         incomingImportScheduler.scheduleWithFixedDelay(() -> {
             DicomDatabase database = DicomDatabase.activeLocalDatabase();
-            if (database == null) database = DicomDatabase.defaultDatabase();
-            if (database != null) database.initiateImportFilesFromIncomingDirUnlessAlreadyImporting();
+            if (database == null)
+                database = DicomDatabase.defaultDatabase();
+            if (database != null)
+                database.initiateImportFilesFromIncomingDirUnlessAlreadyImporting();
         }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
         // // logger.info(
-// //                 "DICOM Listener started on port {} (AET: {}). Ensure your PACS is configured to send to this AET, IP and Port.",
-// //                 port, ae.getAETitle());
+        // // "DICOM Listener started on port {} (AET: {}). Ensure your PACS is
+        // configured to send to this AET, IP and Port.",
+        // // port, ae.getAETitle());
     }
 
     public synchronized void stopListener() {
@@ -117,7 +122,8 @@ public class DicomService {
      */
     public boolean echo(DicomNode remoteNode)
             throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
-        // // logger.info("Starting C-ECHO to {}:{}", remoteNode.getAddress(), remoteNode.getPort());
+        // // logger.info("Starting C-ECHO to {}:{}", remoteNode.getAddress(),
+        // remoteNode.getPort());
 
         DicomNodeManager manager = DicomNodeManager.getInstance();
         ae.setAETitle(manager.getLocalAET());
@@ -142,7 +148,8 @@ public class DicomService {
      */
     public List<Attributes> find(DicomNode remoteNode, Attributes keys)
             throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
-        // // logger.info("Starting C-FIND to {}:{}", remoteNode.getAddress(), remoteNode.getPort());
+        // // logger.info("Starting C-FIND to {}:{}", remoteNode.getAddress(),
+        // remoteNode.getPort());
         final List<Attributes> results = new ArrayList<>();
 
         DicomNodeManager manager = DicomNodeManager.getInstance();
@@ -353,7 +360,7 @@ public class DicomService {
      */
     public void startCStoreSCP(int port, java.io.File saveDir) throws IOException, GeneralSecurityException {
         conn.setPort(port);
-        
+
         // DicomStoreSCPを登録（既存のコンストラクタを使用）
         device.setDimseRQHandler(new DicomStoreSCP(saveDir.getAbsolutePath()));
         device.bindConnections();
@@ -368,13 +375,14 @@ public class DicomService {
         String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
         urlStr += "rs/studies/" + studyUID + "/series/" + seriesUID + "/instances/" + sopInstanceUID;
 
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL().openConnection();
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL()
+                .openConnection();
         conn.setRequestMethod("GET");
-        
+
         // AETitleをContent-Typeに設定（WADO-RS仕様）
         String aet = DicomNodeManager.getInstance().getLocalAET();
         conn.setRequestProperty("Accept", "application/dicom");
-        
+
         int responseCode = conn.getResponseCode();
         if (responseCode != java.net.HttpURLConnection.HTTP_OK) {
             throw new IOException("WADO-RS request failed with status: " + responseCode);
@@ -393,7 +401,8 @@ public class DicomService {
         String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
         urlStr += "rs/studies/" + studyUID + "/series/" + seriesUID + "/instances/" + sopInstanceUID;
 
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL().openConnection();
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL()
+                .openConnection();
         conn.setRequestMethod("GET");
         conn.setRequestProperty("Accept", "application/json");
 
@@ -414,7 +423,8 @@ public class DicomService {
         String urlStr = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
         urlStr += "stow-rs/metadata";
 
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL().openConnection();
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) java.net.URI.create(urlStr).toURL()
+                .openConnection();
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/dicom");
@@ -425,23 +435,29 @@ public class DicomService {
         }
 
         int responseCode = conn.getResponseCode();
-        if (responseCode != java.net.HttpURLConnection.HTTP_OK && 
-            responseCode != java.net.HttpURLConnection.HTTP_CREATED) {
+        if (responseCode != java.net.HttpURLConnection.HTTP_OK &&
+                responseCode != java.net.HttpURLConnection.HTTP_CREATED) {
             throw new IOException("STOW-RS POST failed with status: " + responseCode);
         }
         conn.disconnect();
     }
 
     /**
-     * DICOM Print Management (Basic Grayscale Print Management Meta SOP Class) ジョブ送信。
+     * DICOM Print Management (Basic Grayscale Print Management Meta SOP Class)
+     * ジョブ送信。
      *
-     * <p>DICOM PS3.4 Annex H 準拠シーケンス:
+     * <p>
+     * DICOM PS3.4 Annex H 準拠シーケンス:
      * <ol>
-     *   <li>N-CREATE BasicFilmSession (2000,0010 NumberOfCopies / PrintPriority / MediumType / FilmDestination)</li>
-     *   <li>フィルムごとに N-CREATE BasicFilmBox (ImageDisplayFormat / FilmOrientation / FilmSizeID / MagnificationType / BorderDensity / EmptyImageDensity / Trim / ConfigurationInformation / ReferencedFilmSessionSequence)</li>
-     *   <li>各スロットに N-SET BasicGrayscaleImageBox (ImageBoxPosition + BasicGrayscaleImageSequence)</li>
-     *   <li>N-ACTION BasicFilmBox (Action Type ID = 1: Print)</li>
-     *   <li>N-DELETE BasicFilmBox / BasicFilmSession</li>
+     * <li>N-CREATE BasicFilmSession (2000,0010 NumberOfCopies / PrintPriority /
+     * MediumType / FilmDestination)</li>
+     * <li>フィルムごとに N-CREATE BasicFilmBox (ImageDisplayFormat / FilmOrientation /
+     * FilmSizeID / MagnificationType / BorderDensity / EmptyImageDensity / Trim /
+     * ConfigurationInformation / ReferencedFilmSessionSequence)</li>
+     * <li>各スロットに N-SET BasicGrayscaleImageBox (ImageBoxPosition +
+     * BasicGrayscaleImageSequence)</li>
+     * <li>N-ACTION BasicFilmBox (Action Type ID = 1: Print)</li>
+     * <li>N-DELETE BasicFilmBox / BasicFilmSession</li>
      * </ol>
      */
     public void printDICOMImages(DicomNode printer, java.util.List<java.awt.image.BufferedImage> pages)
@@ -471,7 +487,8 @@ public class DicomService {
         Association association = ae.connect(new Connection(null, printer.getAddress(), printer.getPort()), rq);
         try {
             String filmSessionIUID = org.dcm4che3.util.UIDUtils.createUID();
-            DimseRSP sessionRsp = association.ncreate(metaUID, UID.BasicFilmSession, filmSessionIUID, filmSessionAttrs, null);
+            DimseRSP sessionRsp = association.ncreate(metaUID, UID.BasicFilmSession, filmSessionIUID, filmSessionAttrs,
+                    null);
             sessionRsp.next();
             checkDimseStatus(sessionRsp.getCommand(), "N-CREATE BasicFilmSession");
             String returnedSessionIUID = sessionRsp.getCommand().getString(Tag.AffectedSOPInstanceUID);
@@ -491,19 +508,23 @@ public class DicomService {
                 }
 
                 org.dcm4che3.data.Sequence refImageBoxes = boxRsp.getDataset() != null
-                        ? boxRsp.getDataset().getSequence(Tag.ReferencedImageBoxSequence) : null;
+                        ? boxRsp.getDataset().getSequence(Tag.ReferencedImageBoxSequence)
+                        : null;
 
                 int limit = Math.min(slotsPerFilm, pages.size() - offset);
                 for (int slot = 0; slot < limit; slot++) {
                     java.awt.image.BufferedImage page = pages.get(offset + slot);
-                    if (page == null) continue;
+                    if (page == null)
+                        continue;
                     String imageBoxIUID = (refImageBoxes != null && slot < refImageBoxes.size())
-                            ? refImageBoxes.get(slot).getString(Tag.ReferencedSOPInstanceUID) : null;
+                            ? refImageBoxes.get(slot).getString(Tag.ReferencedSOPInstanceUID)
+                            : null;
                     if (imageBoxIUID == null || imageBoxIUID.isBlank()) {
                         imageBoxIUID = org.dcm4che3.util.UIDUtils.createUID();
                     }
                     Attributes imageBoxAttrs = buildGrayscaleImageBoxAttributes(page, slot + 1);
-                    DimseRSP setRsp = association.nset(metaUID, UID.BasicGrayscaleImageBox, imageBoxIUID, imageBoxAttrs, null);
+                    DimseRSP setRsp = association.nset(metaUID, UID.BasicGrayscaleImageBox, imageBoxIUID, imageBoxAttrs,
+                            null);
                     setRsp.next();
                     checkDimseStatus(setRsp.getCommand(), "N-SET BasicGrayscaleImageBox");
                 }
@@ -526,9 +547,9 @@ public class DicomService {
     }
 
     public static Attributes buildFilmSessionAttributes() {
-        String[] priorities = {"HIGH", "MED", "LOW"};
-        String[] media = {"BLUE FILM", "CLEAR FILM", "PAPER"};
-        String[] destinations = {"PROCESSOR", "MAGAZINE", "BIN_1", "BIN_2"};
+        String[] priorities = { "HIGH", "MED", "LOW" };
+        String[] media = { "BLUE FILM", "CLEAR FILM", "PAPER" };
+        String[] destinations = { "PROCESSOR", "MAGAZINE", "BIN_1", "BIN_2" };
         int priorityIdx = Math.max(0, Math.min(priorities.length - 1,
                 com.oculus.jj.config.AppPreferences.getInt("dicomPrint.priority", 0)));
         int mediumIdx = Math.max(0, Math.min(media.length - 1,
@@ -548,11 +569,11 @@ public class DicomService {
     }
 
     public static Attributes buildFilmBoxAttributes(String filmSessionIUID, int cols, int rows) {
-        String[] orientations = {"PORTRAIT", "LANDSCAPE"};
-        String[] sizes = {"8INX10IN", "10INX12IN", "10INX14IN", "14INX17IN"};
-        String[] magnifications = {"NONE", "CUBIC", "BILINEAR", "REPLICATE"};
-        String[] trims = {"NO", "YES"};
-        String[] colors = {"BLACK", "WHITE"};
+        String[] orientations = { "PORTRAIT", "LANDSCAPE" };
+        String[] sizes = { "8INX10IN", "10INX12IN", "10INX14IN", "14INX17IN" };
+        String[] magnifications = { "NONE", "CUBIC", "BILINEAR", "REPLICATE" };
+        String[] trims = { "NO", "YES" };
+        String[] colors = { "BLACK", "WHITE" };
 
         int orientIdx = Math.max(0, Math.min(orientations.length - 1,
                 com.oculus.jj.config.AppPreferences.getInt("dicomPrint.filmOrientationIndex", 1)));
@@ -618,39 +639,46 @@ public class DicomService {
 
     public static int[] resolveLayoutGrid(int imageCount) {
         if (com.oculus.jj.config.AppPreferences.getBool("dicomPrint.automaticLayout", false)) {
-            if (imageCount <= 1) return new int[]{1, 1};
-            if (imageCount == 2) return new int[]{2, 1};
-            return new int[]{2, 2};
+            if (imageCount <= 1)
+                return new int[] { 1, 1 };
+            if (imageCount == 2)
+                return new int[] { 2, 1 };
+            return new int[] { 2, 2 };
         }
         int fmtIdx = Math.max(0, Math.min(3,
                 com.oculus.jj.config.AppPreferences.getInt("dicomPrint.layoutFormat", 0)));
         return switch (fmtIdx) {
-            case 1 -> new int[]{2, 1};
-            case 2 -> new int[]{1, 2};
-            case 3 -> new int[]{2, 2};
-            default -> new int[]{1, 1};
+            case 1 -> new int[] { 2, 1 };
+            case 2 -> new int[] { 1, 2 };
+            case 3 -> new int[] { 2, 2 };
+            default -> new int[] { 1, 1 };
         };
     }
 
     public static DicomNode resolveConfiguredDicomPrinter() {
         String json = com.oculus.jj.config.AppPreferences.getStr("dicomPrint.printers", "");
-        if (json == null || json.isBlank()) return null;
+        if (json == null || json.isBlank())
+            return null;
         try {
             String[][] rows = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, String[][].class);
             String[] chosen = null;
             for (String[] row : rows) {
-                if (row == null || row.length < 4) continue;
-                if (chosen == null) chosen = row;
+                if (row == null || row.length < 4)
+                    continue;
+                if (chosen == null)
+                    chosen = row;
                 if (row.length >= 5 && Boolean.parseBoolean(row[4])) {
                     chosen = row;
                     break;
                 }
             }
-            if (chosen == null) return null;
+            if (chosen == null)
+                return null;
             String host = chosen[1] == null ? "" : chosen[1].trim();
             String aet = chosen[3] == null ? "" : chosen[3].trim();
             int port = Integer.parseInt(chosen[2] == null ? "104" : chosen[2].trim());
-            if (host.isEmpty() || aet.isEmpty() || port <= 0 || port > 65535) return null;
+            if (host.isEmpty() || aet.isEmpty() || port <= 0 || port > 65535)
+                return null;
             return new DicomNode(chosen[0], aet, host, port);
         } catch (Exception ex) {
             return null;
@@ -719,13 +747,13 @@ public class DicomService {
      */
     public static String[] getSupportedTransferSyntaxes() {
         return new String[] {
-            UID.ImplicitVRLittleEndian,
-            UID.ExplicitVRLittleEndian,
-            UID.JPEGBaseline8Bit,
-            UID.JPEGLosslessSV1,
-            UID.JPEGLSLossless,
-            UID.JPEG2000Lossless,
-            UID.RLELossless
+                UID.ImplicitVRLittleEndian,
+                UID.ExplicitVRLittleEndian,
+                UID.JPEGBaseline8Bit,
+                UID.JPEGLosslessSV1,
+                UID.JPEGLSLossless,
+                UID.JPEG2000Lossless,
+                UID.RLELossless
         };
     }
 
