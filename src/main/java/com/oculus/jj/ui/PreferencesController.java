@@ -58,7 +58,7 @@ public static synchronized PreferencesController getInstance() {
 
     private PreferencesController() {
         setTitle(LanguageManager.get("prefs.title", "OculusJJ - Preferences"));
-        setSize(850, 560);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         initComponents();
     }
@@ -111,7 +111,9 @@ public static synchronized PreferencesController getInstance() {
 
         cardLayout = new CardLayout();
         contentPanel = new JPanel(cardLayout);
-        contentPanel.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        JScrollPane contentScroll = new JScrollPane(contentPanel);
+        contentScroll.getVerticalScrollBar().setUnitIncrement(16);
+        add(contentScroll, BorderLayout.CENTER);
 
         createGeneralPane();
         createDatabasePane();
@@ -129,8 +131,6 @@ public static synchronized PreferencesController getInstance() {
         createWebServerPane();
         createOnDemandPane();
 
-        add(contentPanel, BorderLayout.CENTER);
-
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton saveBtn = new JButton(LanguageManager.get("prefs.apply", "Apply"));
         saveBtn.addActionListener(e -> {
@@ -146,11 +146,18 @@ public static synchronized PreferencesController getInstance() {
             com.oculus.jj.utils.LanguageManager.getInstance().loadLanguage(selectedLang.contains("ja") ? "ja" : "en");
         });
         JButton closeBtn = new JButton(LanguageManager.get("prefs.close", "Close"));
-        closeBtn.addActionListener(e -> setVisible(false));
+        closeBtn.addActionListener(e -> dispose());
         bottomPanel.add(saveBtn);
         bottomPanel.add(closeBtn);
         add(bottomPanel, BorderLayout.SOUTH);
         pack();
+        // 1920x1080 に収まるように最大サイズ制限と初期サイズ調整
+        setMaximumSize(new Dimension(1200, 800));
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        int w = Math.min(1100, (int)(screen.width * 0.85));
+        int h = Math.min(750, (int)(screen.height * 0.80));
+        setSize(w, h);
+        setPreferredSize(new Dimension(w, h));
     }
 
     // === BASIC PANES ===
@@ -2153,7 +2160,7 @@ public static synchronized PreferencesController getInstance() {
     private static class JSectionBox extends JPanel {
         public JSectionBox(String title) {
             setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), title));
-            setLayout(new FlowLayout(FlowLayout.LEFT));
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         }
     }
 }
