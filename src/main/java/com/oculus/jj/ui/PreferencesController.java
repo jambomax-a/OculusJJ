@@ -962,7 +962,8 @@ public static synchronized PreferencesController getInstance() {
         pane.add(renderBox);
         JPanel ssRow = new JPanel(new BorderLayout(8, 2));
         ssRow.add(new JLabel(LanguageManager.get("prefs.3d.supersampling", "Ray cast : Super Sampling:  ")), BorderLayout.WEST);
-        final JLabel ssValue = new JLabel(String.format("%.2f", AppPreferences.getDouble("3d.supersampling", 3.50)), SwingConstants.EAST);
+        final JLabel ssValue = new JLabel(String.format("%.2f", AppPreferences.getDouble("3d.supersampling", 3.50)));
+        ssValue.setHorizontalAlignment(SwingConstants.RIGHT);
         JSlider ssSlider = new JSlider(1, 10, (int)Math.round(AppPreferences.getDouble("3d.supersampling", 3.50) * 2));
         ssSlider.setMajorTickSpacing(3);
         ssSlider.setPaintTicks(true);
