@@ -92,7 +92,7 @@ public class PreferencesController extends JFrame {
         sidebar.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         lastSelection = LanguageManager.get("prefs.nav.general", "General");
         sidebar.setSelectedValue(lastSelection, true);
-        sidebar.setPreferredSize(new Dimension(160, 0));
+        sidebar.setPreferredSize(new Dimension(140, 0));
         sidebar.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(200, 200, 200)));
 
         sidebar.addListSelectionListener(e -> {
@@ -154,10 +154,10 @@ public class PreferencesController extends JFrame {
         add(bottomPanel, BorderLayout.SOUTH);
         pack();
         // 1920x1080 に収まるように最大サイズ制限と初期サイズ調整
-        setMaximumSize(new Dimension(1200, 800));
+        setMaximumSize(new Dimension(1100, 750));
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-        int w = Math.min(1100, (int) (screen.width * 0.85));
-        int h = Math.min(750, (int) (screen.height * 0.80));
+        int w = Math.min(1000, (int) (screen.width * 0.80));
+        int h = Math.min(700, (int) (screen.height * 0.75));
         setSize(w, h);
         setPreferredSize(new Dimension(w, h));
     }
@@ -167,7 +167,7 @@ public class PreferencesController extends JFrame {
     private void createGeneralPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         // --- Global ---
         JSectionBox globalBox = new JSectionBox("Global");
@@ -227,7 +227,7 @@ public class PreferencesController extends JFrame {
         btnRow.add(loadPrefBtn);
         pane.add(globalBox);
         pane.add(btnRow);
-        pane.add(Box.createVerticalStrut(6));
+        pane.add(Box.createVerticalStrut(4));
 
         JCheckBox adminChk = new JCheckBox(
                 LanguageManager.get("prefs.g.admin_auth",
@@ -235,7 +235,7 @@ public class PreferencesController extends JFrame {
                 AppPreferences.getBool("general.adminAuth", false));
         adminChk.addActionListener(e -> AppPreferences.setBool("general.adminAuth", adminChk.isSelected()));
         pane.add(adminChk);
-        pane.add(Box.createVerticalStrut(4));
+        pane.add(Box.createVerticalStrut(2));
 
         JCheckBox syncChk = new JCheckBox(
                 LanguageManager.get("prefs.g.sync_url", "Synchronize preferences at startup with this url:"),
@@ -247,13 +247,13 @@ public class PreferencesController extends JFrame {
         syncUrl.addActionListener(e -> AppPreferences.setStr("general.syncUrl", syncUrl.getText().trim()));
         pane.add(syncChk);
         pane.add(syncUrl);
-        pane.add(Box.createVerticalStrut(4));
+        pane.add(Box.createVerticalStrut(2));
 
         JCheckBox notifChk = new JCheckBox(LanguageManager.get("prefs.g.notifications", "Display Notifications"),
                 AppPreferences.getBool("general.notifications", false));
         notifChk.addActionListener(e -> AppPreferences.setBool("general.notifications", notifChk.isSelected()));
         pane.add(notifChk);
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- JPEG Compression ---
         JSectionBox jpegBox = new JSectionBox(LanguageManager.get("prefs.g.jpeg_section", "JPEG Compression"));
@@ -317,7 +317,7 @@ public class PreferencesController extends JFrame {
         jpegColor
                 .addActionListener(e -> AppPreferences.setBool("general.jpegColorPhotometric", jpegColor.isSelected()));
         pane.add(jpegColor);
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- Check version ---
         JSectionBox checkBox = new JSectionBox(LanguageManager.get("prefs.g.checkversion_section", "Check version"));
@@ -332,7 +332,7 @@ public class PreferencesController extends JFrame {
                 AppPreferences.isCheckUpdatesAtStartup());
         appChk.addActionListener(e -> AppPreferences.setCheckUpdatesAtStartup(appChk.isSelected()));
         pane.add(appChk);
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- DICOM Editing ---
         JSectionBox editBox = new JSectionBox(LanguageManager.get("prefs.g.dicom_editing_section", "DICOM Editing"));
@@ -342,7 +342,7 @@ public class PreferencesController extends JFrame {
                 AppPreferences.getBool("general.allowDicomEditing", false));
         dicomEdit.addActionListener(e -> AppPreferences.setBool("general.allowDicomEditing", dicomEdit.isSelected()));
         pane.add(dicomEdit);
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- Languages ---
         JSectionBox langBox = new JSectionBox(LanguageManager.get("prefs.g.languages_section", "Languages"));
@@ -369,7 +369,7 @@ public class PreferencesController extends JFrame {
         langRight.add(noteLbl);
         langTableWrap.add(langRight, BorderLayout.EAST);
         pane.add(langTableWrap);
-        pane.add(Box.createVerticalStrut(6));
+        pane.add(Box.createVerticalStrut(3));
 
         // 既存の「Language / Display Type / Separate Window / Check updates」を
         // 実機準拠のキーに統一しつつ維持（後方互換）
@@ -384,7 +384,7 @@ public class PreferencesController extends JFrame {
                 LanguageManager.get("prefs.display.displayed", "Displayed Pixel Data") };
         JComboBox<String> displayTypeCombo = new JComboBox<>(displayTypes);
         pane.add(makeRow(new JLabel(LanguageManager.get("prefs.language", "Language:")), langCombo));
-        pane.add(Box.createVerticalStrut(4));
+        pane.add(Box.createVerticalStrut(2));
         pane.add(makeRow(new JLabel(LanguageManager.get("prefs.image_display_type", "Image Display Type:")),
                 displayTypeCombo));
         JCheckBox chkSeparateWin = new JCheckBox(LanguageManager.get("prefs.separate_window",
@@ -398,7 +398,7 @@ public class PreferencesController extends JFrame {
     private void createDatabasePane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         JPanel files = preferenceSection(LanguageManager.get("prefs.db.filemgmt", "File Management"));
         JPanel dbLocation = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
@@ -628,7 +628,7 @@ public class PreferencesController extends JFrame {
     private void createCDpvPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         JPanel readBox = preferenceSection(LanguageManager.get("prefs.cddvd.read", "Reading CD/DVDs"));
         readBox.add(new JLabel(LanguageManager.get("prefs.cddvd.insert", "When a disc is inserted:")));
@@ -668,13 +668,13 @@ public class PreferencesController extends JFrame {
         readBox.add(ck("cddvd.switchToScanWhenEmpty", true,
                 LanguageManager.get("prefs.cddvd.switch_scan", "If no DICOM files are found, switch to Scan Mode")));
         pane.add(readBox);
-        pane.add(Box.createVerticalStrut(10));
+        pane.add(Box.createVerticalStrut(6));
 
         JSectionBox writeBox = new JSectionBox(LanguageManager.get("prefs.section.write_cd", "Writing CD/DVDs"));
         pane.add(writeBox);
         pane.add(ck("cddvd.preferStdJPEG", false, LanguageManager.get("prefs.prefer_std_jpeg",
                 "Prefer standard JPEG instead of JPEG2000/JPEG-LS compression for DICOM files")));
-        pane.add(Box.createVerticalStrut(4));
+        pane.add(Box.createVerticalStrut(2));
 
         JPanel suppPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JCheckBox chkSuppFolder = new JCheckBox(
@@ -710,7 +710,7 @@ public class PreferencesController extends JFrame {
     private void createHangingProtocolsPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         String[] modalities = { "CR", "CT", "DX", "ES", "MG", "MR", "NM", "OT", "PT", "RF", "SC", "US", "XA" };
         JComboBox<String> modalityCombo = new JComboBox<>(modalities);
         modalityCombo.setSelectedIndex(Math.max(0, Math.min(modalities.length - 1,
@@ -959,7 +959,7 @@ public class PreferencesController extends JFrame {
     private void createViewersPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         // --- TIFF, JPEG, Quicktime, DICOM Export ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.export_section", "TIFF, JPEG, Quicktime, DICOM Export")));
@@ -969,7 +969,7 @@ public class PreferencesController extends JFrame {
                 "If there are tiled views, export all tiled views, not only the selected view")));
         pane.add(ck("viewers.exportOpen", true, LanguageManager.get("prefs.v.export_open",
                 "Automatically open the exported images after exporting with Preview or Quicktime Player")));
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- Screens & Window size ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.screens_section", "Screens & Window size")));
@@ -1007,7 +1007,7 @@ public class PreferencesController extends JFrame {
         pane.add(ck("viewers.tilingRecentFirst", true, LanguageManager.get("prefs.v.tiling_recent_first",
                 "Order windows from most recent to oldest studies")));
         pane.add(ck("viewers.tilingReversed", false, LanguageManager.get("prefs.v.tiling_reversed", "Reversed order")));
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- Workspace State ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.workspace_section", "Workspace State:")));
@@ -1015,7 +1015,7 @@ public class PreferencesController extends JFrame {
                 "Automatically save Workspace State when closing all viewers")));
         pane.add(ck("viewers.workspaceLoadAuto", true, LanguageManager.get("prefs.v.workspace_load_auto",
                 "Automatically load Workspace State when opening a study")));
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- Series List ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v.series_list_section", "Series List:")));
@@ -1023,7 +1023,7 @@ public class PreferencesController extends JFrame {
                 LanguageManager.get("prefs.v.series_single_list", "Single Series List per screen")));
         pane.add(ck("viewers.seriesAutoShowhide", false,
                 LanguageManager.get("prefs.v.series_auto_showhide", "Automatically showhide the list")));
-        pane.add(Box.createVerticalStrut(12));
+        pane.add(Box.createVerticalStrut(6));
 
         // --- 12bit Display / Scale ---
         pane.add(new JSectionBox(LanguageManager.get("prefs.v._12bit_section", "12bit Display:")));
@@ -1253,7 +1253,7 @@ public class PreferencesController extends JFrame {
     private void create3DPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         // --- Best Rendering Button ---
         JSectionBox renderBox = new JSectionBox("Best Rendering Button");
@@ -1388,7 +1388,7 @@ public class PreferencesController extends JFrame {
     private void createPETPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         String[] cluts = { "CT-Body", "CT-Bone", "CT-Lung", "CT-Brain", "Gray Scale", "PET-Rainbow", "PET-HotMetal",
                 "PET-Heat" };
 
@@ -1555,7 +1555,7 @@ public class PreferencesController extends JFrame {
 
     private void createAnnotationsPane() {
         JPanel pane = new JPanel(new BorderLayout(6, 6));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         toolbar.add(new JLabel(LanguageManager.get("prefs.ann.modality", "Modality:")));
         JComboBox<String> modality = new JComboBox<>(
@@ -1905,7 +1905,7 @@ public class PreferencesController extends JFrame {
     private void createDICOMPrintPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         JCheckBox resize = ck("dicomPrint.autoResizeWindow", true,
                 LanguageManager.get("prefs.print.resize",
                         "Automatically resize window to a 'square size' before printing"));
@@ -2083,7 +2083,7 @@ public class PreferencesController extends JFrame {
     private void createListenerPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         JPanel connection = preferenceSection(
                 LanguageManager.get("prefs.lis.activate", "Activate DICOM listener when Horos is running"));
@@ -2285,7 +2285,7 @@ public class PreferencesController extends JFrame {
     private void createLocationsPane() {
         JPanel locationsPane = new JPanel();
         locationsPane.setLayout(new BoxLayout(locationsPane, BoxLayout.Y_AXIS));
-        locationsPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        locationsPane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
 
         JPanel nodes = preferenceSection(
                 LanguageManager.get("prefs.loc.nodes_title", "DICOM Nodes for DICOM Query/Retrieve and DICOM Send"));
@@ -2491,8 +2491,8 @@ public class PreferencesController extends JFrame {
     }
 
     private void createRoutingPane() {
-        JPanel pane = new JPanel(new BorderLayout(6, 6));
-        pane.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        JPanel pane = new JPanel(new BorderLayout(4, 4));
+        pane.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
         JPanel options = new JPanel();
         options.setLayout(new BoxLayout(options, BoxLayout.Y_AXIS));
         options.add(ck("routing.active", false, LanguageManager.get("prefs.route.activate", "Activate AutoRouting")));
@@ -2605,7 +2605,7 @@ public class PreferencesController extends JFrame {
     private void createWebServerPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         JCheckBox webServerActive = new JCheckBox(
                 LanguageManager.get("prefs.web.activate", "Activate the built-in Web Server"),
                 AppPreferences.getBool("webserver.active", false));
@@ -2748,7 +2748,7 @@ public class PreferencesController extends JFrame {
     private void createOnDemandPane() {
         JPanel pane = new JPanel();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         pane.add(ck("ondemand.active", false, LanguageManager.get("prefs.ond.activate", "Activate PACS On Demand")));
         JPanel nodes = preferenceSection(
                 LanguageManager.get("prefs.ond.nodes", "DICOM Nodes for PACS On Demand matching and retrieving:"));
