@@ -694,6 +694,10 @@ public class ViewerController extends JFrame {
         inhibitTiling = b;
     }
 
+    public static boolean getInhibitTiling() {
+        return inhibitTiling;
+    }
+
     public static void tileWindows() {
         if (inhibitTiling) {
             return;
@@ -840,6 +844,97 @@ public class ViewerController extends JFrame {
         }
 
         // HOROS-20240407準拠: 全てのビューワーのサムネイルハイライトを更新
+        refreshAllThumbnails();
+    }
+
+    /**
+     * 指定されたグリッド (rows × cols) でウィンドウをタイル配置する。
+     *
+     * HOROS-20240407準拠: WindowLayoutManager.windowsRowsForHangingProtocol: /
+     * windowsColumnsForHangingProtocol: (75-106行目) + AppController.m 5105-5140行目の
+     * "fixed rows/cols 優先" 分岐。Hanging Protocol からの明示的なグリッド指定を受け取る
+     * オーバーロード。rows/cols が 1 以下の場合は自動計算版 {@link #tileWindows()} と同等。
+     */
+    public static void tileWindows(int fixedRows, int fixedCols) {
+        if (inhibitTiling) {
+            return;
+        }
+        List<ViewerController> viewers = getDisplayed2DViewers();
+        if (viewers.isEmpty()) {
+            return;
+        }
+
+        viewers.sort((v1, v2) -> {
+            int y1 = v1.getY();
+            int y2 = v2.getY();
+            if (Math.abs(y1 - y2) > 50) {
+                return Integer.compare(y1, y2);
+            }
+            return Integer.compare(v1.getX(), v2.getX());
+        });
+
+        int rows = Math.max(1, fixedRows);
+        int cols = Math.max(1, fixedCols);
+        // 指定グリッドの cell 数がビューワー数に満たない場合は、cell 数を満たすまで拡張
+        while (rows * cols < viewers.size()) {
+            cols++;
+        }
+
+        tileWindowsAt(viewers, rows, cols);
+    }
+
+    /**
+     * 既計算の rows/cols を用いてグリッド配置を行う共通ルーチン。
+     */
+    private static void tileWindowsAt(List<ViewerController> viewers, int rows, int cols) {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        GraphicsDevice gd = ge.getDefaultScreenDevice();
+        Rectangle screenBounds = gd.getDefaultConfiguration().getBounds();
+        java.awt.Insets insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(gd.getDefaultConfiguration());
+
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(ViewerController.class);
+        boolean useToolbarPanel = prefs.getBoolean("USETOOLBARPANEL", true);
+        boolean useFloatingThumbnails = prefs.getBoolean("UseFloatingThumbnailsList", true);
+        int toolbarHeight = useToolbarPanel ? ToolbarPanel.exposedHeight() : 0;
+        int thumbnailWidth = useFloatingThumbnails ? ThumbnailsListPanel.getFixedWidth() : 0;
+
+        int availX = screenBounds.x + insets.left + thumbnailWidth;
+        int availY = screenBounds.y + insets.top + toolbarHeight;
+        int availWidth = screenBounds.width - insets.left - insets.right - thumbnailWidth;
+        int availHeight = screenBounds.height - insets.top - insets.bottom - toolbarHeight;
+
+        int viewerCount = viewers.size();
+        int cellWidth = availWidth / cols;
+        int cellHeight = availHeight / rows;
+
+        for (int i = 0; i < viewerCount; i++) {
+            ViewerController v = viewers.get(i);
+            int row = i / cols;
+            int col = i % cols;
+
+            int x = availX + col * cellWidth;
+            int y = availY + row * cellHeight;
+            int w = cellWidth;
+            int h = cellHeight;
+
+            // HOROS-20240407準拠: StrechWindowsロジック (AppController.m 4582行目相当)
+            // 最後の行（下に行がない）は垂直方向に引き伸ばして隙間を埋める
+            if (i + cols >= viewerCount) {
+                h = availHeight - (y - availY);
+            }
+
+            v.setBounds(x, y, w, h);
+
+            final ViewerController finalV = v;
+            SwingUtilities.invokeLater(() -> {
+                if (finalV.imageView != null) {
+                    finalV.imageView.scaleToFit();
+                    finalV.imageView.repaint();
+                }
+            });
+            v.toFront();
+        }
+
         refreshAllThumbnails();
     }
 

@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.prefs.Preferences;
 
 import com.oculus.jj.model.DicomSeries;
+import com.oculus.jj.model.DicomStudy;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -5897,8 +5898,115 @@ public class BrowserController extends JFrame {
         } else {
             // HOROS-20240407準拠: BrowserController.m 7535行目以降
             // STUDY - Hanging Protocols - Windows State
-            // 現在は基本的な実装のみ
-            viewerDICOMInt(false, java.util.Arrays.asList(item), null);
+            // 2026-11-03: Hanging Protocol 適用
+            openStudyWithHangingProtocol(item);
+        }
+    }
+
+    /**
+     * Hanging Protocol を適用して Study を開く
+     * HOROS-20240407準拠: BrowserController.m 7096-7492行目 databaseOpenStudy:withProtocol:
+     *
+     * 処理:
+     * <ol>
+     *   <li>modality + studyName に応じてプロトコル行を解決（{@link HangingProtocolManager#resolve}）</li>
+     *   <li>Comparative（過去の検査）を検索（{@link HangingProtocolManager#findComparativeStudies}）</li>
+     *   <li>series を protocol の windows cells 数に割り当て
+     *       （{@link HangingProtocolManager#assignSeriesToWindows}）</li>
+     *   <li>Series を開く（openViewerForSeries 経由で 1 series 1 viewer）</li>
+     *   <li>全 viewer に Sync / Propagate / WL/WW を適用</li>
+     *   <li>指定された rows × cols でタイルリング（{@link ViewerController#tileWindows(int, int)}）</li>
+     * </ol>
+     */
+    private void openStudyWithHangingProtocol(Object studyItem) {
+        if (studyItem == null) {
+            return;
+        }
+        DicomStudy study = null;
+        if (studyItem instanceof DicomStudy) {
+            study = (DicomStudy) studyItem;
+        }
+        if (study == null) {
+            // フォールバック: 従来の viewerDICOMInt 経路
+            viewerDICOMInt(false, java.util.Arrays.asList(studyItem), null);
+            return;
+        }
+
+        HangingProtocolManager.Protocol protocol = HangingProtocolManager.INSTANCE
+                .resolve(study.getModality(), study.getStudyName());
+
+        // Comparative（過去の検査）検索 — hanging.previousSameModality / previousSameDescription で制御
+        boolean sameModality = com.oculus.jj.config.AppPreferences.getBool("hanging.previousSameModality", false);
+        boolean sameDescription = com.oculus.jj.config.AppPreferences
+                .getBool("hanging.previousSameDescription", false);
+        int previousDisplayMode = com.oculus.jj.config.AppPreferences.getInt("hanging.previousDisplayMode", 0);
+        // previousDisplayMode: 0=Display last study, if possible; 1=most recent; 2=Do not display
+        List<DicomStudy> comparatives = new ArrayList<>();
+        if (previousDisplayMode != 2) {
+            comparatives = HangingProtocolManager.findComparativeStudies(study,
+                    study.getModality(), study.getStudyName(), sameModality, sameDescription, 1);
+        }
+
+        // series を protocol の windows cells 数に割り当て
+        boolean repeatSeries = com.oculus.jj.config.AppPreferences.getBool("hanging.repeatSeries", false);
+        List<DicomSeries> seriesList = HangingProtocolManager
+                .assignSeriesToWindows(study, protocol, comparatives, repeatSeries);
+        if (seriesList.isEmpty()) {
+            // series がない（画像なし）場合は従来の経路にフォールバック
+            viewerDICOMInt(false, java.util.Arrays.asList(studyItem), null);
+            return;
+        }
+
+        // HOROS-20240407準拠: 7122-7134行目 - Sync / Propagate を DCMView 静的フラグへ反映
+        DCMView.syncro = protocol.sync ? DCMView.syncroLOC : DCMView.syncroOFF;
+        DCMView.propagateSettings = protocol.propagate;
+
+        // HOROS-20240407準拠: 7454行目 - viewerDICOMInt:NO dcmFile:seriesArray viewer:nil tileWindows:YES
+        // OculusJJ では series を1つずつ開き、最後にタイルリング + WL/WW を一括適用する。
+        // openViewerFromImages の finally で中間タイルリングが毎回実行されるが、
+        // 最終的な tileWindows(rows, cols) が上書きするため問題ない。
+        for (DicomSeries series : seriesList) {
+            try {
+                openViewerForSeries(series);
+            } catch (Exception ex) {
+                System.err.println("[HangingProtocol] open series failed: " + ex.getMessage());
+            }
+        }
+
+        // HOROS-20240407準拠: 7454-7486行目 - 全 viewer に対して WL/WW を適用
+        applyHangingProtocolWLWW(protocol.wlwwPreset);
+
+        // HOROS-20240407準拠: 7488-7492行目 - 指定グリッドで統一タイルリング
+        final int rows = protocol.rows;
+        final int cols = protocol.cols;
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            ViewerController.tileWindows(rows, cols);
+            for (ViewerController vc : ViewerController.getDisplayed2DViewers()) {
+                if (vc.getImageView() != null) {
+                    vc.getImageView().repaint();
+                }
+            }
+        });
+    }
+
+    /**
+     * Hanging Protocol の WL/WW プリセットを開いた全 viewer に適用する。
+     * "Default WL & WW" は既存の DicomPix の既定値を維持（何もしない）。
+     */
+    private void applyHangingProtocolWLWW(String presetName) {
+        String preset = presetName == null ? "" : presetName.trim();
+        if (preset.isEmpty() || preset.toLowerCase(java.util.Locale.ROOT).contains("default")) {
+            return;
+        }
+        for (ViewerController vc : ViewerController.getDisplayed2DViewers()) {
+            DCMView view = vc.getImageView();
+            if (view != null) {
+                try {
+                    view.applyWLPreset(preset);
+                } catch (Exception ex) {
+                    System.err.println("[HangingProtocol] applyWLPreset failed: " + ex.getMessage());
+                }
+            }
         }
     }
 
@@ -5909,6 +6017,17 @@ public class BrowserController extends JFrame {
      * :series :nil :YES keyImagesOnly: displayOnlyKeyImages];
      */
     public void openViewerForSeries(DicomSeries series) {
+        openViewerForSeries(series, false);
+    }
+
+    /**
+     * Hanging Protocol 等多 series 一括開窓の抑制フラグ付き版。
+     *
+     * @param series        対象 series
+     * @param suppressTiling true なら開窓直後の自動タイルリングをスキップする
+     *                       (呼び出し側が最後に protocol の grid で統一タイルリングするため)
+     */
+    public void openViewerForSeries(DicomSeries series, boolean suppressTiling) {
         if (series == null) {
             return;
         }
@@ -5942,6 +6061,10 @@ public class BrowserController extends JFrame {
         autoFuseVisiblePETCT();
 
         // HOROS-20240407準拠: AUTOTILING処理
+        // Hanging Protocol による複数 series 一括開窓時は抑制 (呼び出し側が最後に統一タイルリングするため)
+        if (suppressTiling) {
+            return;
+        }
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(ViewerController.class);
         boolean autoTiling = prefs.getBoolean("AUTOTILING", true);
         if (autoTiling) {
@@ -10931,7 +11054,7 @@ public class BrowserController extends JFrame {
         if (!file.getName().toLowerCase().endsWith(".jpg") && !file.getName().toLowerCase().endsWith(".jpeg")) {
             file = new java.io.File(file.getAbsolutePath() + ".jpg");
         }
-        exportImageSingle(view.curDCM, file, "JPEG", "Export to Email");
+        exportImageSingle(view, view.curDCM, file, "JPEG", "Export to Email", false);
         if (file.exists()) {
             try {
                 String dcm = (view.curDCM.getSeriesDescription() != null
@@ -16090,7 +16213,16 @@ public class BrowserController extends JFrame {
                 LanguageManager.get("export.title.jpeg", "Export JPEG"));
     }
 
-    /** 画像エクスポート共通処理（JPEG/TIFF）。複数フレーム時はフォルダ一括出力に対応 */
+    /**
+     * 画像エクスポート共通処理（JPEG/TIFF）。
+     * 複数ビュー/複数フレーム時はフォルダ一括出力に対応。
+     *
+     * HOROS-20240407準拠のPreferences連携:
+     * - {@code viewers.exportTiled} (既定 true): 全タイルビューの current frame を一括エクスポート
+     * - {@code viewers.exportOpen}  (既定 true): エクスポート完了後、デフォルトアプリで開く
+     * - {@code viewers.exportCrop}  (既定 true): 表示中のビュー領域（ROI/アノテーション込み）を出力
+     *   - false: 元 DICOM のフレームサイズで出力（余白なし）
+     */
     private void exportImageBatch(String format, String[] exts, String title) {
         DCMView view = getActiveDCMViewForEdit();
         if (view == null || view.curDCM == null) {
@@ -16099,18 +16231,45 @@ public class BrowserController extends JFrame {
                     title, JOptionPane.WARNING_MESSAGE);
             return;
         }
+
+        boolean exportTiled = com.oculus.jj.config.AppPreferences.getBool("viewers.exportTiled", true);
+        // viewers.exportTiled がONかつ複数の2Dビューが表示されている場合は、
+        // 全ビューの current frame を一括してエクスポート対象にする
+        // (HOROS "If there are tiled views, export all tiled views, not only the selected view")
+        if (exportTiled) {
+            java.util.List<ViewerController> displayed = ViewerController.getDisplayed2DViewers();
+            if (displayed.size() > 1) {
+                java.util.List<DicomPix> all = new java.util.ArrayList<>();
+                java.util.List<DCMView> views = new java.util.ArrayList<>();
+                for (ViewerController vc : displayed) {
+                    DCMView v = vc.getImageView();
+                    if (v == null || v.curDCM == null) continue;
+                    all.add(v.curDCM);
+                    views.add(v);
+                }
+                if (all.size() > 1) {
+                    exportImageBatchAll(all, views, format, exts[0], title);
+                    return;
+                }
+            }
+        }
+
         java.util.List<DicomPix> list = (view.dcmPixList != null && !view.dcmPixList.isEmpty())
                 ? view.dcmPixList
                 : java.util.Collections.singletonList(view.curDCM);
         String ext = exts[0];
 
+        // 単一ビュー内で複数フレームを持つ場合: フォルダ一括出力の確認ダイアログを提示
+        // (views は全て同じ active view)
         if (list.size() > 1) {
             int choice = JOptionPane.showConfirmDialog(BrowserController.this,
                     String.format(LanguageManager.get("export.all.frames",
                             "This series has %d frames. Export all frames to a folder?"), list.size()),
                     title, JOptionPane.YES_NO_OPTION);
             if (choice == JOptionPane.YES_OPTION) {
-                exportImageBatchAll(list, format, ext, title);
+                java.util.List<DCMView> views = new java.util.ArrayList<>(list.size());
+                for (int i = 0; i < list.size(); i++) views.add(view);
+                exportImageBatchAll(list, views, format, ext, title);
                 return;
             }
         }
@@ -16126,12 +16285,46 @@ public class BrowserController extends JFrame {
         if (!file.getName().toLowerCase().endsWith("." + ext)) {
             file = new java.io.File(file.getAbsolutePath() + "." + ext);
         }
-        exportImageSingle(view.curDCM, file, format, title);
+        exportImageSingle(view, view.curDCM, file, format, title, true);
     }
 
-    private void exportImageSingle(DicomPix pix, java.io.File file, String format, String title) {
+    /**
+     * 単一画像のエクスポート。
+     *
+     * @param view       レンダリング元となる DCMView（viewers.exportCrop=ON で使用、null 可）
+     * @param pix        出力元 DicomPix
+     * @param file       出力ファイル
+     * @param format     JPEG / TIFF
+     * @param title      ダイアログタイトル
+     * @param showMessage 完了ダイアログと viewers.exportOpen による自動開ファイルを有効にするか
+     *                   (バッチ呼び出し元では false にして最終一括ダイアログに集約する)
+     */
+    private void exportImageSingle(DCMView view, DicomPix pix, java.io.File file, String format, String title,
+            boolean showMessage) {
         try {
-            java.awt.image.BufferedImage img = pix.getBufferedImage();
+            boolean crop = com.oculus.jj.config.AppPreferences.getBool("viewers.exportCrop", true);
+            java.awt.image.BufferedImage img = null;
+            // viewers.exportCrop = ON かつ view がある場合: 表示状態（ROI・アノテーション・WL/WW・融合）を反映した
+            // 画像サイズでレンダリング (HOROS "Automatically crop the view to the image area")
+            if (crop && view != null) {
+                // pix が現在のフレームと異なる場合は一時切り替えてレンダリング（同一viewの複数フレーム出力時）
+                int idx = (view.dcmPixList != null) ? view.dcmPixList.indexOf(pix) : -1;
+                int prevIdx = view.getCurImage();
+                if (idx >= 0 && idx != prevIdx) {
+                    view.setIndex(idx);
+                }
+                try {
+                    img = renderViewToBufferedImage(view, pix);
+                } finally {
+                    if (idx >= 0 && idx != prevIdx) {
+                        view.setIndex(prevIdx);
+                    }
+                    view.repaint();
+                }
+            }
+            if (img == null) {
+                img = pix.getBufferedImage();
+            }
             if (img == null) {
                 JOptionPane.showMessageDialog(BrowserController.this,
                         LanguageManager.get("export.no.image", "No image data available"),
@@ -16146,9 +16339,23 @@ public class BrowserController extends JFrame {
                 img = rgb;
             }
             javax.imageio.ImageIO.write(img, format, file);
-            JOptionPane.showMessageDialog(BrowserController.this,
-                    LanguageManager.get("export.saved", "Exported to:") + "\n" + file.getAbsolutePath(),
-                    title, JOptionPane.INFORMATION_MESSAGE);
+            if (showMessage) {
+                JOptionPane.showMessageDialog(BrowserController.this,
+                        LanguageManager.get("export.saved", "Exported to:") + "\n" + file.getAbsolutePath(),
+                        title, JOptionPane.INFORMATION_MESSAGE);
+                // HOROS-20240407: "Automatically open the exported images after exporting"
+                // (Preferences → Viewers → Export → open-after-export)
+                if (com.oculus.jj.config.AppPreferences.getBool("viewers.exportOpen", true)) {
+                    try {
+                        java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                        if (desktop.isDesktopSupported()) {
+                            desktop.open(file);
+                        }
+                    } catch (Exception ex2) {
+                        System.err.println("[Export] open-after-export failed: " + ex2.getMessage());
+                    }
+                }
+            }
         } catch (java.io.IOException ex) {
             JOptionPane.showMessageDialog(BrowserController.this,
                     LanguageManager.get("export.failed", "Export failed:") + " " + ex.getMessage(),
@@ -16156,7 +16363,15 @@ public class BrowserController extends JFrame {
         }
     }
 
-    private void exportImageBatchAll(java.util.List<DicomPix> list, String format, String ext, String title) {
+    /**
+     * 複数画像の一括エクスポート。
+     *
+     * @param list   出力対象 DicomPix リスト
+     * @param views  各 DicomPix に対応する DCMView リスト（同一長、null 要素可）。
+     *               viewers.exportCrop=ON の場合、views[i] を用いてレンダリングする。
+     */
+    private void exportImageBatchAll(java.util.List<DicomPix> list, java.util.List<DCMView> views,
+            String format, String ext, String title) {
         javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
         fc.setDialogTitle(title);
         fc.setFileSelectionMode(javax.swing.JFileChooser.DIRECTORIES_ONLY);
@@ -16171,13 +16386,30 @@ public class BrowserController extends JFrame {
         int ok = 0;
         for (int i = 0; i < list.size(); i++) {
             java.io.File out = new java.io.File(dir, String.format("%s_%03d.%s", base, i + 1, ext));
-            exportImageSingle(list.get(i), out, format, title + " (batch)");
+            DCMView v = (views != null && i < views.size()) ? views.get(i) : null;
+            exportImageSingle(v, list.get(i), out, format, title + " (batch)", false);
             ok++;
         }
         JOptionPane.showMessageDialog(BrowserController.this,
                 String.format(LanguageManager.get("export.frames.exported", "Exported %d image(s) to:"))
                         + "\n" + dir.getAbsolutePath(),
                 title, JOptionPane.INFORMATION_MESSAGE);
+        // HOROS-20240407: open-after-export（フォルダをデフォルトアプリで開く）
+        if (com.oculus.jj.config.AppPreferences.getBool("viewers.exportOpen", true)) {
+            try {
+                java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                if (desktop.isDesktopSupported()) {
+                    desktop.open(dir);
+                }
+            } catch (Exception ex2) {
+                System.err.println("[Export] open-after-export failed: " + ex2.getMessage());
+            }
+        }
+    }
+
+    /** 旧シグネチャ（views 未指定）のオーバーロード */
+    private void exportImageBatchAll(java.util.List<DicomPix> list, String format, String ext, String title) {
+        exportImageBatchAll(list, null, format, ext, title);
     }
 
     /** Export Raw Data dialog */

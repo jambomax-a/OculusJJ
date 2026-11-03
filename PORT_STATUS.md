@@ -1,9 +1,53 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-10-29 (P-C〜P-I 実装更新) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
-> **Javaソースファイル数:** 113 classes (`src/main/java/`)  
-> **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)  
+> **更新日:** 2026-11-03 (Preferences 残ランタイム連携: Export 3項目 + Hanging Protocols) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
+> **Javaソースファイル数:** 122 classes (`src/main/java/`)
+> **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
+
+---
+
+## [2026-11-03 更新9] — Preferences 残ランタイム連携（Export 3項目 + Hanging Protocols）
+
+> HOROS 実機 Preferences の「未連携」項目（`docs/Preferences-Diff.md` Phase 1 Viewers 残 + Phase 2 Protocols）を順次実装。
+
+### 1. Export 連携3機能（HOROS Preferences → Viewers → Export）
+
+| 項目 | 設定キー | 実装内容 |
+|---|---|---|
+| crop-on-export | `viewers.exportCrop` (既定 true) | `BrowserController.exportImageSingle(DCMView, DicomPix, ...)` にシグネチャ変更。ON かつ view がある場合は `renderViewToBufferedImage(view, pix)`（ROI・アノテーション・WL/WW・融合を含む描画状態）で出力。同一 view の複数フレーム出力時は `setIndex` を一時切り替えてレンダリング。OFF 時は従来の `pix.getBufferedImage()`（元 DICOM フレームサイズ）。 |
+| tiled-view export | `viewers.exportTiled` (既定 true) | `exportImageBatch` 入口で `ViewerController.getDisplayed2DViewers()` を取得、複数ビュー表示中は全ビューの current frame + 対応 DCMView を一括で `exportImageBatchAll(list, views, ...)` に渡す。 |
+| open-after-export | `viewers.exportOpen` (既定 true) | エクスポート完了ダイアログ表示後、`java.awt.Desktop.open(file/directory)` でデフォルトアプリを起動。バッチ経路ではフォルダ、単体ではファイルを指定。 |
+
+**変更ファイル**: `BrowserController.java`
+- `exportImageBatch` / `exportImageSingle` / `exportImageBatchAll` を新シグネチャにリファクタ（旧シグネチャは `views=null` 経由のオーバーロードとして維持）
+- `sendMail` の `exportImageSingle` 呼び出しも新シグネチャに対応
+
+### 2. Hanging Protocols（HOROS WindowLayoutManager + BrowserController 7096-7492行目 相当）
+
+| ファイル | 変更内容 |
+|---|---|
+| **`HangingProtocolManager.java`** (新規, ~280行) | HOROS `WindowLayoutManager` 相当の静的マネージャ。`Protocol`（description/rows/cols/sync/propagate/wlwwPreset）データクラス。`parseProtocolRows()` — `hanging.protocolRows` TSV パース。`resolve(modality, studyName)` — description の case-insensitive 部分一致でプロトコル行選択（HOROS `hangingProtocolForModality:description:` 217行目相当）。`decodeTiling("2x2")` — WindowsTiling 文字列解码。`sortSeriesByOrder(series, orderSpec, ignoreCase)` — カンマ区切り部分一致語句による series 並び替え（HOROS 7143-7180行目相当）。`findComparativeStudies(...)` — 同一患者の過去の study を acquisition date 基準で検索、sameModality/sameDescription フィルタ。`assignSeriesToWindows(...)` — cells 数（rows×cols）への series 割り当て、超過時末尾切り捨て、不足時 `hanging.repeatSeries` で循環複製。 |
+| `BrowserController.java` | `databaseOpenStudy(Object)` の Study 分岐を `openStudyWithHangingProtocol(item)` に接続。`openStudyWithHangingProtocol` — HOROS `databaseOpenStudy:withProtocol:` (7096-7492行目) 移植: protocol 解決 → Comparative 検索（`hanging.previousDisplayMode` 0/1 で有効、2 で無効）→ series 割り当て → `openViewerForSeries` で 1 series 1 viewer 開窓 → `applyHangingProtocolWLWW(preset)` で全 viewer に `DCMView.applyWLPreset` → `ViewerController.tileWindows(rows, cols)` で統一タイルリング（`invokeLater`）。`DCMView.syncro`/`propagateSettings` 静的フラグも反映。`openViewerForSeries(series, suppressTiling)` オーバーロード追加。 |
+| `ViewerController.java` | `tileWindows(int fixedRows, int fixedCols)` オーバーロード追加 — Hanging Protocol 指定のグリッドで配置。不足 cell 数は cols 方向へ拡張。共通ルーチン `tileWindowsAt` に抽出。`getInhibitTiling()` ゲッター追加。 |
+
+**i18n**: 既存 `prefs.proto.*` キー（19キー en/ja 両方）を UI でそのまま使用。エラー/ステータス系は `System.err` に出力（UI ダイアログはHOROSと同様、静粛に動作）。
+
+**テスト**: `HangingProtocolManagerTest.java` (新規, 9件)
+- `decodeTiling` — 標準グリッド(2x2/1x3/3x3/4x2/1x1) + 不正入力(null/空白/x2/2x/abc/0x0/-1x2)
+- `resolve` — studyName 部分一致でプロトコル行選択 + 一致しない場合は先頭行 + case-insensitive
+- `sortSeriesByOrder` — HOROS MG デフォルト "R CC,L CC,R MLO,L MLO" 順 + case-insensitive + 未マッチ末尾
+- `parseProtocolRows` — TSV パース + 空白時は Default フォールバック
+
+### 検証
+- `./gradlew compileJava` — BUILD SUCCESSFUL
+- `./gradlew test` — 全テスト合格（HangingProtocolManagerTest 9件 / DicomPixTest 11件 / DicomDatabaseTest 1件 / DicomDirectoryUtilsTest 2件 / WebServerServiceTest 1件）
+
+### 残タスク（次フェーズ候補）
+- Hanging Protocol の Comparative 詳細表示（`hanging.previousSeriesMode` による複数 series per comparative）
+- `ImageTiling`（ウィンドウ内マルチスライスリング）— OculusJJ の DCMView にはウィンドウ内分割機構が未実装のため、初回は `WindowsTiling` のみ適用
+- `viewers.keepClutBars`（CLUT Bar retention）— 前提の CLUT Bar 描画本体が未実装のため、CLUT Bar 機能実装時に併せて接続
+- `DicomView` の `Liver` / `Mediastinum` WL/WW プリセット値（HOROS `WLWW3` 相当、現在は `applyWLPreset` の既定値にフォールバック）
 
 ---
 
@@ -18,7 +62,7 @@
 | **P4: 画像処理・分析** | ✅ **完了** | Shutter tool/Movie再生/PACS Query Settings✅。Brush Morphological ops(Dilate/Erode)、Fusion Blending配線、Report生成 全実装 |
 | **P5: GPU/Optimization** | ✅ **完了** | LWJGL 3.2.3: MIP/VR(レイマーチ)/Isosurface 3モード・Transfer Function・Phong照明・ステレオ・CPUフォールバック。VRAM最適化（Mipmap＋VRAM検出・HOROS準拠警告）＋分析（Grow Region 領域成長3種・Set Pixel Values・2D連動オーバーレイ）実装済 |
 
-### 進捗率：約98%（114 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋VRAM最適化＋2Dメニュー全項目(SUV/校正/融合/伝播)＋ツールバー Annotations Panel＋Key Image → DICOM SC出力＋分析(Grow Region/Set Pixel Values/2D連動) 完了）
+### 進捗率：約98.5%（122 Javaファイル中、DICOMパーサー基盤＋Navigator Model＋Navigator Window＋GPU Volume Rendering＋VRAM最適化＋2Dメニュー全項目(SUV/校正/融合/伝播)＋ツールバー Annotations Panel＋Key Image → DICOM SC出力＋分析(Grow Region/Set Pixel Values/2D連動)＋Export 連携3項目(crop/tiled/open-after)＋Hanging Protocols(解決/series割り当て/Comparative/統一タイルリング) 完了）
 
 ---
 
