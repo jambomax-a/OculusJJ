@@ -293,9 +293,12 @@ public class ROI {
         this.pixelSpacingY = pixelSpacingY;
 
         // HOROS-20240407: ROI color rotation
-        // 実際には設定を確認するが、ここでは常に回転させる
-        this.color = colorRotationTable[globalColorRotationState % colorRotationTable.length];
-        globalColorRotationState++;
+        // Preferences → Viewers → "ROI color rotation" (viewers.roiColorRotation, 既定 true)
+        // OFF 時はデフォルト色 (YELLOW) を維持、ON 時は回転テーブルから順に採色
+        if (com.oculus.jj.config.AppPreferences.getBool("viewers.roiColorRotation", true)) {
+            this.color = colorRotationTable[globalColorRotationState % colorRotationTable.length];
+            globalColorRotationState++;
+        }
 
         if (type == DCMView.ToolMode.tText) {
             this.name = "Double-Click to edit";

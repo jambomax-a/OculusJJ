@@ -2469,8 +2469,8 @@ public class DCMView extends JPanel {
 
         // HOROS-20240407準拠: DCMView.m 9309行目付近 - OVERFLOWLINES
         // 黄緑の点線枠を表示（画像がはみ出している場合のみ）
-        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(DCMView.class);
-        boolean overflowLines = prefs.getBoolean("OVERFLOWLINES", true);
+        // Preferences → Viewers → "Display Overflow Lines" (viewers.overflowLines, 既定 true)
+        boolean overflowLines = com.oculus.jj.config.AppPreferences.getBool("viewers.overflowLines", true);
 
         if (overflowLines) {
             boolean isOverflow = imageX < 0 || imageY < 0 || (imageX + scaledWidth) > panelWidth
