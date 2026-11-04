@@ -99,6 +99,12 @@ public class DCMView extends JPanel {
     // HOROS-20240407準拠: DCMView.h 146行目 - int volumicData;
     protected int volumicData = -1;
 
+    // HOROS-20240407準拠: ImageTiling (ウィンドウ内マルチスライスリング)
+    // HOROS WindowLayoutManager "ImageTiling" 相当。同じ viewer 内で複数フレームをタイル配置する。
+    protected int imageRows = 1;
+    protected int imageCols = 1;
+    protected boolean imageTilingEnabled = false;
+
     // HOROS-20240407準拠: DCMView.m 2178行目 - drawLock（Javaではsynchronizedを使用）
     private final Object drawLock = new Object();
 
@@ -2252,6 +2258,9 @@ public class DCMView extends JPanel {
     /**
      * paintComponent - 画像を描画
      * HOROS-20240407準拠: DCMView.m（OpenGL描画の代わりにJava Swingで実装）
+     *
+     * ImageTiling が有効な場合、同じ viewer 内で複数フレームを grid (imageRows × imageCols)
+     * にタイル配置して描画する。
      */
     @Override
     protected void paintComponent(Graphics g) {
@@ -2289,161 +2298,234 @@ public class DCMView extends JPanel {
                 // // // + ", frontMost: " + frontMost);
             }
 
-                boolean highQualityZoom = com.oculus.jj.config.AppPreferences.getBool("viewers.hqZoom", true);
-                boolean noInterpolation = com.oculus.jj.config.AppPreferences.getBool("viewers.noInterpZoom", true);
-                Object interpolation = highQualityZoom
+            boolean highQualityZoom = com.oculus.jj.config.AppPreferences.getBool("viewers.hqZoom", true);
+            boolean noInterpolation = com.oculus.jj.config.AppPreferences.getBool("viewers.noInterpZoom", true);
+            Object interpolation = highQualityZoom
                     ? RenderingHints.VALUE_INTERPOLATION_BICUBIC
                     : noInterpolation ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR
                     : RenderingHints.VALUE_INTERPOLATION_BILINEAR;
-                g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, interpolation);
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, interpolation);
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
-            // 画像の読み込み状態を確認 (非同期読み込みを待たない)
-            // HOROS-20240407準拠: blendWindows/ActivateBlending - 融合オーバーレイがある場合は融合画像を描画
-            java.awt.image.BufferedImage image = curDCM.hasFusion()
-                    ? curDCM.getFusedOverlay()
-                    : curDCM.getBufferedImageNoLoad();
-            if (image == null) {
-                image = curDCM.getBufferedImageNoLoad();
+            // ImageTiling が有効で複数画像を配置する場合
+            if (imageTilingEnabled && dcmPixList != null && dcmPixList.size() > 1) {
+                drawImageTiling(g2d, getWidth(), getHeight());
+                return;
             }
 
-            if (image != null) {
-                int panelWidth = getWidth();
-                int panelHeight = getHeight();
-                int imageWidth = image.getWidth();
-                int imageHeight = image.getHeight();
-
-                if (imageWidth > 0 && imageHeight > 0) {
-                    // HOROS-20240407準拠: scaleValueとoriginを使用して描画
-                    float pixelRatio = (float) curDCM.getPixelRatio();
-                    int scaledWidth = (int) (imageWidth * scaleValue);
-                    int scaledHeight = (int) (imageHeight * scaleValue * pixelRatio);
-
-                    // originを考慮した描画位置
-                    int x = (panelWidth - scaledWidth) / 2 + origin.x;
-                    int y = (panelHeight - scaledHeight) / 2 + origin.y;
-
-                    // 背景色を設定
-                    if (whiteBackground) {
-                        g2d.setColor(java.awt.Color.WHITE);
-                    } else {
-                        g2d.setColor(java.awt.Color.BLACK);
-                    }
-                    g2d.fillRect(0, 0, panelWidth, panelHeight);
-
-                    // --- 画像の反転・描画処理 ---
-                    int dx1 = x;
-                    int dy1 = y;
-                    int dx2 = x + scaledWidth;
-                    int dy2 = y + scaledHeight;
-
-                    int sx1 = 0;
-                    int sy1 = 0;
-                    int sx2 = imageWidth;
-                    int sy2 = imageHeight;
-
-                    if (xFlipped) {
-                        // 左右反転: 描画先のX座標の開始と終了を入れ替える
-                        int tmp = dx1;
-                        dx1 = dx2;
-                        dx2 = tmp;
-                    }
-                    if (yFlipped) {
-                        // 上下反転: 描画先のY座標の開始と終了を入れ替える
-                        int tmp = dy1;
-                        dy1 = dy2;
-                        dy2 = tmp;
-                    }
-
-                    // 画像を描画 (反転対応版)
-                    g2d.drawImage(image, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2, null);
-
-                    // --- セグメンテーションオーバーレイ (HOROS Grow Region 2D連動表示) ---
-                    if (curDCM.hasSegOverlay()) {
-                        java.awt.image.BufferedImage segImg = curDCM.getSegOverlayImage();
-                        if (segImg != null) {
-                            // メイン画像と同じ座標変換（反転対応）で描画
-                            g2d.drawImage(segImg, dx1, dy1, dx2, dy2,
-                                    0, 0, segImg.getWidth(), segImg.getHeight(), null);
-                        }
-                    }
-
-                    // --- ROIの表示 ---
-                    // HOROS-20240407準拠: 座標変換を考慮してROIを描画
-                    // ROIを描画する前に、画像スケールとオフセットを考慮したGraphics2D状態を作成
-                    Graphics2D roiG2d = (Graphics2D) g2d.create();
-                    try {
-                        roiG2d.translate(x, y);
-
-                        // HOROS-20240407準拠: 反転時の座標変換を適用
-                        if (xFlipped) {
-                            roiG2d.translate(scaledWidth, 0);
-                            roiG2d.scale(-1, 1);
-                        }
-                        if (yFlipped) {
-                            roiG2d.translate(0, scaledHeight);
-                            roiG2d.scale(1, -1);
-                        }
-
-                        // 基本スケール (画像座標系 0,0 - width,height に変換)
-                        roiG2d.scale(scaleValue, scaleValue * pixelRatio);
-
-                        // ズームアウト時に線が細くなりすぎないようにストロークを調整
-                        // 画面上で約1.5ピクセル程度に見えるようにする
-                        float baseStrokeWidth = 1.5f / scaleValue;
-                        roiG2d.setStroke(new BasicStroke(baseStrokeWidth));
-
-                        if (is2DViewer()) {
-                            drawROI(roiG2d);
-                        }
-                    } finally {
-                        roiG2d.dispose();
-                    }
-
-                    // HOROS-20240407準拠: 境界線の描画
-                    drawBorders(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
-
-                    // HOROS-20240407準拠: 同期ラインの描画 (drawCrossLines)
-                    // アノテーション設定に関わらず同期ラインは表示する (交差線を表示するため)
-                    drawSyncLines(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
-
-                    // HOROS-20240407準拠: アノテーションと定規の描画
-                    if (annotationType != annotNone) {
-                        if (annotationType >= annotBase) {
-                            drawRuler(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
-                        }
-                        drawTextualData(g2d, panelWidth, panelHeight);
-                    }
-                }
-            } else {
-                // 画像が読み込まれていない場合でも背景と「選択枠(赤)」は描画する
-                int panelWidth = getWidth();
-                int panelHeight = getHeight();
-                if (whiteBackground) {
-                    g2d.setColor(java.awt.Color.WHITE);
-                } else {
-                    g2d.setColor(java.awt.Color.BLACK);
-                }
-                g2d.fillRect(0, 0, panelWidth, panelHeight);
-
-                // 画像がない場合の境界線描画 (x, yなどは0扱いで赤枠のみ描画される)
-                drawBorders(g2d, panelWidth, panelHeight, 0, 0, 0, 0);
-            }
-                // --- シャッターオーバーレイ描画 ---
-                if (shutterTool != null && shutterTool.isActive()) {
-                    java.awt.Graphics2D overlayG2d = (java.awt.Graphics2D) g2d.create();
-                    try {
-                        shutterTool.paintOverlay(overlayG2d);
-                    } finally {
-                        overlayG2d.dispose();
-                    }
-                }
+            // 通常モード: 単一画像描画
+            drawSingleImage(g2d, getWidth(), getHeight(), curDCM, curImage);
 
         } finally {
             g2d.dispose();
+        }
+    }
+
+    /**
+     * 単一画像の描画処理（従来の paintComponent 内の画像描画ロジックを抽出）。
+     */
+    private void drawSingleImage(Graphics2D g2d, int panelWidth, int panelHeight, DicomPix dcPix,
+            int imageIndex) {
+        // 画像の読み込み状態を確認 (非同期読み込みを待たない)
+        // HOROS-20240407準拠: blendWindows/ActivateBlending - 融合オーバーレイがある場合は融合画像を描画
+        java.awt.image.BufferedImage image = dcPix.hasFusion()
+                ? dcPix.getFusedOverlay()
+                : dcPix.getBufferedImageNoLoad();
+        if (image == null) {
+            image = dcPix.getBufferedImageNoLoad();
+        }
+
+        if (image != null) {
+            int imageWidth = image.getWidth();
+            int imageHeight = image.getHeight();
+
+            if (imageWidth > 0 && imageHeight > 0) {
+                // HOROS-20240407準拠: scaleValueとoriginを使用して描画
+                float pixelRatio = (float) dcPix.getPixelRatio();
+                int scaledWidth = (int) (imageWidth * scaleValue);
+                int scaledHeight = (int) (imageHeight * scaleValue * pixelRatio);
+
+                // originを考慮した描画位置
+                int x = (panelWidth - scaledWidth) / 2 + origin.x;
+                int y = (panelHeight - scaledHeight) / 2 + origin.y;
+
+                // 背景色を設定 (fillRectは呼び出し元で済むためスキップ)
+                // --- 画像の反転・描画処理 ---
+                int dx1 = x;
+                int dy1 = y;
+                int dx2 = x + scaledWidth;
+                int dy2 = y + scaledHeight;
+
+                int sx1 = 0;
+                int sy1 = 0;
+                int sx2 = imageWidth;
+                int sy2 = imageHeight;
+
+                if (xFlipped) {
+                    // 左右反転: 描画先のX座標の開始と終了を入れ替える
+                    int tmp = dx1;
+                    dx1 = dx2;
+                    dx2 = tmp;
+                }
+                if (yFlipped) {
+                    // 上下反転: 描画先のY座標の開始と終了を入れ替える
+                    int tmp = dy1;
+                    dy1 = dy2;
+                    dy2 = tmp;
+                }
+
+                // 画像を描画 (反転対応版)
+                g2d.drawImage(image, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2, null);
+
+                // --- セグメンテーションオーバーレイ (HOROS Grow Region 2D連動表示) ---
+                if (dcPix.hasSegOverlay()) {
+                    java.awt.image.BufferedImage segImg = dcPix.getSegOverlayImage();
+                    if (segImg != null) {
+                        // メイン画像と同じ座標変換（反転対応）で描画
+                        g2d.drawImage(segImg, dx1, dy1, dx2, dy2,
+                                0, 0, segImg.getWidth(), segImg.getHeight(), null);
+                    }
+                }
+
+                // --- ROIの表示 ---
+                // HOROS-20240407準拠: 座標変換を考慮してROIを描画
+                // ROIを描画する前に、画像スケールとオフセットを考慮したGraphics2D状態を作成
+                Graphics2D roiG2d = (Graphics2D) g2d.create();
+                try {
+                    roiG2d.translate(x, y);
+
+                    // HOROS-20240407準拠: 反転時の座標変換を適用
+                    if (xFlipped) {
+                        roiG2d.translate(scaledWidth, 0);
+                        roiG2d.scale(-1, 1);
+                    }
+                    if (yFlipped) {
+                        roiG2d.translate(0, scaledHeight);
+                        roiG2d.scale(1, -1);
+                    }
+
+                    // 基本スケール (画像座標系 0,0 - width,height に変換)
+                    roiG2d.scale(scaleValue, scaleValue * pixelRatio);
+
+                    // ズームアウト時に線が細くなりすぎないようにストロークを調整
+                    // 画面上で約1.5ピクセル程度に見えるようにする
+                    float baseStrokeWidth = 1.5f / scaleValue;
+                    roiG2d.setStroke(new BasicStroke(baseStrokeWidth));
+
+                    if (is2DViewer()) {
+                        drawROI(roiG2d);
+                    }
+                } finally {
+                    roiG2d.dispose();
+                }
+
+                // HOROS-20240407準拠: 境界線の描画
+                drawBorders(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
+
+                // HOROS-20240407準拠: 同期ラインの描画 (drawCrossLines)
+                // アノテーション設定に関わらず同期ラインは表示する (交差線を表示するため)
+                drawSyncLines(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
+
+                // HOROS-20240407準拠: アノテーションと定規の描画
+                if (annotationType != annotNone) {
+                    if (annotationType >= annotBase) {
+                        drawRuler(g2d, panelWidth, panelHeight, x, y, scaledWidth, scaledHeight);
+                    }
+                    drawTextualData(g2d, panelWidth, panelHeight);
+                }
+            }
+        } else {
+            // 画像が読み込まれていない場合でも背景と「選択枠(赤)」は描画する
+            drawBorders(g2d, panelWidth, panelHeight, 0, 0, 0, 0);
+        }
+    }
+
+    /**
+     * ImageTiling: 同じ viewer 内で複数フレームを grid (imageRows × imageCols)
+     * にタイル配置して描画する。
+     */
+    private void drawImageTiling(Graphics2D g2d, int panelWidth, int panelHeight) {
+        if (dcmPixList == null || dcmPixList.isEmpty()) {
+            return;
+        }
+
+        // 表示対象の画像インデックスを取得 (curImage から開始、grid 順)
+        List<Integer> indices = new ArrayList<>();
+        int totalCells = imageRows * imageCols;
+        int listSize = dcmPixList.size();
+        for (int i = 0; i < totalCells; i++) {
+            int idx = (curImage + i) % listSize;
+            indices.add(idx);
+        }
+
+        // タイル領域を計算 (間隔 4px)
+        int cellWidth = panelWidth / imageCols;
+        int cellHeight = panelHeight / imageRows;
+
+        for (int r = 0; r < imageRows; r++) {
+            for (int c = 0; c < imageCols; c++) {
+                int idx = indices.get(r * imageCols + c);
+                DicomPix pix = dcmPixList.get(idx);
+
+                // 各セルの描画領域
+                int cx = c * cellWidth;
+                int cy = r * cellHeight;
+                int cw = cellWidth - 4;
+                int ch = cellHeight - 4;
+
+                // セル背景を塗りつぶす
+                g2d.setColor(java.awt.Color.BLACK);
+                g2d.fillRect(cx + 2, cy + 2, cw, ch);
+
+                // セル内で画像を描画 (scaleValue はグローバル値、各セルに自動フィットさせるため調整)
+                java.awt.image.BufferedImage image = pix.hasFusion()
+                        ? pix.getFusedOverlay()
+                        : pix.getBufferedImageNoLoad();
+                if (image == null) {
+                    image = pix.getBufferedImageNoLoad();
+                }
+                if (image == null || image.getWidth() <= 0 || image.getHeight() <= 0) {
+                    continue;
+                }
+
+                int imgW = image.getWidth();
+                int imgH = image.getHeight();
+                float pixelRatio = (float) pix.getPixelRatio();
+
+                // セルにフィットさせるスケール計算
+                float scaleW = (float) cw / imgW;
+                float scaleH = (float) ch / (imgH * pixelRatio);
+                float cellScale = Math.min(scaleW, scaleH) * scaleValue;
+                if (cellScale <= 0) {
+                    cellScale = 0.1f;
+                }
+
+                int scaledW = (int) (imgW * cellScale);
+                int scaledH = (int) (imgH * cellScale * pixelRatio);
+
+                int dx = cx + 2 + (cw - scaledW) / 2;
+                int dy = cy + 2 + (ch - scaledH) / 2;
+
+                g2d.drawImage(image, dx, dy, dx + scaledW, dy + scaledH,
+                        0, 0, imgW, imgH, null);
+
+                // ROI 描画 (セル内で簡易描画)
+                Graphics2D roiG2d = (Graphics2D) g2d.create();
+                try {
+                    roiG2d.translate(dx, dy);
+                    roiG2d.scale(cellScale, cellScale * pixelRatio);
+                    float baseStrokeWidth = 1.5f / cellScale;
+                    roiG2d.setStroke(new BasicStroke(baseStrokeWidth));
+                    if (is2DViewer()) {
+                        drawROI(roiG2d);
+                    }
+                } finally {
+                    roiG2d.dispose();
+                }
+            }
         }
     }
 

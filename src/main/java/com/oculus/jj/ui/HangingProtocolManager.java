@@ -56,29 +56,34 @@ public final class HangingProtocolManager {
         public final String description;
         public final int rows;
         public final int cols;
+        public final int imageRows;
+        public final int imageCols;
         public final boolean sync;
         public final boolean propagate;
         public final String wlwwPreset;
 
-        public Protocol(String description, int rows, int cols, boolean sync, boolean propagate,
-                String wlwwPreset) {
+        public Protocol(String description, int rows, int cols, int imageRows, int imageCols, boolean sync,
+                boolean propagate, String wlwwPreset) {
             this.description = description == null ? "" : description;
             this.rows = Math.max(1, rows);
             this.cols = Math.max(1, cols);
+            this.imageRows = Math.max(1, imageRows);
+            this.imageCols = Math.max(1, imageCols);
             this.sync = sync;
             this.propagate = propagate;
             this.wlwwPreset = wlwwPreset == null ? "Default WL & WW" : wlwwPreset;
         }
 
-        /** HOROS "WindowsTiling" の数値タグ (rows*10+cols ではなく rows 個の col 列) */
-        public int tag() {
-            return rows * 10 + cols;
+        /** HOROS "ImageTiling" の数値タグ (imageRows*10+imageCols) */
+        public int imageTag() {
+            return imageRows * 10 + imageCols;
         }
 
         @Override
         public String toString() {
-            return "HangingProtocol{desc='" + description + "', grid=" + rows + "x" + cols + ", sync=" + sync
-                    + ", propagate=" + propagate + ", wlww='" + wlwwPreset + "'}";
+            return "HangingProtocol{desc='" + description + "', grid=" + rows + "x" + cols
+                    + ", imageGrid=" + imageRows + "x" + imageCols + ", sync=" + sync + ", propagate=" + propagate
+                    + ", wlww='" + wlwwPreset + "'}";
         }
     }
 
@@ -116,7 +121,7 @@ public final class HangingProtocolManager {
         String saved = AppPreferences.getStr("hanging.protocolRows", "");
         List<Protocol> list = new ArrayList<>();
         if (saved == null || saved.isBlank()) {
-            list.add(new Protocol("Default", 1, 1, true, true, "Default WL & WW"));
+            list.add(new Protocol("Default", 1, 1, 1, 1, true, true, "Default WL & WW"));
             return list;
         }
         for (String line : saved.split("\\n")) {
@@ -125,12 +130,13 @@ public final class HangingProtocolManager {
                 continue;
             }
             int[] rc = decodeTiling(parts[1]);
+            int[] ic = decodeTiling(parts[2]); // imageTiling (index 2)
             boolean sync = Boolean.parseBoolean(parts[4]);
             boolean propagate = Boolean.parseBoolean(parts[5]);
-            list.add(new Protocol(parts[0].trim(), rc[0], rc[1], sync, propagate, parts[6].trim()));
+            list.add(new Protocol(parts[0].trim(), rc[0], rc[1], ic[0], ic[1], sync, propagate, parts[6].trim()));
         }
         if (list.isEmpty()) {
-            list.add(new Protocol("Default", 1, 1, true, true, "Default WL & WW"));
+            list.add(new Protocol("Default", 1, 1, 1, 1, true, true, "Default WL & WW"));
         }
         return list;
     }

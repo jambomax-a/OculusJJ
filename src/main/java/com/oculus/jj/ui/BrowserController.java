@@ -5976,6 +5976,22 @@ public class BrowserController extends JFrame {
         // HOROS-20240407準拠: 7454-7486行目 - 全 viewer に対して WL/WW を適用
         applyHangingProtocolWLWW(protocol.wlwwPreset);
 
+        // HOROS-20240407準拠: ImageTiling (ウィンドウ内マルチスライスリング)
+        // protocol.imageRows × protocol.imageCols で各 viewer 内に画像をタイル配置
+        final int imageRows = protocol.imageRows;
+        final int imageCols = protocol.imageCols;
+        java.util.List<ViewerController> displayedViewers = ViewerController.getDisplayed2DViewers();
+        for (ViewerController vc : displayedViewers) {
+            DCMView view = vc.getImageView();
+            if (view != null) {
+                view.imageRows = imageRows;
+                view.imageCols = imageCols;
+                // 複数シリーズ・画像がある場合のみ ImageTiling を有効化
+                view.imageTilingEnabled = (imageRows * imageCols > 1) && view.getDcmPixList() != null
+                        && view.getDcmPixList().size() > 1;
+            }
+        }
+
         // HOROS-20240407準拠: 7488-7492行目 - 指定グリッドで統一タイルリング
         final int rows = protocol.rows;
         final int cols = protocol.cols;

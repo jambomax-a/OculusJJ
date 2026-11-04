@@ -27,9 +27,10 @@
 
 | ファイル | 変更内容 |
 |---|---|
-| **`HangingProtocolManager.java`** (新規, ~280行) | HOROS `WindowLayoutManager` 相当の静的マネージャ。`Protocol`（description/rows/cols/sync/propagate/wlwwPreset）データクラス。`parseProtocolRows()` — `hanging.protocolRows` TSV パース。`resolve(modality, studyName)` — description の case-insensitive 部分一致でプロトコル行選択（HOROS `hangingProtocolForModality:description:` 217行目相当）。`decodeTiling("2x2")` — WindowsTiling 文字列解码。`sortSeriesByOrder(series, orderSpec, ignoreCase)` — カンマ区切り部分一致語句による series 並び替え（HOROS 7143-7180行目相当）。`findComparativeStudies(...)` — 同一患者の過去の study を acquisition date 基準で検索、sameModality/sameDescription フィルタ。`assignSeriesToWindows(...)` — cells 数（rows×cols）への series 割り当て、超過時末尾切り捨て、不足時 `hanging.repeatSeries` で循環複製。 |
-| `BrowserController.java` | `databaseOpenStudy(Object)` の Study 分岐を `openStudyWithHangingProtocol(item)` に接続。`openStudyWithHangingProtocol` — HOROS `databaseOpenStudy:withProtocol:` (7096-7492行目) 移植: protocol 解決 → Comparative 検索（`hanging.previousDisplayMode` 0/1 で有効、2 で無効）→ series 割り当て → `openViewerForSeries` で 1 series 1 viewer 開窓 → `applyHangingProtocolWLWW(preset)` で全 viewer に `DCMView.applyWLPreset` → `ViewerController.tileWindows(rows, cols)` で統一タイルリング（`invokeLater`）。`DCMView.syncro`/`propagateSettings` 静的フラグも反映。`openViewerForSeries(series, suppressTiling)` オーバーロード追加。 |
+| **`HangingProtocolManager.java`** (新規, ~280行) | HOROS `WindowLayoutManager` 相当の静的マネージャ。`Protocol`（description/rows/cols/imageRows/imageCols/sync/propagate/wlwwPreset）データクラス。`parseProtocolRows()` — `hanging.protocolRows` TSV パース（7列: description, windowsTiling, imageTiling, prevStudy, sync, propagate, wlww）。`resolve(modality, studyName)` — description の case-insensitive 部分一致でプロトコル行選択（HOROS `hangingProtocolForModality:description:` 217行目相当）。`decodeTiling("2x2")` — WindowsTiling/ImageTiling 文字列解码。`sortSeriesByOrder(series, orderSpec, ignoreCase)` — カンマ区切り部分一致語句による series 並び替え（HOROS 7143-7180行目相当）。`findComparativeStudies(...)` — 同一患者の過去の study を acquisition date 基準で検索、sameModality/sameDescription フィルタ。`assignSeriesToWindows(...)` — cells 数（rows×cols）への series 割り当て、超過時末尾切り捨て、不足時 `hanging.repeatSeries` で循環複製。 |
+| `BrowserController.java` | `databaseOpenStudy(Object)` の Study 分岐を `openStudyWithHangingProtocol(item)` に接続。`openStudyWithHangingProtocol` — HOROS `databaseOpenStudy:withProtocol:` (7096-7492行目) 移植: protocol 解決 → Comparative 検索（`hanging.previousDisplayMode` 0/1 で有効、2 で無効）→ series 割り当て → `openViewerForSeries` で 1 series 1 viewer 開窓 → `applyHangingProtocolWLWW(preset)` で全 viewer に `DCMView.applyWLPreset` → `ViewerController.tileWindows(rows, cols)` で統一タイルリング（`invokeLater`）。**ImageTiling**: 各 viewer の `DCMView.imageRows/imageCols/imageTilingEnabled` をプロトコルの `imageRows`/`imageCols` に設定し、`DCMView.paintComponent` で grid 描画。`DCMView.syncro`/`propagateSettings` 静的フラグも反映。`openViewerForSeries(series, suppressTiling)` オーバーロード追加。 |
 | `ViewerController.java` | `tileWindows(int fixedRows, int fixedCols)` オーバーロード追加 — Hanging Protocol 指定のグリッドで配置。不足 cell 数は cols 方向へ拡張。共通ルーチン `tileWindowsAt` に抽出。`getInhibitTiling()` ゲッター追加。 |
+| `DCMView.java` | `imageRows`/`imageCols`/`imageTilingEnabled` フィールド追加。`paintComponent` リファクタ: `drawSingleImage()`（従来ロジック）と `drawImageTiling()`（grid 描画）に分離。ImageTiling 有効時は `imageRows × imageCols` グリッドで複数フレームをタイル配置描画。ROI/セグメント/同期ラインは各セル内で描画。 |
 
 **i18n**: 既存 `prefs.proto.*` キー（19キー en/ja 両方）を UI でそのまま使用。エラー/ステータス系は `System.err` に出力（UI ダイアログはHOROSと同様、静粛に動作）。
 
@@ -45,7 +46,6 @@
 
 ### 残タスク（次フェーズ候補）
 - Hanging Protocol の Comparative 詳細表示（`hanging.previousSeriesMode` による複数 series per comparative）
-- `ImageTiling`（ウィンドウ内マルチスライスリング）— OculusJJ の DCMView にはウィンドウ内分割機構が未実装のため、初回は `WindowsTiling` のみ適用
 - `viewers.keepClutBars`（CLUT Bar retention）— 前提の CLUT Bar 描画本体が未実装のため、CLUT Bar 機能実装時に併せて接続
 - `DicomView` の `Liver` / `Mediastinum` WL/WW プリセット値（HOROS `WLWW3` 相当、現在は `applyWLPreset` の既定値にフォールバック）
 
