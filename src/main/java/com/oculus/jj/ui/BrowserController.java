@@ -5949,8 +5949,10 @@ public class BrowserController extends JFrame {
 
         // series を protocol の windows cells 数に割り当て
         boolean repeatSeries = com.oculus.jj.config.AppPreferences.getBool("hanging.repeatSeries", false);
+        int previousSeriesMode = com.oculus.jj.config.AppPreferences.getInt("hanging.previousSeriesMode", 0);
+        // previousSeriesMode: 0=Display 1 series per previous study, 1=Display all series per previous study
         List<DicomSeries> seriesList = HangingProtocolManager
-                .assignSeriesToWindows(study, protocol, comparatives, repeatSeries);
+                .assignSeriesToWindows(study, protocol, comparatives, repeatSeries, previousSeriesMode);
         if (seriesList.isEmpty()) {
             // series がない（画像なし）場合は従来の経路にフォールバック
             viewerDICOMInt(false, java.util.Arrays.asList(studyItem), null);

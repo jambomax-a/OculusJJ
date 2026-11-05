@@ -45,9 +45,18 @@
 - `./gradlew test` — 全テスト合格（HangingProtocolManagerTest 9件 / DicomPixTest 11件 / DicomDatabaseTest 1件 / DicomDirectoryUtilsTest 2件 / WebServerServiceTest 1件）
 
 ### 残タスク（次フェーズ候補）
-- Hanging Protocol の Comparative 詳細表示（`hanging.previousSeriesMode` による複数 series per comparative）
 - `viewers.keepClutBars`（CLUT Bar retention）— 前提の CLUT Bar 描画本体が未実装のため、CLUT Bar 機能実装時に併せて接続
 - `DicomView` の `Liver` / `Mediastinum` WL/WW プリセット値（HOROS `WLWW3` 相当、現在は `applyWLPreset` の既定値にフォールバック）
+
+### [2026-11-05 更新] — Hanging Protocol Comparative 詳細表示（`hanging.previousSeriesMode` 対応）
+
+| 項目 | 実装内容 |
+|------|----------|
+| **`HangingProtocolManager.getComparativeSeries()`** (新規) | Comparative study から取得する series 数を `previousSeriesMode` に従って制御。mode=0（1 series per previous study）では最優先 series のみを1件、mode=1（all series per previous study）では全 series を取得。SeriesOrder による並び替えも適用。 |
+| **`HangingProtocolManager.assignSeriesToWindows()`** | `previousSeriesMode` パラメータを追加。Comparative の各 series を `getComparativeSeries()` で取得し、seriesOrder / ignoreCase で並び替え後に割り当て。 |
+| **`BrowserController.openStudyWithHangingProtocol()`** | `hanging.previousSeriesMode` 設定を読み取り、`assignSeriesToWindows()` に渡す。 |
+
+**検証**: `./gradlew compileJava` / `./gradlew test` 全合格
 
 ---
 

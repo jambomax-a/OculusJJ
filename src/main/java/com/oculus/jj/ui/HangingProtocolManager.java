@@ -221,12 +221,12 @@ public final class HangingProtocolManager {
      * 同一患者の、acquisition date が新しい study を検索し、
      * previousSameModality / previousSameDescription の条件でフィルタ。
      *
-     * @param study      現在の study
-     * @param modality   現在 study の modality
-     * @param studyName  現在 study の名称
-     * @param sameModality previousSameModality
+     * @param study          現在の study
+     * @param modality       現在 study の modality
+     * @param studyName      現在 study の名称
+     * @param sameModality   previousSameModality
      * @param sameDescription previousSameDescription
-     * @param maxCount   取得上限（0 なら 1）
+     * @param maxCount       取得上限（0 なら 1）
      * @return 該当する過去の study リスト（新しい順）
      */
     public static List<DicomStudy> findComparativeStudies(DicomStudy study, String modality, String studyName,
@@ -286,21 +286,56 @@ public final class HangingProtocolManager {
     }
 
     /**
+     * Comparative study から取得する series 数を previousSeriesMode に従って制御。
+     * HOROS BrowserController 7143-7180行目 相当の seriesOrder 並び替えを適用し、
+     * mode=0（1 series per previous study）では最優先 series のみを1件、
+     * mode=1（all series per previous study）では全 series を取得。
+     *
+     * @param comparative   過去の検査 study
+     * @param previousSeriesMode 0: 1 series per previous study, 1: all series per previous study
+     * @return 該当する series リスト
+     */
+    public static List<DicomSeries> getComparativeSeries(DicomStudy comparative, int previousSeriesMode) {
+        if (comparative == null) {
+            return new ArrayList<>();
+        }
+        List<DicomSeries> allSeries = new ArrayList<>(comparative.imageSeriesContainingPixels(true));
+        if (allSeries == null || allSeries.isEmpty()) {
+            allSeries = comparative.imageSeries();
+        }
+        if (allSeries == null || allSeries.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // SeriesOrder による並び替え（hanging.seriesOrder / hanging.ignoreCase）
+        allSeries = sortSeriesByOrder(allSeries,
+                AppPreferences.getStr("hanging.seriesOrder", ""),
+                AppPreferences.getBool("hanging.ignoreCase", false));
+        if (previousSeriesMode <= 0) {
+            // 1 series per previous study: 最優先の1件のみ
+            return new ArrayList<>(allSeries.subList(0, Math.min(1, allSeries.size())));
+        }
+        // all series per previous study: 全 series
+        return allSeries;
+    }
+
+    /**
      * HOROS 7430-7486行目の「series → windows cells に割り当て + WL/WW 適用」相当。
      * <ul>
      *   <li>総 cell 数 = protocol.rows × protocol.cols</li>
      *   <li>series が超過する場合は末尾切り捨て、不足時は hanging.repeatSeries が ON なら循環複製</li>
      *   <li>comparative study の各 series を末尾に付加</li>
+     *   <li>comparative の series 数は previousSeriesMode で制御</li>
      * </ul>
      *
-     * @param study      対象 study
-     * @param protocol   解決済みプロトコル
-     * @param comparatives Comparative 検索結果（任意）
-     * @param repeatSeries series 不足時に循環複製するかどうか
+     * @param study          対象 study
+     * @param protocol       解決済みプロトコル
+     * @param comparatives   Comparative 検索結果（任意）
+     * @param repeatSeries   series 不足時に循環複製するかどうか
+     * @param previousSeriesMode 0: 1 series per previous study, 1: all series per previous study
      * @return cell 数に一致する series リスト
      */
     public static List<DicomSeries> assignSeriesToWindows(DicomStudy study, Protocol protocol,
-            List<DicomStudy> comparatives, boolean repeatSeries) {
+            List<DicomStudy> comparatives, boolean repeatSeries, int previousSeriesMode) {
         List<DicomSeries> seriesArray;
         if (study == null) {
             seriesArray = new ArrayList<>();
@@ -316,8 +351,7 @@ public final class HangingProtocolManager {
         if (comparatives != null && !comparatives.isEmpty()) {
             List<DicomSeries> cmpSeries = new ArrayList<>();
             for (DicomStudy cmp : comparatives) {
-                List<DicomSeries> cs = cmp.imageSeriesContainingPixels(true);
-                if (cs == null) cs = new ArrayList<>();
+                List<DicomSeries> cs = getComparativeSeries(cmp, previousSeriesMode);
                 cmpSeries.addAll(cs);
             }
             if (!cmpSeries.isEmpty()) {
