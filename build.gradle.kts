@@ -53,6 +53,8 @@ dependencies {
     implementation("org.weasis.core:weasis-core-img:4.12.2")
     // dcm4che-net is required for network DICOM features (PACS query/retrieve, C-STORE SCP)
     implementation("org.dcm4che:dcm4che-net:5.34.1")
+// JmDNS Bonjour service discovery
+implementation("org.jmdns:jmdns:3.6.1")
     // SwingX (TreeTable support for HOROS-like outline view)
     implementation("org.swinglabs.swingx:swingx-all:1.6.5-1")
     // Database

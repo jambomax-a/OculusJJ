@@ -298,6 +298,9 @@ public class BrowserController extends JFrame {
     // HOROS-20240407準拠: NSImage *notFoundImage; (230行目)
     private javax.swing.ImageIcon notFoundImage;
 
+    // HOROS-20240407準拠: BonjourBrowser *bonjourBrowser; (BrowserController.h)
+    private BonjourBrowser bonjourBrowser;
+
     private javax.swing.ImageIcon createNotFoundImage() {
         // HOROS-20240407準拠: 70x70のグレーの矩形をデフォルトとする
         java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(70, 70,
@@ -344,6 +347,9 @@ public class BrowserController extends JFrame {
             });
         }
         SwingUtilities.invokeLater(() -> QueryController.resumeSavedAutoQuery(this));
+
+        // Bonjourブラウザの初期化（Bonjour/Zeroconfサービス発見）
+        this.bonjourBrowser = new BonjourBrowser(this);
     }
 
     /**
@@ -10712,10 +10718,10 @@ public class BrowserController extends JFrame {
         // description = [description stringByAppendingFormat:NSLocalizedString(@"%@: %@
         // / ", nil), [_database isLocal] ? NSLocalizedString( @"Local Database", nil) :
         // NSLocalizedString( @"Remote Database", nil), [bs description]];
-        // if (bonjourBrowser != null && row > 0) {
-        // // BonjourBrowserからサービスを取得
-        // return bonjourBrowser.getServiceAtRow(row - 1);
-        // }
+        if (bonjourBrowser != null && row > 0) {
+            // BonjourBrowserからサービスを取得
+            return bonjourBrowser.getServiceAtRow(row - 1);
+        }
 
         // 現在はローカルデータベースのみサポート
         return null;
