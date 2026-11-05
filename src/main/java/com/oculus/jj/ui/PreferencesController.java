@@ -78,6 +78,7 @@ public class PreferencesController extends JFrame {
         model.addElement(LanguageManager.get("prefs.nav.viewers", "Viewers"));
         model.addElement(LanguageManager.get("prefs.nav.viewer3d", "3D Viewer"));
         model.addElement(LanguageManager.get("prefs.nav.petsuv", "PET/SUV"));
+        model.addElement(LanguageManager.get("prefs.nav.ai", "AI Assistant"));
         // Horos sharing section
         model.addElement("-- Sharing --");
         model.addElement(LanguageManager.get("prefs.nav.annotations", "Annotations"));
@@ -124,6 +125,7 @@ public class PreferencesController extends JFrame {
         createHotKeysPane();
         createViewersPane();
         create3DPane();
+        createAIPane();
         createPETPane();
         createAnnotationsPane();
         createDICOMPrintPane();
@@ -1064,7 +1066,7 @@ public class PreferencesController extends JFrame {
         ssRow.add(new JLabel(LanguageManager.get("prefs.v.scroll_series", "Scroll through image and series for:")));
         ssRow.add(new JComboBox<>(new String[] { "Modalities", "All", "None" }));
         miscLeft.add(ssRow);
-        miscLeft.add(ck("viewers.keepClutBars", false,
+        miscLeft.add(ck("viewers.clutBars", false,
                 LanguageManager.get("prefs.v.keep_clut_bars", "Keep CLUT Bars when exporting Screen Captures")));
         miscLeft.add(ck("viewers.skewKurt", false,
                 LanguageManager.get("prefs.v.skewness_kurtosis", "Compute Skewness and Kurtosis for ROI")));
@@ -1383,6 +1385,38 @@ public class PreferencesController extends JFrame {
                 new JComboBox<>(new String[] { "Phong", "Gouraud", "Metallic" })));
 
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.viewer3d", "3D Viewer"));
+    }
+
+    private void createAIPane() {
+        JPanel pane = new JPanel();
+        pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
+        pane.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
+
+        JSectionBox providerBox = new JSectionBox(LanguageManager.get("prefs.ai.provider_section", "Text model"));
+        pane.add(providerBox);
+        String[] providers = {
+                LanguageManager.get("prefs.ai.ollama", "Local Ollama"),
+                LanguageManager.get("prefs.ai.openai_compatible", "Cloud OpenAI-compatible API")
+        };
+        JComboBox<String> providerCombo = new JComboBox<>(providers);
+        providerCombo.setSelectedIndex("OPENAI_COMPATIBLE".equalsIgnoreCase(AppPreferences.getAIProvider()) ? 1 : 0);
+        providerCombo.addActionListener(e -> AppPreferences.setAIProvider(
+                providerCombo.getSelectedIndex() == 1 ? "OPENAI_COMPATIBLE" : "OLLAMA"));
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.ai.provider", "Provider:")), providerCombo));
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.ai.endpoint", "Endpoint URL:")),
+                preferenceText(AppPreferences.KEY_AI_ENDPOINT, AppPreferences.getAIEndpoint(), 36)));
+        pane.add(makeRow(new JLabel(LanguageManager.get("prefs.ai.model", "Model:")),
+                preferenceText(AppPreferences.KEY_AI_MODEL, AppPreferences.getAIModel(), 24)));
+        pane.add(Box.createVerticalStrut(8));
+        pane.add(new JLabel("<html>"
+                + LanguageManager.get("prefs.ai.security_note",
+                        "Local Ollama is the default. Cloud requests require HTTPS and are confirmed each time. "
+                                + "Only manually entered notes are sent; DICOM data is not attached. "
+                                + "Set OCULUSJJ_LLM_API_KEY in the environment for cloud authentication. "
+                                + "The key is never stored in preferences.")
+                + "</html>"));
+
+        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.ai", "AI Assistant"));
     }
 
     private void createPETPane() {

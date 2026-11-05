@@ -7323,6 +7323,11 @@ public class BrowserController extends JFrame {
         openReportItem.addActionListener(e -> generateReport(null));
         reportMenu.add(openReportItem);
 
+        javax.swing.JMenuItem aiDraftItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_report_ai_draft", "Draft report with AI..."));
+        aiDraftItem.addActionListener(e -> new AIReportDraftDialog(this).setVisible(true));
+        reportMenu.add(aiDraftItem);
+
         // Delete report
         // HOROS-20240407準拠: MainMenu.xib 161行目
         javax.swing.JMenuItem deleteReportItem = new javax.swing.JMenuItem(LanguageManager.get("menu_report_delete", "Delete report"));
@@ -8577,6 +8582,30 @@ public class BrowserController extends JFrame {
         javax.swing.JMenu windowWidthLevelMenu = new javax.swing.JMenu(
             LanguageManager.get("menu_2d_window_width_level", "Window Width & Level"));
         windowWidthLevelMenu.add(applyWindowProtocolItem);
+
+        // HOROS WLWW3 相当: Liver / Mediastinum WL/WW プリセット
+        javax.swing.JMenuItem liverPresetItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_2d_wlww_liver", "Liver (WL: 40, WW: 150)"));
+        liverPresetItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null && view.getCurDCM() != null) {
+                view.getCurDCM().setWindowLevelWidth(40, 150);
+                view.repaint();
+            }
+        });
+        windowWidthLevelMenu.add(liverPresetItem);
+
+        javax.swing.JMenuItem mediastinumPresetItem = new javax.swing.JMenuItem(
+            LanguageManager.get("menu_2d_wlww_mediastinum", "Mediastinum (WL: 40, WW: 350)"));
+        mediastinumPresetItem.addActionListener(e -> {
+            DCMView view = getActiveDCMViewForEdit();
+            if (view != null && view.getCurDCM() != null) {
+                view.getCurDCM().setWindowLevelWidth(40, 350);
+                view.repaint();
+            }
+        });
+        windowWidthLevelMenu.add(mediastinumPresetItem);
+
         javax.swing.JMenuItem resetWLWWItem = new javax.swing.JMenuItem(
             LanguageManager.get("menu_2d_reset_wlww", "Reset Window Width & Level"));
         resetWLWWItem.addActionListener(e -> {

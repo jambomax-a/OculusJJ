@@ -54,6 +54,12 @@ public class AppPreferences {
     public static final String KEY_DEFAULT_CLUT = "viewers.defaultCLUT";
     public static final String KEY_DEFAULT_OPACITY_TABLE = "viewers.defaultOpacityTable";
     public static final String KEY_SYNC_SERIES_BETWEEN_STUDIES = "viewers.syncSeriesBetweenStudies";
+    public static final String KEY_CLUT_BARS = "viewers.clutBars";
+
+    // === AI assistant preferences ===
+    public static final String KEY_AI_PROVIDER = "ai.provider";
+    public static final String KEY_AI_ENDPOINT = "ai.endpoint";
+    public static final String KEY_AI_MODEL = "ai.model";
 
     // === 3D Viewer preference keys ===
     public static final String KEY_3D_SHADING_ALGORITHM = "3d.shadingAlgorithm";
@@ -411,6 +417,39 @@ public class AppPreferences {
 
     public static void setSyncSeriesBetweenStudies(boolean sync) {
         prefs.putBoolean(KEY_SYNC_SERIES_BETWEEN_STUDIES, sync);
+    }
+
+    /** HOROS-20240407準拠: CLUT Bars の表示/非表示 (viewers.clutBars, 既定 false) */
+    public static boolean isClutBarsEnabled() {
+        return prefs.getBoolean(KEY_CLUT_BARS, false);
+    }
+
+    public static void setClutBarsEnabled(boolean enabled) {
+        prefs.putBoolean(KEY_CLUT_BARS, enabled);
+    }
+
+    public static String getAIProvider() {
+        return prefs.get(KEY_AI_PROVIDER, "OLLAMA");
+    }
+
+    public static void setAIProvider(String provider) {
+        prefs.put(KEY_AI_PROVIDER, provider);
+    }
+
+    public static String getAIEndpoint() {
+        return prefs.get(KEY_AI_ENDPOINT, "http://localhost:11434");
+    }
+
+    public static void setAIEndpoint(String endpoint) {
+        prefs.put(KEY_AI_ENDPOINT, endpoint);
+    }
+
+    public static String getAIModel() {
+        return prefs.get(KEY_AI_MODEL, "qwen2.5:7b");
+    }
+
+    public static void setAIModel(String model) {
+        prefs.put(KEY_AI_MODEL, model);
     }
 
     // --- 3D Viewer ---

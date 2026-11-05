@@ -105,6 +105,10 @@ public class DCMView extends JPanel {
     protected int imageCols = 1;
     protected boolean imageTilingEnabled = false;
 
+    // HOROS-20240407準拠: DCMView.m - CLUT Bars 表示/非表示
+    // Preferences → Viewers → "Keep CLUT Bars when exporting Screen Captures" (viewers.clutBars, 既定 false)
+    protected boolean showClutBars = false;
+
     // HOROS-20240407準拠: DCMView.m 2178行目 - drawLock（Javaではsynchronizedを使用）
     private final Object drawLock = new Object();
 
@@ -399,6 +403,11 @@ public class DCMView extends JPanel {
         this.annotationType = prefs.getInt("ANNOTATIONS", annotBase);
         // // System.out.println("[DEBUG] DCMView() - annotationType loaded from
         // Preferences: " + annotationType);
+
+        // HOROS-20240407準拠: CLUT Bars の表示/非表示をPreferencesから読み込む
+        // DCMView.m 696行目 - CLUTBARS = [[NSUserDefaults standardUserDefaults]
+        // integerForKey: @"CLUTBARS"];
+        this.showClutBars = com.oculus.jj.config.AppPreferences.isClutBarsEnabled();
 
         // HOROS-20240407準拠: Preferenceで有効な場合のみサイズ変更時にscaleToFitを呼び出す
         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -2319,9 +2328,91 @@ public class DCMView extends JPanel {
             // 通常モード: 単一画像描画
             drawSingleImage(g2d, getWidth(), getHeight(), curDCM, curImage);
 
+            // CLUT Bar の描画 (Preferences "Keep CLUT Bars" が有効な場合)
+            if (showClutBars && curDCM != null) {
+                drawClutBar(g2d, getWidth(), getHeight(), curDCM);
+            }
+
         } finally {
             g2d.dispose();
         }
+    }
+
+    /**
+     * CLUT Bar を描画
+     * HOROS-20240407準拠: DCMView.m - CLUTBARS 関連の描画ロジック
+     * カラーグラデーションバーとWL/WWのマーカーを表示する。
+     */
+    private void drawClutBar(Graphics2D g2d, int panelWidth, int panelHeight, DicomPix dcPix) {
+        if (dcPix == null) return;
+
+        // CLUTバーの設定
+        int barWidth = 20;
+        int barHeight = 120;
+        int margin = 10;
+
+        // 右下隅に配置
+        int x = panelWidth - barWidth - margin;
+        int y = panelHeight - barHeight - margin;
+
+        // バー背景
+        g2d.setColor(new Color(0.0f, 0.0f, 0.0f, 0.7f));
+        g2d.fillRect(x, y, barWidth, barHeight);
+
+        // CLUT LUTを取得
+        int[] clut = dcPix.getCLUTLUT();
+        if (clut == null) {
+            // CLUTが設定されていない場合はグレーグラデーションを描画
+            for (int i = 0; i < barHeight; i++) {
+                int gray = i * 255 / barHeight;
+                g2d.setColor(new Color(gray, gray, gray));
+                g2d.fillRect(x, y + i, barWidth, 1);
+            }
+        } else {
+            // CLUT LUTを使ってカラーグラデーションを描画
+            for (int i = 0; i < barHeight; i++) {
+                int lutIndex = i * 255 / barHeight;
+                int rgb = clut[lutIndex];
+                g2d.setColor(new Color((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF));
+                g2d.fillRect(x, y + i, barWidth, 1);
+            }
+        }
+
+        // WL/WWマーカーを描画
+        float wl = dcPix.getWindowLevel();
+        float ww = dcPix.getWindowWidth();
+
+        // WLの位置を計算 (0-255の範囲にマップ)
+        float wlPos = (wl + ww / 2.0f) / ww * barHeight;
+        wlPos = Math.max(0, Math.min(barHeight, wlPos));
+
+        // WLマーカー（白いライン）
+        g2d.setColor(java.awt.Color.WHITE);
+        g2d.drawLine(x, y + (int) wlPos, x + barWidth, y + (int) wlPos);
+
+        // WW幅を示すマーカー（黄色いライン、WL ± WW/2 の位置）
+        if (ww > 0) {
+            float wwLow = (wl - ww / 2.0f) / ww * barHeight;
+            float wwHigh = (wl + ww / 2.0f) / ww * barHeight;
+            wwLow = Math.max(0, Math.min(barHeight, wwLow));
+            wwHigh = Math.max(0, Math.min(barHeight, wwHigh));
+
+            g2d.setColor(new Color(1.0f, 1.0f, 0.0f)); // 黄色
+            g2d.drawLine(x, y + (int) wwLow, x + barWidth, y + (int) wwLow);
+            g2d.drawLine(x, y + (int) wwHigh, x + barWidth, y + (int) wwHigh);
+        }
+
+        // バーの枠線
+        g2d.setColor(new Color(0.5f, 0.5f, 0.5f, 0.8f));
+        g2d.drawRect(x, y, barWidth, barHeight);
+
+        // WL/WWテキスト表示
+        g2d.setColor(java.awt.Color.WHITE);
+        g2d.setFont(new java.awt.Font("Dialog", 1, 10));
+        String wlText = String.format("WL: %.0f", wl);
+        String wwText = String.format("WW: %.0f", ww);
+        g2d.drawString(wlText, x - 60, y + 12);
+        g2d.drawString(wwText, x - 60, y + 25);
     }
 
     /**

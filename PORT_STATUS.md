@@ -1,9 +1,17 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-11-03 (Preferences 残ランタイム連携: Export 3項目 + Hanging Protocols) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
+> **更新日:** 2026-11-05 (ローカル優先・クラウド選択式LLM草稿支援を追加) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
 > **Javaソースファイル数:** 122 classes (`src/main/java/`)
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
+
+## [2026-11-05 更新] — ローカル優先LLM草稿支援
+
+- `AITextClient.java`: Java `HttpClient` + Jackson でローカル Ollama (`/api/chat`) と OpenAI互換 (`/chat/completions`) をサポート。既定は `http://localhost:11434` / `qwen2.5:7b`。リモートHTTPは拒否し、クラウド接続はHTTPSのみ。
+- `PreferencesController`: AI Assistant pane でプロバイダー、エンドポイント、モデルを設定。APIキーは設定/XMLへ保存せず、クラウド利用時は `OCULUSJJ_LLM_API_KEY` 環境変数から取得。
+- `AIReportDraftDialog`: File > Report > Draft report with AI... から手入力メモの草稿を生成。DICOMメタデータや画像は自動添付しない。クラウド利用時は送信先と入力メモをリクエストごとに表示して確認。出力は編集可能で、診断ではなく確認必須の文章作成支援として扱う。
+- `AITextClientTest`: Ollama/OpenAI互換のリクエスト形式・Bearer認証・非TLS外部URL拒否を検証。
+- **区別**: 既存のGrow Region / Set Pixel Valuesは閾値等による対話的領域成長処理であり、ML推論や外部LLM連携ではない。今回のLLM草稿支援とも別機能。
 
 ---
 
@@ -373,7 +381,8 @@
 | ステレオ表示 | ✅ 実装済 | 単眼L/R / バッファーステレオ |
 | WW/WL・クリッピング・方位ボックス | ✅ 実装済 | Orientation Cube (A/P/S/I/R/L) |
 | VRAM最適化（OpenGL textures to VRAM） | ✅ 実装済 | ボリューム/勾配テクスチャは VRAM に永駐し再利用（`volumeNeedsReupload` dirty-flag で再転送のみ）。POT ボリュームには Mipmap 生成 + trilinear（`GL_LINEAR_MIPMAP_LINEAR`、失敗時 LINEAR フォールバック）。HOROS準拠 VRAM 検出（`GpuVramInfo.java`: Linux /sys/class/drm、Windows wmic/PowerShell、macOS system_profiler）+ 低VRAM(<1GB)警告 / ボリューム超過警告（HOROS `VRView.mm:1020,6310` 相当、1回のみ・i18n `vr3d.vram.*`） |
-| AI画像分析連携（HOROS: Grow Region / Set Pixel Values） | ✅ 実装済 | `model/SegmentationEngine.java`（HOROS ITKSegmentation3D 相当: Threshold区間 / Neighborhood半径 / Confidence倍率 の領域成長＋平滑化近似、純Java・依存ゼロ）+ `Viewer3DController.showAnalysisDialog()`（3Dツールバー「Analysis」ボタン、3Dビュー上でシードピッキング、inside/outside HU上書き、2D連動半透明オーバーレイ）+ `DicomPix.setSegOverlay`/`DCMView`描画パス。i18n `analysis.*` 両ファイル |
+| 領域成長・HU値操作（HOROS: Grow Region / Set Pixel Values） | ✅ 実装済 | `model/SegmentationEngine.java`（Threshold区間 / Neighborhood半径 / Confidence倍率の対話的領域成長＋平滑化近似、純Java）+ `Viewer3DController.showAnalysisDialog()` + 2D連動オーバーレイ。**AI/ML推論ではない**。 |
+| 外部LLM草稿支援 | ✅ 基盤・草稿UI実装済 | `ai/AITextClient.java`（ローカルOllama既定、任意のHTTPS OpenAI互換API）+ Preferences設定 + Reportメニュー草稿ダイアログ。メモは手入力のみ、クラウド送信は毎回確認、APIキーは環境変数管理。 |
 
 ---
 

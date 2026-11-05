@@ -1254,6 +1254,14 @@ public class DicomPix {
     }
 
     /**
+     * 現在のCLUT LUTを取得
+     * @return CLUT LUT配列（256エントリのRGB値）、未設定の場合は null
+     */
+    public int[] getCLUTLUT() {
+        return clutLUT;
+    }
+
+    /**
      * 算術減算 (HOROS: DCMPix.m -imageArithmeticSubtraction:absolute: / arithmeticSubtractImages:)
      * 別のDicomPixのピクセル値を、現在のピクセル値からin-placeで差し引く。
      * - HOROSは生データをmemcpyで上書き（幅/高さは変更しない）
