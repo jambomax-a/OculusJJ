@@ -394,6 +394,9 @@ public class PreferencesController extends JFrame {
         chkSeparateWin.addActionListener(e -> AppPreferences.setSeparateWindowPerStudy(chkSeparateWin.isSelected()));
         pane.add(chkSeparateWin);
 
+        // 余白が大きくなりすぎないよう、垂直グルーでコンテンツを下まで広げる
+        pane.add(Box.createVerticalGlue());
+
         contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.general", "General"));
     }
 
