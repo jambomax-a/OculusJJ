@@ -653,10 +653,20 @@ public class QueryController extends JFrame {
             return;
         }
 
+        String searchText = globalSearchField.getText().trim();
+        // HOROS-20240407準拠 (QueryController.mm "No query parameters provided"):
+        // 検索テキスト・日付条件・モダリティ条件がどれも指定されていない場合、全件C-FINDになり
+        // 非常に時間がかかる（または失敗する）可能性があるため、まず確認する。
+        boolean blankQuery = searchText.isEmpty()
+                && anyDateBtn.isSelected()
+                && modalityCheckBoxes.stream().noneMatch(JCheckBox::isSelected);
+        if (blankQuery && !confirmBlankQuery()) {
+            return;
+        }
+
         Attributes keys = new Attributes();
         keys.setString(0x00080052, org.dcm4che3.data.VR.CS, "STUDY"); // QueryRetrieveLevel
 
-        String searchText = globalSearchField.getText().trim();
         int tabIndex = selectedSearchTabIndex;
 
         // Tab-based search
@@ -784,6 +794,23 @@ public class QueryController extends JFrame {
             }
         };
         worker.execute();
+    }
+
+    /**
+     * HOROS-20240407準拠 (QueryController.mm: "No query parameters provided. The query may take
+     * a long time."): 検索パラメータが全くない全件C-FINDを実行する前に、ユーザーに確認する。
+     * 自動更新（Timer）中はHOROSと同様にダイアログをスキップして実行する。
+     */
+    private boolean confirmBlankQuery() {
+        if (automaticQueryInProgress) {
+            return true;
+        }
+        int answer = JOptionPane.showConfirmDialog(this,
+                LanguageManager.get("query.blank.confirm",
+                        "No query parameters provided. The query may take a long time."),
+                LanguageManager.get("query.title", "DICOM Query/Retrieve"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        return answer == JOptionPane.OK_OPTION;
     }
 
     private List<Attributes> findAcrossFields(DicomNode node, Attributes baseKeys, String searchText) throws Exception {

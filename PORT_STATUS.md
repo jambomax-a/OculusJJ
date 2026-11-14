@@ -692,3 +692,14 @@
 - 追加機能（Apply Window Protocol、Resample、12-bit、Workspace）は基準項目の後に配置。
 
 **コンパイル成功** ✅
+
+---
+
+## [2026-11-14 更新] — Query/Retrieve 全件検索警告
+
+- **HOROS準拠**: HOROS/OsiriX（`QueryController.mm` の「No query parameters provided. The query may take a long time.」）と同様、検索テキスト・日付条件・モダリティ条件がどれも指定されていない全件C-FIND実行前に確認ダイアログ（続行/キャンセル）を表示するように変更。
+- `QueryController.confirmBlankQuery()` を追加し、`performQuery()` 冒頭で条件判定（検索テキスト空 + Any date + モダリティ未チェック）。
+- 自動更新タイマー実行中（`automaticQueryInProgress`）はHOROSの `showError=NO` パスと同様に確認なしで実行。
+- **i18n:** `query.blank.confirm` を en/ja の両 properties に追加。
+
+**コンパイル成功** ✅
