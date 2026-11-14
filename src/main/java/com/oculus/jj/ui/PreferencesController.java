@@ -28,7 +28,6 @@ public class PreferencesController extends JFrame {
     public static void showFrame(Frame owner) {
         SwingUtilities.invokeLater(() -> {
             PreferencesController win = new PreferencesController();
-            win.pack();
             win.setVisible(true);
         });
     }
@@ -42,7 +41,6 @@ public class PreferencesController extends JFrame {
     public static void showPreferences(Frame owner) {
         SwingUtilities.invokeLater(() -> {
             PreferencesController win = new PreferencesController();
-            win.pack();
             win.setVisible(true);
         });
     }
@@ -53,14 +51,12 @@ public class PreferencesController extends JFrame {
 
     private static void showInstance() {
         PreferencesController win = new PreferencesController();
-        win.pack();
         win.setVisible(true);
     }
 
     private PreferencesController() {
         setTitle(LanguageManager.get("prefs.title", "OculusJJ - Preferences"));
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setLocationRelativeTo(null);
         initComponents();
     }
 
@@ -93,7 +89,7 @@ public class PreferencesController extends JFrame {
         sidebar.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         lastSelection = LanguageManager.get("prefs.nav.general", "General");
         sidebar.setSelectedValue(lastSelection, true);
-        sidebar.setPreferredSize(new Dimension(140, 0));
+        sidebar.setPreferredSize(new Dimension(120, 0));
         sidebar.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(200, 200, 200)));
 
         sidebar.addListSelectionListener(e -> {
@@ -114,9 +110,7 @@ public class PreferencesController extends JFrame {
 
         cardLayout = new CardLayout();
         contentPanel = new JPanel(cardLayout);
-        JScrollPane contentScroll = new JScrollPane(contentPanel);
-        contentScroll.getVerticalScrollBar().setUnitIncrement(16);
-        add(contentScroll, BorderLayout.CENTER);
+        add(contentPanel, BorderLayout.CENTER);
 
         createGeneralPane();
         createDatabasePane();
@@ -155,13 +149,12 @@ public class PreferencesController extends JFrame {
         bottomPanel.add(closeBtn);
         add(bottomPanel, BorderLayout.SOUTH);
         pack();
-        // 1920x1080 に収まるように最大サイズ制限と初期サイズ調整
-        setMaximumSize(new Dimension(1100, 750));
         Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-        int w = Math.min(1000, (int) (screen.width * 0.80));
-        int h = Math.min(700, (int) (screen.height * 0.75));
+        int w = Math.min(1024, screen.width - 80);
+        int h = Math.min(680, screen.height - 100);
         setSize(w, h);
-        setPreferredSize(new Dimension(w, h));
+        setMinimumSize(new Dimension(Math.min(620, w), Math.min(420, h)));
+        setLocationRelativeTo(null);
     }
 
     // === BASIC PANES ===
@@ -263,6 +256,7 @@ public class PreferencesController extends JFrame {
         JPanel levelsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         levelsRow.add(new JLabel(LanguageManager.get("prefs.g.jpeg_levels", "Compression Levels:")));
         JButton configureBtn = new JButton(LanguageManager.get("prefs.g.jpeg_configure", "Configure..."));
+
         configureBtn.addActionListener(e -> {
             String currentLevels = AppPreferences.getStr("general.jpegLevels", "Low,Medium,High,Maximum");
             JTextArea levelsArea = new JTextArea(currentLevels, 5, 40);
@@ -361,15 +355,22 @@ public class PreferencesController extends JFrame {
         langModel.addRow(new Object[] { true, "English" });
         JTable langTable = new JTable(langModel);
         langTable.setRowHeight(20);
-        JPanel langTableWrap = new JPanel(new BorderLayout(0, 4));
+        langTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        langTable.getColumnModel().getColumn(0).setPreferredWidth(110);
+        langTable.getColumnModel().getColumn(1).setPreferredWidth(220);
+        langTable.setPreferredScrollableViewportSize(new Dimension(360, 60));
+        JPanel langTableWrap = new JPanel(new BorderLayout(0, 3));
         langTableWrap.add(new JScrollPane(langTable), BorderLayout.CENTER);
-        JPanel langRight = new JPanel();
-        langRight.setLayout(new BoxLayout(langRight, BoxLayout.Y_AXIS));
-        JLabel noteLbl = new JLabel(LanguageManager.get("prefs.g.languages_note",
-                "Restart to apply the changes. If multiple languages are enabled, the used language will be chosen according to OS settings."));
-        noteLbl.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
-        langRight.add(noteLbl);
-        langTableWrap.add(langRight, BorderLayout.EAST);
+        JTextArea noteLbl = new JTextArea(LanguageManager.get("prefs.g.languages_note",
+                "Restart to apply the changes. If multiple languages are enabled, the used language will be chosen according to OS settings."),
+                2, 45);
+        noteLbl.setEditable(false);
+        noteLbl.setFocusable(false);
+        noteLbl.setLineWrap(true);
+        noteLbl.setWrapStyleWord(true);
+        noteLbl.setOpaque(false);
+        noteLbl.setFont(UIManager.getFont("Label.font"));
+        langTableWrap.add(noteLbl, BorderLayout.SOUTH);
         pane.add(langTableWrap);
         pane.add(Box.createVerticalStrut(3));
 
@@ -394,10 +395,7 @@ public class PreferencesController extends JFrame {
         chkSeparateWin.addActionListener(e -> AppPreferences.setSeparateWindowPerStudy(chkSeparateWin.isSelected()));
         pane.add(chkSeparateWin);
 
-        // 余白が大きくなりすぎないよう、垂直グルーでコンテンツを下まで広げる
-        pane.add(Box.createVerticalGlue());
-
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.general", "General"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.general", "General"));
     }
 
     private void createDatabasePane() {
@@ -627,7 +625,7 @@ public class PreferencesController extends JFrame {
                 "Automatically create a DICOM PDF file of the report, when status is changed to 'validated'")));
         pane.add(reports);
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.database", "Database"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.database", "Database"));
     }
 
     private void createCDpvPane() {
@@ -709,7 +707,7 @@ public class PreferencesController extends JFrame {
         suppPanel.add(browseBurnBtn);
         pane.add(suppPanel);
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.burning", "CD/DVD Burning"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.burning", "CD/DVD Burning"));
     }
 
     private void createHangingProtocolsPane() {
@@ -848,7 +846,7 @@ public class PreferencesController extends JFrame {
                 LanguageManager.get("prefs.proto.ignore_case", "Ignore case sensitivity")));
         pane.add(order);
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.hanging", "Hanging Protocols"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.hanging", "Hanging Protocols"));
     }
 
     private void createHotKeysPane() {
@@ -881,6 +879,10 @@ public class PreferencesController extends JFrame {
             model.addRow(r);
 
         JTable table = new JTable(model);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.getColumnModel().getColumn(0).setPreferredWidth(250);
+        table.getColumnModel().getColumn(1).setPreferredWidth(180);
+        table.setRowHeight(22);
         pane.add(new JScrollPane(table), BorderLayout.CENTER);
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton addBtn = new JButton(LanguageManager.get("prefs.add_keybinding", "+ Add Key Binding"));
@@ -952,7 +954,7 @@ public class PreferencesController extends JFrame {
             }
         });
 
-        contentPanel.add(pane, LanguageManager.get("prefs.nav.hotkeys", "Hot Keys"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.hotkeys", "Hot Keys"));
     }
 
     private void saveHotKeys() {
@@ -1135,10 +1137,33 @@ public class PreferencesController extends JFrame {
         chkSync.addActionListener(e -> AppPreferences.setSyncSeriesBetweenStudies(chkSync.isSelected()));
         pane.add(chkSync);
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.viewers", "Viewers"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.viewers", "Viewers"));
     }
 
-    /** HOROS 準拠のチェックボックス（AppPreferences flat-key 永続化） */
+        private JScrollPane createPaneScroll(JPanel pane) {
+        alignBoxLayoutChildren(pane);
+        JScrollPane scroll = new JScrollPane(pane);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        return scroll;
+    }
+
+        private void alignBoxLayoutChildren(Container container) {
+                if (container.getLayout() instanceof BoxLayout) {
+                        for (Component component : container.getComponents()) {
+                                Dimension preferred = component.getPreferredSize();
+                                int maxWidth = component.getMaximumSize().width;
+                                component.setMaximumSize(new Dimension(maxWidth, preferred.height));
+                                if (component instanceof JComponent swingComponent)
+                                        swingComponent.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        }
+                }
+                for (Component component : container.getComponents()) {
+                        if (component instanceof Container nested)
+                                alignBoxLayoutChildren(nested);
+                }
+        }
+
+        /** HOROS 準拠のチェックボックス（AppPreferences flat-key 永続化） */
     private JCheckBox ck(String key, boolean def, String label) {
         JCheckBox cb = new JCheckBox(label, AppPreferences.getBool(key, def));
         cb.addActionListener(e -> AppPreferences.setBool(key, cb.isSelected()));
@@ -1387,7 +1412,7 @@ public class PreferencesController extends JFrame {
         pane.add(makeRow(new JLabel(LanguageManager.get("prefs.shading_algorithm", "Shading Algorithm:")),
                 new JComboBox<>(new String[] { "Phong", "Gouraud", "Metallic" })));
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.viewer3d", "3D Viewer"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.viewer3d", "3D Viewer"));
     }
 
     private void createAIPane() {
@@ -1419,7 +1444,7 @@ public class PreferencesController extends JFrame {
                                 + "The key is never stored in preferences.")
                 + "</html>"));
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.ai", "AI Assistant"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.ai", "AI Assistant"));
     }
 
     private void createPETPane() {
@@ -1579,7 +1604,7 @@ public class PreferencesController extends JFrame {
         doseNote.setBorder(BorderFactory.createEmptyBorder(4, 12, 0, 0));
         pane.add(doseNote);
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.petsuv", "PET/SUV"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.petsuv", "PET/SUV"));
     }
 
     private int parseIntSafe(String s, int def) {
@@ -1866,7 +1891,7 @@ public class PreferencesController extends JFrame {
         saveLoad.add(load);
         details.add(saveLoad);
         pane.add(details, BorderLayout.SOUTH);
-        contentPanel.add(pane, LanguageManager.get("prefs.nav.annotations", "Annotations"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.annotations", "Annotations"));
     }
 
     private JPanel collapsibleField(String key, String fallback, String[] choices) {
@@ -2079,7 +2104,7 @@ public class PreferencesController extends JFrame {
         settings.add(job);
         pane.add(settings);
 
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.print", "DICOM Print"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.print", "DICOM Print"));
     }
 
     private void savePrinterList(DefaultTableModel model) {
@@ -2305,7 +2330,7 @@ public class PreferencesController extends JFrame {
         other.add(ck("listener.closeViewersForXmlRpc", false, LanguageManager.get("prefs.lis.close_2d",
                 "Automatically close all 2D Viewers before displaying studies with XML-RPC orders")));
         pane.add(other);
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.listener", "Listener"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.listener", "Listener"));
     }
 
     private void saveIntField(JTextField field, String key, int fallback, int min, int max) {
@@ -2524,7 +2549,7 @@ public class PreferencesController extends JFrame {
         localDb.add(addLocal);
         locationsPane.add(localDb);
 
-        contentPanel.add(new JScrollPane(locationsPane), LanguageManager.get("prefs.nav.locations", "Locations"));
+        contentPanel.add(createPaneScroll(locationsPane), LanguageManager.get("prefs.nav.locations", "Locations"));
     }
 
     private void createRoutingPane() {
@@ -2617,7 +2642,7 @@ public class PreferencesController extends JFrame {
         footer.add(addRoute, BorderLayout.EAST);
         center.add(footer, BorderLayout.SOUTH);
         pane.add(center, BorderLayout.CENTER);
-        contentPanel.add(pane, LanguageManager.get("prefs.nav.routing", "Routing"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.routing", "Routing"));
     }
 
     private void editRoutingRow(JTable table, DefaultTableModel model, int row) {
@@ -2764,7 +2789,7 @@ public class PreferencesController extends JFrame {
         notify.add(new JLabel(LanguageManager.get("prefs.web.user", "minutes")));
         emails.add(notify);
         pane.add(emails);
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.webserver", "Web Server"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.webserver", "Web Server"));
     }
 
     private void setWebServerActive(boolean active, JCheckBox control) {
@@ -2895,7 +2920,7 @@ public class PreferencesController extends JFrame {
         webFunctions.add(ck("ondemand.webSearch", false, LanguageManager.get("prefs.ond.search", "Search function")));
         webFunctions.add(ck("ondemand.webAlbums", false, LanguageManager.get("prefs.ond.albums", "Albums")));
         pane.add(webFunctions);
-        contentPanel.add(new JScrollPane(pane), LanguageManager.get("prefs.nav.ondemand", "On-Demand (PACS)"));
+        contentPanel.add(createPaneScroll(pane), LanguageManager.get("prefs.nav.ondemand", "On-Demand (PACS)"));
     }
 
     private void moveTableRow(DefaultTableModel model, int row, int direction) {
