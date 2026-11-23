@@ -428,7 +428,9 @@ public class ROI {
         // 除外されるタイプ (Horos準拠: tAxis, tAngle, tArrow, tDynAngle 等)
         if (type == DCMView.ToolMode.tAxis || type == DCMView.ToolMode.tAngle ||
                 type == DCMView.ToolMode.tArrow || type == DCMView.ToolMode.tDynamicAngle ||
-                type == DCMView.ToolMode.tText || type == DCMView.ToolMode.tPlain) {
+                type == DCMView.ToolMode.tText || type == DCMView.ToolMode.tPlain ||
+                type == DCMView.ToolMode.tVHS || type == DCMView.ToolMode.tVLAS ||
+                type == DCMView.ToolMode.tMVLAS) {
             return false;
         }
 
@@ -1126,6 +1128,12 @@ public class ROI {
                 }
                 break;
 
+            case tVHS:
+            case tVLAS:
+            case tMVLAS:
+                drawVeterinaryCardiacROI(g2d, currentScale, selected, strokeWidth, outlineWidth, suppressLabels);
+                break;
+
             default:
                 // Draw points
                 float dotSize = (float) (4.0 / currentScale);
@@ -1158,6 +1166,206 @@ public class ROI {
                 headPos.y - arrowSize * Math.sin(angle + Math.PI / 6));
 
         g2d.draw(head);
+    }
+
+    /**
+     * VHS 短軸の直交終点を計算する (points[2]=Carina, points[3]=Apex, points[4]=短軸起点, points[5]=短軸方向点)
+     */
+    Point2D.Float computeVhsShortAxisEnd() {
+        if (points.size() < 6) {
+            return null;
+        }
+        Point2D.Float carina = points.get(2);
+        Point2D.Float apex = points.get(3);
+        Point2D.Float sStart = points.get(4);
+        Point2D.Float sRaw = points.get(5);
+
+        double dx = apex.x - carina.x;
+        double dy = apex.y - carina.y;
+        double len = Math.hypot(dx, dy);
+        if (len < 1e-6) {
+            return new Point2D.Float(sRaw.x, sRaw.y);
+        }
+        // 長軸に対する単位法線ベクトル
+        double vx = -dy / len;
+        double vy = dx / len;
+        double distS = (sRaw.x - sStart.x) * vx + (sRaw.y - sStart.y) * vy;
+        return new Point2D.Float((float) (sStart.x + vx * distS), (float) (sStart.y + vy * distS));
+    }
+
+    /**
+     * 獣医心臓計測 ROI (VHS / VLAS / M-VLAS) の描画
+     * MMVD-XrayMan 準拠のガイド線・直交線・T4起点椎体ルーラーを描画する
+     */
+    private void drawVeterinaryCardiacROI(Graphics2D g2d, double currentScale, boolean selected,
+            float strokeWidth, float outlineWidth, boolean suppressLabels) {
+        boolean isNewRoi = (parentView != null && parentView.getNewRoi() == this);
+        Color vhsColor = new Color(239, 68, 68);
+        Color vlasColor = new Color(234, 179, 8);
+        Color mvlasColor = new Color(6, 182, 212);
+        Color spineColor = new Color(16, 185, 129, 150);
+
+        float dashLen = (float) (6.0 / currentScale);
+        Stroke dashedStroke = new BasicStroke(strokeWidth, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+                10.0f, new float[] { dashLen, dashLen }, 0.0f);
+
+        // 1. 背骨軸 (T4前縁 -> 背骨方向) とルーラー基準ベクトル
+        double ux = 1.0, uy = 0.0;
+        boolean hasSpineAxis = false;
+        if (points.size() >= 2) {
+            Point2D.Float t4 = points.get(0);
+            Point2D.Float spine = points.get(1);
+            double sdx = spine.x - t4.x;
+            double sdy = spine.y - t4.y;
+            double slen = Math.hypot(sdx, sdy);
+            if (slen >= 1e-4) {
+                ux = sdx / slen;
+                uy = sdy / slen;
+                hasSpineAxis = true;
+
+                // 作成中または選択中は背骨軸の延長ガイド破線を表示
+                if (isNewRoi || selected) {
+                    float ext = (float) (1500.0 / currentScale);
+                    g2d.setColor(spineColor);
+                    g2d.setStroke(dashedStroke);
+                    g2d.draw(new java.awt.geom.Line2D.Float(t4.x, t4.y,
+                            (float) (t4.x + ux * ext), (float) (t4.y + uy * ext)));
+                }
+            }
+        }
+
+        // 2. 各指標ごとの心臓ライン + ルーラー描画
+        if (type == DCMView.ToolMode.tVHS) {
+            if (points.size() >= 4) {
+                Point2D.Float carina = points.get(2);
+                Point2D.Float apex = points.get(3);
+                drawOutlinedLine(g2d, carina, apex, vhsColor, strokeWidth, outlineWidth, false, currentScale);
+
+                if (hasSpineAxis) {
+                    double vhsLPx = carina.distance(apex);
+                    drawSpineRulerBar(g2d, points.get(0), ux, uy, vhsLPx, 18.0, vhsColor,
+                            false, currentScale, strokeWidth, outlineWidth);
+                }
+
+                if (points.size() >= 6) {
+                    Point2D.Float sStart = points.get(4);
+                    Point2D.Float sEnd = computeVhsShortAxisEnd();
+
+                    // 作成中の最後の点（短軸終点）選択時は長軸に垂直な無限ガイド線を表示
+                    if (isNewRoi && points.size() == 6) {
+                        double dx = apex.x - carina.x;
+                        double dy = apex.y - carina.y;
+                        double len = Math.hypot(dx, dy);
+                        if (len >= 1e-6) {
+                            double vx = -dy / len;
+                            double vy = dx / len;
+                            float guideExt = (float) (1200.0 / currentScale);
+                            g2d.setColor(new Color(239, 68, 68, 120));
+                            g2d.setStroke(dashedStroke);
+                            g2d.draw(new java.awt.geom.Line2D.Float(
+                                    (float) (sStart.x - vx * guideExt), (float) (sStart.y - vy * guideExt),
+                                    (float) (sStart.x + vx * guideExt), (float) (sStart.y + vy * guideExt)));
+                        }
+                    }
+
+                    if (sEnd != null) {
+                        drawOutlinedLine(g2d, sStart, sEnd, vhsColor, strokeWidth, outlineWidth, false, currentScale);
+                        if (hasSpineAxis) {
+                            double vhsSPx = sStart.distance(sEnd);
+                            drawSpineRulerBar(g2d, points.get(0), ux, uy, vhsSPx, 32.0, vhsColor,
+                                    true, currentScale, strokeWidth, outlineWidth);
+                        }
+                    }
+                }
+            }
+        } else if (type == DCMView.ToolMode.tVLAS) {
+            if (points.size() >= 4) {
+                Point2D.Float carina = points.get(2);
+                Point2D.Float vlasEnd = points.get(3);
+                drawOutlinedLine(g2d, carina, vlasEnd, vlasColor, strokeWidth, outlineWidth, false, currentScale);
+
+                if (hasSpineAxis) {
+                    double vlasPx = carina.distance(vlasEnd);
+                    drawSpineRulerBar(g2d, points.get(0), ux, uy, vlasPx, 18.0, vlasColor,
+                            false, currentScale, strokeWidth, outlineWidth);
+                }
+            }
+        } else if (type == DCMView.ToolMode.tMVLAS) {
+            if (points.size() >= 4) {
+                Point2D.Float carina = points.get(2);
+                Point2D.Float vlasEnd = points.get(3);
+                // VLAS 基準線
+                drawOutlinedLine(g2d, carina, vlasEnd, vlasColor, strokeWidth * 0.85f, outlineWidth * 0.85f,
+                        false, currentScale);
+
+                if (points.size() >= 5) {
+                    Point2D.Float laTop = points.get(4);
+                    Point2D.Float pM = projectPointOnLine(laTop, carina, vlasEnd);
+                    boolean preview = (isNewRoi && points.size() == 5);
+                    drawOutlinedLine(g2d, laTop, pM, mvlasColor, strokeWidth, outlineWidth, preview, currentScale);
+
+                    if (hasSpineAxis) {
+                        double mvlasPx = laTop.distance(pM);
+                        drawSpineRulerBar(g2d, points.get(0), ux, uy, mvlasPx, 18.0, mvlasColor,
+                                false, currentScale, strokeWidth, outlineWidth);
+                    }
+                }
+            }
+        }
+
+        // 3. ハンドル描画 (作成中・選択中は全点表示、非選択完了時は T4/背骨軸ドットを隠して視認性確保)
+        if (selected || isNewRoi) {
+            for (int i = 0; i < points.size(); i++) {
+                drawHandle(g2d, points.get(i).x, points.get(i).y, currentScale, i);
+            }
+        }
+
+        if (!suppressLabels) {
+            prepareTextualData();
+            drawStatistics(g2d, currentScale, selected);
+        }
+    }
+
+    private void drawOutlinedLine(Graphics2D g2d, Point2D.Float p1, Point2D.Float p2, Color color,
+            float strokeWidth, float outlineWidth, boolean dashed, double currentScale) {
+        float dashLen = (float) (5.0 / currentScale);
+        Stroke mainStroke = dashed
+                ? new BasicStroke(strokeWidth, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f,
+                        new float[] { dashLen, dashLen }, 0.0f)
+                : new BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+        Stroke bgStroke = dashed
+                ? new BasicStroke(outlineWidth, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f,
+                        new float[] { dashLen, dashLen }, 0.0f)
+                : new BasicStroke(outlineWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+
+        java.awt.geom.Line2D.Float line = new java.awt.geom.Line2D.Float(p1.x, p1.y, p2.x, p2.y);
+        g2d.setColor(Color.BLACK);
+        g2d.setStroke(bgStroke);
+        g2d.draw(line);
+        g2d.setColor(color);
+        g2d.setStroke(mainStroke);
+        g2d.draw(line);
+    }
+
+    private void drawSpineRulerBar(Graphics2D g2d, Point2D.Float t4, double ux, double uy, double pxLength,
+            double screenOffset, Color color, boolean dashed, double currentScale,
+            float strokeWidth, float outlineWidth) {
+        double perpX = -uy;
+        double perpY = ux;
+        double off = screenOffset / currentScale;
+        Point2D.Float start = new Point2D.Float(
+                (float) (t4.x + perpX * off),
+                (float) (t4.y + perpY * off));
+        Point2D.Float end = new Point2D.Float(
+                (float) (start.x + ux * pxLength),
+                (float) (start.y + uy * pxLength));
+        drawOutlinedLine(g2d, start, end, color, strokeWidth * 1.3f, outlineWidth * 1.3f, dashed, currentScale);
+
+        // T4起点の目盛りティック
+        double tick = 4.0 / currentScale;
+        Point2D.Float tA = new Point2D.Float((float) (start.x - perpX * tick), (float) (start.y - perpY * tick));
+        Point2D.Float tB = new Point2D.Float((float) (start.x + perpX * tick), (float) (start.y + perpY * tick));
+        drawOutlinedLine(g2d, tA, tB, color, strokeWidth, outlineWidth, false, currentScale);
     }
 
     /**
@@ -1269,6 +1477,9 @@ public class ROI {
             case tAxis:
             case tDynamicAngle:
             case tPerpendicular:
+            case tVHS:
+            case tVLAS:
+            case tMVLAS:
                 // 統計計算用: これらのツールは面積を持たないか、線分ベースなので
                 // 基本的に中身判定は行わない
                 return false;
@@ -1375,6 +1586,45 @@ public class ROI {
                     if (new java.awt.geom.Line2D.Float(points.get(4).x, points.get(4).y, points.get(5).x,
                             points.get(5).y)
                             .ptSegDist(pt) < tolerance)
+                        return true;
+                }
+                break;
+
+            case tVHS:
+                if (points.size() >= 4) {
+                    if (new java.awt.geom.Line2D.Float(points.get(2).x, points.get(2).y, points.get(3).x,
+                            points.get(3).y).ptSegDist(pt) < tolerance)
+                        return true;
+                }
+                if (points.size() >= 6) {
+                    Point2D.Float sEnd = computeVhsShortAxisEnd();
+                    if (sEnd != null && new java.awt.geom.Line2D.Float(points.get(4).x, points.get(4).y,
+                            sEnd.x, sEnd.y).ptSegDist(pt) < tolerance)
+                        return true;
+                }
+                if (points.size() >= 2) {
+                    if (new java.awt.geom.Line2D.Float(points.get(0).x, points.get(0).y, points.get(1).x,
+                            points.get(1).y).ptSegDist(pt) < tolerance)
+                        return true;
+                }
+                break;
+
+            case tVLAS:
+            case tMVLAS:
+                if (points.size() >= 4) {
+                    if (new java.awt.geom.Line2D.Float(points.get(2).x, points.get(2).y, points.get(3).x,
+                            points.get(3).y).ptSegDist(pt) < tolerance)
+                        return true;
+                }
+                if (type == DCMView.ToolMode.tMVLAS && points.size() >= 5) {
+                    Point2D.Float pM = projectPointOnLine(points.get(4), points.get(2), points.get(3));
+                    if (new java.awt.geom.Line2D.Float(points.get(4).x, points.get(4).y, pM.x, pM.y)
+                            .ptSegDist(pt) < tolerance)
+                        return true;
+                }
+                if (points.size() >= 2) {
+                    if (new java.awt.geom.Line2D.Float(points.get(0).x, points.get(0).y, points.get(1).x,
+                            points.get(1).y).ptSegDist(pt) < tolerance)
                         return true;
                 }
                 break;
@@ -1635,7 +1885,7 @@ public class ROI {
         points.set(2, projectPointOnLine(points.get(3), p4, p5));
     }
 
-    private Point2D.Float projectPointOnLine(Point2D.Float p, Point2D.Float a, Point2D.Float b) {
+    Point2D.Float projectPointOnLine(Point2D.Float p, Point2D.Float a, Point2D.Float b) {
         float dx = b.x - a.x;
         float dy = b.y - a.y;
         float denominator = dx * dx + dy * dy;
@@ -1839,6 +2089,15 @@ public class ROI {
 
             case tPerpendicular:
                 return points.size() >= 6;
+
+            case tVHS:
+                return points.size() >= 6;
+
+            case tVLAS:
+                return points.size() >= 4;
+
+            case tMVLAS:
+                return points.size() >= 5;
 
             default:
                 return true;
@@ -2181,6 +2440,42 @@ public class ROI {
                 }
                 break;
 
+            case tVHS:
+                if (points.size() >= 4) {
+                    double lenL = calculateLength(points.get(2), points.get(3)) / 10.0;
+                    textualBoxLine2 = String.format("VHS L: %s", formatLength(lenL));
+                    if (points.size() >= 6) {
+                        Point2D.Float sEnd = computeVhsShortAxisEnd();
+                        if (sEnd != null) {
+                            double lenS = calculateLength(points.get(4), sEnd) / 10.0;
+                            textualBoxLine3 = String.format("VHS S: %s", formatLength(lenS));
+                            textualBoxLine4 = String.format("VHS (L+S): %s", formatLength(lenL + lenS));
+                        }
+                    }
+                }
+                break;
+
+            case tVLAS:
+                if (points.size() >= 4) {
+                    double lenVlas = calculateLength(points.get(2), points.get(3)) / 10.0;
+                    textualBoxLine2 = String.format("VLAS: %s", formatLength(lenVlas));
+                }
+                break;
+
+            case tMVLAS:
+                if (points.size() >= 4) {
+                    double lenVlas = calculateLength(points.get(2), points.get(3)) / 10.0;
+                    if (points.size() >= 5) {
+                        Point2D.Float pM = projectPointOnLine(points.get(4), points.get(2), points.get(3));
+                        double lenMvlas = calculateLength(points.get(4), pM) / 10.0;
+                        textualBoxLine2 = String.format("M-VLAS: %s", formatLength(lenMvlas));
+                        textualBoxLine3 = String.format("VLAS: %s", formatLength(lenVlas));
+                    } else {
+                        textualBoxLine2 = String.format("VLAS: %s", formatLength(lenVlas));
+                    }
+                }
+                break;
+
             default:
                 break;
         }
@@ -2230,6 +2525,11 @@ public class ROI {
             // Dynamic Angleは最初の線分の中点をとりあえずのアンカーにする
             anchorX = (points.get(0).x + points.get(1).x) / 2.0f;
             anchorY = (points.get(0).y + points.get(1).y) / 2.0f;
+        } else if ((type == DCMView.ToolMode.tVHS || type == DCMView.ToolMode.tVLAS || type == DCMView.ToolMode.tMVLAS)
+                && points.size() >= 3) {
+            // 獣医心臓計測はCarina付近（またはT4上）にテキストボックスを配置
+            anchorX = points.get(2).x;
+            anchorY = points.get(2).y;
         } else if (!points.isEmpty()) {
             for (Point2D.Float pt : points) {
                 if (pt.y < anchorY) { // Pixel coordinates: smaller Y is higher

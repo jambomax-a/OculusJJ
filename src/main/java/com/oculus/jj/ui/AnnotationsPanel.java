@@ -135,7 +135,10 @@ public class AnnotationsPanel extends JFrame {
             boolean hasStats = roi.getType() != DCMView.ToolMode.tMesure
                     && roi.getType() != DCMView.ToolMode.tAngle
                     && roi.getType() != DCMView.ToolMode.tArrow
-                    && roi.getType() != DCMView.ToolMode.tText;
+                    && roi.getType() != DCMView.ToolMode.tText
+                    && roi.getType() != DCMView.ToolMode.tVHS
+                    && roi.getType() != DCMView.ToolMode.tVLAS
+                    && roi.getType() != DCMView.ToolMode.tMVLAS;
 
             boolean showSkewKurt = com.oculus.jj.config.AppPreferences.getBool("viewers.skewKurt", false);
             double area = roi.getArea() / 100.0; // HOROS: formatArea(getArea() / 100.0)

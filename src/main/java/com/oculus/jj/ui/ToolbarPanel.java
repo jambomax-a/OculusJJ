@@ -120,6 +120,22 @@ public class ToolbarPanel extends JFrame {
 
         toolbar.addSeparator();
 
+        // Veterinary Cardiac Measurements (VHS / VLAS / M-VLAS)
+        addToolButton(toolbar, "btn_vhs", "tt.btn_vhs", () -> {
+            DCMView.currentTool = DCMView.ToolMode.tVHS;
+            if (viewer != null && viewer.getImageView() != null) viewer.getImageView().repaint();
+        });
+        addToolButton(toolbar, "btn_vlas", "tt.btn_vlas", () -> {
+            DCMView.currentTool = DCMView.ToolMode.tVLAS;
+            if (viewer != null && viewer.getImageView() != null) viewer.getImageView().repaint();
+        });
+        addToolButton(toolbar, "btn_mvlas", "tt.btn_mvlas", () -> {
+            DCMView.currentTool = DCMView.ToolMode.tMVLAS;
+            if (viewer != null && viewer.getImageView() != null) viewer.getImageView().repaint();
+        });
+
+        toolbar.addSeparator();
+
         // CPR / Brush / Repulsor / Sync / MPR / MIP3D / VR3D
         addToolButton(toolbar, "btn_cpr", null, () -> { BrowserController current = BrowserController.currentBrowser(); if (current != null) current.cprViewer(null); });
         addToolButton(toolbar, "btn_brush", null, () -> { DCMView.currentTool = DCMView.ToolMode.tBrush; Window owner = SwingUtilities.getWindowAncestor(ToolbarPanel.this); BrushPaletteDialog.showPalette(owner instanceof Frame ? (Frame) owner : null); });

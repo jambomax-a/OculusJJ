@@ -317,6 +317,9 @@ public class DCMView extends JPanel {
         t3DPointTool4, // 3Dポイントツール4
         t3DPolygonTool4, // 3D多角形ツール4
         tCurvedROI, // Curved MPR ROI (HOROS-20240407)
+        tVHS, // 獣医領域: Vertebral Heart Size (VHS)
+        tVLAS, // 獣医領域: Vertebral Left Atrial Size (VLAS)
+        tMVLAS, // 獣医領域: Modified VLAS (M-VLAS)
     }
 
     // HOROS-20240407準拠: 現在のツール（デフォルトはWL/WW）
@@ -328,6 +331,10 @@ public class DCMView extends JPanel {
         return curRoiList;
     }
 
+    protected boolean isVeterinaryCardiacTool(ToolMode tool) {
+        return tool == ToolMode.tVHS || tool == ToolMode.tVLAS || tool == ToolMode.tMVLAS;
+    }
+
     /**
      * ROIツールかどうかを判定
      */
@@ -336,7 +343,8 @@ public class DCMView extends JPanel {
                 tool == ToolMode.tArrow || tool == ToolMode.tText || tool == ToolMode.tOPolygon
                 || tool == ToolMode.tCPolygon || tool == ToolMode.tROI || tool == ToolMode.tPencil
                 || tool == ToolMode.t2DPoint || tool == ToolMode.tAxis || tool == ToolMode.tDynamicAngle
-                || tool == ToolMode.tPerpendicular || tool == ToolMode.tBrush || tool == ToolMode.tCurvedROI;
+                || tool == ToolMode.tPerpendicular || tool == ToolMode.tBrush || tool == ToolMode.tCurvedROI
+                || tool == ToolMode.tVHS || tool == ToolMode.tVLAS || tool == ToolMode.tMVLAS;
     }
 
     /**
@@ -500,7 +508,7 @@ public class DCMView extends JPanel {
                 if (newRoi != null && (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
                         currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
                         currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular
-                        || currentTool == ToolMode.tCurvedROI)) {
+                        || currentTool == ToolMode.tCurvedROI || isVeterinaryCardiacTool(currentTool))) {
                     if (imgPt != null && newRoi.getPoints().size() > 0) {
                         // マウスカーソルの位置に「最後の点」を更新し続ける
                         newRoi.updatePoint(newRoi.getPoints().size() - 1, imgPt);
@@ -912,7 +920,7 @@ public class DCMView extends JPanel {
                             && (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
                                     currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
                                     currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular ||
-                                    currentTool == ToolMode.tCurvedROI)) {
+                                    currentTool == ToolMode.tCurvedROI || isVeterinaryCardiacTool(currentTool))) {
 
                         // --- 終了判定 ---
                         // HOROS: 既存の点（特に直前の確定点）と非常に近い場所をクリックしたら終了
@@ -923,7 +931,8 @@ public class DCMView extends JPanel {
                         // mouseMovedで「追尾点」が末尾に追加されているので、
                         // 確定済みの最後の点は後ろから2番目 (size-2)
                         if (currentPts.size() >= 2 && currentTool != ToolMode.tAxis &&
-                                currentTool != ToolMode.tDynamicAngle && currentTool != ToolMode.tPerpendicular) {
+                                currentTool != ToolMode.tDynamicAngle && currentTool != ToolMode.tPerpendicular &&
+                                !isVeterinaryCardiacTool(currentTool)) {
                             java.awt.geom.Point2D.Float lastFixedPt = currentPts.get(currentPts.size() - 2);
                             if (imgPt.distance(lastFixedPt) < tolerance) {
                                 completeNewRoi();
@@ -954,6 +963,15 @@ public class DCMView extends JPanel {
                             completeNewRoi();
                         } else if (currentTool == ToolMode.tPerpendicular && currentPts.size() == 6) {
                             newRoi.updatePoint(5, imgPt); // 最後（6点目）を確定
+                            completeNewRoi();
+                        } else if (currentTool == ToolMode.tVHS && currentPts.size() == 6) {
+                            newRoi.updatePoint(5, imgPt);
+                            completeNewRoi();
+                        } else if (currentTool == ToolMode.tVLAS && currentPts.size() == 4) {
+                            newRoi.updatePoint(3, imgPt);
+                            completeNewRoi();
+                        } else if (currentTool == ToolMode.tMVLAS && currentPts.size() == 5) {
+                            newRoi.updatePoint(4, imgPt);
                             completeNewRoi();
                         } else {
                             // まだ続くなら、現在の位置を確定させ、次の追尾用の点を同じ場所に重ねて追加
@@ -1115,7 +1133,7 @@ public class DCMView extends JPanel {
                             } else {
                                 // HOROS: mouseRoiDownIn 準拠
                                 if (currentTool == ToolMode.tAxis || currentTool == ToolMode.tDynamicAngle
-                                        || currentTool == ToolMode.tAngle) {
+                                        || currentTool == ToolMode.tAngle || isVeterinaryCardiacTool(currentTool)) {
                                     // HOROS: 最初のクリックで2点（起点と追尾点）を追加することで、
                                     // 2クリック目で2点目、3クリック目で3点目を確定させる直感的な操作にする
                                     newRoi.addPoint(imgPt); // P0: 起点
@@ -1252,7 +1270,8 @@ public class DCMView extends JPanel {
                     // 多角形、角度、軸、垂線ツールなどはクリック（またはドラッグ＆リリース）の繰り返しで作成する
                     if (currentTool == ToolMode.tOPolygon || currentTool == ToolMode.tCPolygon ||
                             currentTool == ToolMode.tAngle || currentTool == ToolMode.tAxis ||
-                            currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular) {
+                            currentTool == ToolMode.tDynamicAngle || currentTool == ToolMode.tPerpendicular ||
+                            isVeterinaryCardiacTool(currentTool)) {
 
                         // ドラッグして離した場合、その点を確定させて次の点の追尾を開始する
                         java.awt.geom.Point2D.Float imgPt = convertScreenToImage(e.getPoint());
@@ -1261,9 +1280,9 @@ public class DCMView extends JPanel {
                             newRoi.updatePoint(pts.size() - 1, imgPt);
 
                             // 次の点を追加（条件付き）
-                            // Axis/DynamicAngle/Perpendicular は mousePressed で次点を追加していくため、ここでは追加しない
+                            // Axis/DynamicAngle/Perpendicular/Cardiac は mousePressed で次点を追加していくため、ここでは追加しない
                             if (currentTool != ToolMode.tAxis && currentTool != ToolMode.tDynamicAngle
-                                    && currentTool != ToolMode.tPerpendicular) {
+                                    && currentTool != ToolMode.tPerpendicular && !isVeterinaryCardiacTool(currentTool)) {
                                 if (currentTool == ToolMode.tPerpendicular && pts.size() % 2 == 0
                                         && pts.size() < 6) {
                                     newRoi.addPoint(imgPt);
@@ -2237,7 +2256,8 @@ public class DCMView extends JPanel {
                 // 現在操作中の測定ROIは常にラベルを表示する
                 if (roi == selectedRoi && roi.getActiveHandleIndex() != -1) {
                     if (roi.getType() == ToolMode.tMesure || roi.getType() == ToolMode.tAngle ||
-                            roi.getType() == ToolMode.tDynamicAngle || roi.getType() == ToolMode.tAxis) {
+                            roi.getType() == ToolMode.tDynamicAngle || roi.getType() == ToolMode.tAxis ||
+                            isVeterinaryCardiacTool(roi.getType())) {
                         suppressLabels = false;
                     } else {
                         suppressLabels = true;
@@ -3240,6 +3260,105 @@ public class DCMView extends JPanel {
             int bottomTextWidth = fm.stringWidth(bottomText);
             g2d.drawString(bottomText, panelWidth / 2 - bottomTextWidth / 2, panelHeight - 2);
         }
+
+        drawVeterinaryStepGuide(g2d, panelWidth);
+    }
+
+    private void drawVeterinaryStepGuide(Graphics2D g2d, int panelWidth) {
+        ToolMode activeMode = (newRoi != null && isVeterinaryCardiacTool(newRoi.getType()))
+                ? newRoi.getType()
+                : (isVeterinaryCardiacTool(currentTool) ? currentTool : null);
+        if (activeMode == null) {
+            return;
+        }
+
+        int stepIdx = 0;
+        if (newRoi != null && newRoi.getType() == activeMode) {
+            stepIdx = Math.max(0, newRoi.getPoints().size() - 1);
+        }
+
+        String guideText = null;
+        if (activeMode == ToolMode.tVHS) {
+            String[] keys = {
+                    "cardiac.step.t4_front",
+                    "cardiac.step.spine_axis",
+                    "cardiac.step.carina_vhs",
+                    "cardiac.step.apex",
+                    "cardiac.step.vhs_s_start",
+                    "cardiac.step.vhs_s_end"
+            };
+            String[] fallbacks = {
+                    "Click cranial edge of T4 (origin)",
+                    "Click caudal direction along spine axis",
+                    "Click ventral border of Carina (VHS L start)",
+                    "Click furthest point of cardiac Apex (VHS L end)",
+                    "Click ventral border of CVC / caudal heart (VHS S start)",
+                    "Click cranial heart border (perpendicular to L)"
+            };
+            int idx = Math.min(stepIdx, keys.length - 1);
+            guideText = String.format("[VHS %d/6] %s", idx + 1,
+                    com.oculus.jj.utils.LanguageManager.get(keys[idx], fallbacks[idx]));
+        } else if (activeMode == ToolMode.tVLAS) {
+            String[] keys = {
+                    "cardiac.step.t4_front",
+                    "cardiac.step.spine_axis",
+                    "cardiac.step.carina_vlas",
+                    "cardiac.step.vlas_end"
+            };
+            String[] fallbacks = {
+                    "Click cranial edge of T4 (origin)",
+                    "Click caudal direction along spine axis",
+                    "Click ventral border of Carina",
+                    "Click intersection of dorsal CVC & caudal LA border"
+            };
+            int idx = Math.min(stepIdx, keys.length - 1);
+            guideText = String.format("[VLAS %d/4] %s", idx + 1,
+                    com.oculus.jj.utils.LanguageManager.get(keys[idx], fallbacks[idx]));
+        } else if (activeMode == ToolMode.tMVLAS) {
+            String[] keys = {
+                    "cardiac.step.t4_front",
+                    "cardiac.step.spine_axis",
+                    "cardiac.step.carina_vlas",
+                    "cardiac.step.vlas_end",
+                    "cardiac.step.la_dorsal_top"
+            };
+            String[] fallbacks = {
+                    "Click cranial edge of T4 (origin)",
+                    "Click caudal direction along spine axis",
+                    "Click ventral border of Carina",
+                    "Click intersection of dorsal CVC & caudal LA border",
+                    "Click dorsalmost border of Left Atrium dome"
+            };
+            int idx = Math.min(stepIdx, keys.length - 1);
+            guideText = String.format("[M-VLAS %d/5] %s", idx + 1,
+                    com.oculus.jj.utils.LanguageManager.get(keys[idx], fallbacks[idx]));
+        }
+
+        if (guideText == null || guideText.isEmpty()) {
+            return;
+        }
+
+        Graphics2D g2 = (Graphics2D) g2d.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        java.awt.Font font = new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 13);
+        g2.setFont(font);
+        java.awt.FontMetrics fm = g2.getFontMetrics();
+        int textW = fm.stringWidth(guideText);
+        int padX = 14;
+        int padY = 6;
+        int boxW = textW + padX * 2;
+        int boxH = fm.getHeight() + padY * 2;
+        int x = Math.max(10, (panelWidth - boxW) / 2);
+        int y = 28;
+
+        g2.setColor(new Color(15, 23, 42, 210));
+        g2.fillRoundRect(x, y, boxW, boxH, 12, 12);
+        g2.setColor(new Color(56, 189, 248, 200));
+        g2.setStroke(new BasicStroke(1.2f));
+        g2.drawRoundRect(x, y, boxW, boxH, 12, 12);
+        g2.setColor(Color.WHITE);
+        g2.drawString(guideText, x + padX, y + padY + fm.getAscent());
+        g2.dispose();
     }
 
     /**

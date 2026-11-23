@@ -129,6 +129,10 @@ public class MainMenuBar extends JMenuBar {
         angleItem = makeItem(LanguageManager.get("menu_angle", "Angle"), e -> setTool(DCMView.ToolMode.tAngle));
         measureTools.add(lengthItem);
         measureTools.add(angleItem);
+        measureTools.addSeparator();
+        measureTools.add(makeItem(LanguageManager.get("menu_vhs", "VHS (Vertebral Heart Size)"), e -> setTool(DCMView.ToolMode.tVHS)));
+        measureTools.add(makeItem(LanguageManager.get("menu_vlas", "VLAS (Vertebral Left Atrial Size)"), e -> setTool(DCMView.ToolMode.tVLAS)));
+        measureTools.add(makeItem(LanguageManager.get("menu_mvlas", "M-VLAS (Modified VLAS)"), e -> setTool(DCMView.ToolMode.tMVLAS)));
         JMenu annotTools = new JMenu(LanguageManager.get("menu_annotations", "Annotations"));
         annotTools.add(makeItem(LanguageManager.get("menu_text", "Text"), e -> setTool(DCMView.ToolMode.tText)));
         annotTools.add(makeItem(LanguageManager.get("menu_arrow", "Arrow"), e -> setTool(DCMView.ToolMode.tArrow)));
