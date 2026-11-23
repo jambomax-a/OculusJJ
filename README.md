@@ -32,6 +32,7 @@ Inspired by and ported from the architecture of **[Horos](https://horosproject.o
   - Complete ROI & measurement suite (Length, Angle, Polygon, Oval, Pencil, Brush with morphological Dilate/Erode, SUV conversion, Pixel calibration).
   - Image Fusion (PET-CT / MRI-CT blending), Subtraction, and Key Image (DICOM Secondary Capture) export.
   - Navigator strip & 3D Position Synchronizer across multi-series studies.
+  - Veterinary cardiac measurements: VHS, VLAS, and M-VLAS with guided 2D ROI placement.
 - **GPU-Accelerated 3D & MPR**:
   - Multi-Planar Reconstruction (MPR), Curved MPR, and Orthogonal views.
   - OpenGL (`LWJGL 3`) hardware-accelerated Volume Rendering (Ray-marching VR, MIP, Isosurface) with 16-bit Transfer Functions, Phong shading, Stereo 3D modes, and automatic CPU fallback.
@@ -116,6 +117,7 @@ macOS向けの定番オープンソース医用画像ビューワーである **
   - ROI・計測ツール一式（距離、角度、ポリゴン、楕円、ペンシル、モルフォロジー膨張/収縮対応ブラシ、SUV換算、ピクセル校正）。
   - 画像フュージョン（PET-CT / MRI-CT ブレンディング）、サブトラクション、Key Image（DICOM Secondary Capture）出力。
   - シリーズ横断の Navigator ストリップおよび 3D Position 同期パネル。
+  - 獣医心臓計測: ガイド付き2D ROIによるVHS・VLAS・M-VLAS。
 - **GPUアクセラレーション 3D / MPR**:
   - MPR（多断面再構成）、Curved MPR、直交3断面表示。
   - OpenGL (`LWJGL 3`) によるハードウェア高速化ボリュームレンダリング（Ray-marching VR / MIP / Isosurface）、16-bit トランスファーファンクション、Phongシェーディング、ステレオ立体視、および環境に応じたCPUフォールバック機能。

@@ -19,8 +19,9 @@
 
 | パス | 役割 | AIへの注意事項 |
 | :--- | :--- | :--- |
-| **`src/main/java/com/oculus/jj/`** | **OculusJJ 本体ソースコード**（106クラス、全体で122クラス） | **実装・修正はここに対して行う。** |
-| **`src/main/java/org/dcm4che3/opencv/`** | OpenCV Native ImageIO ブリッジ（16クラス） | `weasis-core-img` 4.12.2と連携してJPEG/JPEG2000/JPEG-LS圧縮DICOMをデコードするカスタム組み込みコード。 |
+| **`src/main/java/com/oculus/jj/`** | **OculusJJ 本体ソースコード**（106 Javaファイル） | **実装・修正はここに対して行う。** |
+| **`src/main/java/org/dcm4che3/opencv/`** | OpenCV Native ImageIO ブリッジ（19 Javaファイル） | `weasis-core-img` 4.12.2と連携してJPEG/JPEG2000/JPEG-LS圧縮DICOMをデコードするカスタム組み込みコード。 |
+| **全体** | 本体・ネイティブブリッジ合計125 Javaファイル | ルート直下の参照用アップストリームソースとは別管理。 |
 | **`src/main/resources/`** | リソースファイル | `i18n/messages_ja.properties`, `messages_en.properties`（日英辞書）、`native/`（OS別OpenCVネイティブライブラリ）。 |
 | **`PORT_STATUS.md`** | **実装進捗・変更履歴のマスタードキュメント** | 何が実装済みで何が未実装か、直近でどう実装されたかの事実確認に最優先で参照すること。 |
 | **`docs/`** | ポーティング設計書・差分分析 | `docs/PortingGuide/`（アーキテクチャ、DICOM、UI、MPR/CPR解析）、`docs/diff/gap-analysis.md`（ツールバー等のHoros比較）。 |
@@ -85,7 +86,7 @@ Horos (Objective-C) のクラス構造・メソッド名を可能な限り対応
 | **ハンギングプロトコル** | `WindowLayoutManager.m`<br>`BrowserController.m` | **`ui/HangingProtocolManager.java`** | モダリティ・検査名に応じた画面分割（WindowsTiling / ImageTiling）、Series並び替え、過去検査比較（Comparative Studies / `previousSeriesMode`）の自動割り当て。 |
 | **2D画像キャンバス** | **`DCMView.m`** | **`ui/DCMView.java`** | **描画・マウス操作の核**。WL/WW調整、Zoom/Pan/回転、1ビュー内グリッド表示（ImageTiling）、ROI描画・操作、クロスリファレンス線・Overflow Lines、オーバーレイ表示、ビューア間同期。 |
 | **1スライス画素モデル** | **`DCMPix.m`** | **`model/DicomPix.java`** | **ピクセル演算の核**。16bit/float画素保持、WL/WW LUT変換、CLUT適用、3x3/5x5畳み込みフィルタ、サブトラクション（減算）、SUV換算、RGB/BW変換、セグメンテーションオーバーレイ保持。 |
-| **ROI（関心領域・計測）** | **`ROI.m`** | **`model/ROI.java`** | 距離・角度・矩形・楕円・ポリゴン・ペンシル・ブラシROI。モルフォロジー膨張/収縮（Dilate/Erode）、グループ化、スライス間伝播・欠損補間、Undo/Redo (`AnnotationUndoManager`)。 |
+| **ROI（関心領域・計測）** | **`ROI.m`** | **`model/ROI.java`** | 距離・角度・矩形・楕円・ポリゴン・ペンシル・ブラシROI。モルフォロジー膨張/収縮（Dilate/Erode）、グループ化、スライス間伝播・欠損補間、Undo/Redo (`AnnotationUndoManager`)。獣医心臓ROIとしてVHS（T4基準の長軸・短軸）／VLAS／M-VLAS（左房背側ドーム）にも対応し、六点・四点・五点のガイド付き入力と実寸換算表示を提供。 |
 | 2Dビューアツールバー | `ViewerController` Toolbar | `ui/ToolbarPanel.java`<br>`ui/ToolbarPanelController.java` | 2Dビューア上部のツール切替、WL/WWプリセット、CLUT、Fusion、Shutter等。 |
 | 画像フュージョン | Fusion Blending | `model/FusionImageProcessor.java`<br>`ui/FusionControlsPanel.java` | PET-CT / MRI-CT 等の重ね合わせ（ブレンド率調整・フラット化焼き込み）。 |
 | ナビゲーター / 3D位置 | `NavigatorWindowController`<br>`ThreeDPositionController` | `ui/NavigatorWindow.java`<br>`ui/NavigatorPanel.java`<br>`ui/ThreeDPositionWindow.java` | 全スライスのサムネイルストリップ表示・ジャンプ、および3D座標同期パネル。 |

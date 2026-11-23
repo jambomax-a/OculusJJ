@@ -1,9 +1,16 @@
 # OculusJJ HOROS Java Port - 実装状況サマリー
 
-> **更新日:** 2026-11-05 (ローカル優先・クラウド選択式LLM草稿支援を追加) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
-> **Javaソースファイル数:** 122 classes (`src/main/java/`)
+> **更新日:** 2026-11-23 (獣医心臓計測ROI: VHS / VLAS / M-VLAS を追加) | **最終ビルド:** BUILD SUCCESSFUL (dcm4che-core 5.34.1)
+> **Javaソースファイル数:** 125 Javaファイル（本体106 + OpenCVブリッジ19）
 > **HOROS-20240407参照ソース:** 337 .m, 1088 .h, 205 .mm (Objective-C/Cocoa)
 > **依存関係:** dcm4che-core 5.34.1 / LWJGL 3.2.3 / SQLite JDBC 3.44.1
+
+## [2026-11-23 更新] — 獣医心臓計測ROI
+
+- `DCMView.ToolMode` に VHS（Vertebral Heart Size）、VLAS（Vertebral Left Atrial Size）、M-VLAS（Modified VLAS）を追加。
+- `ROI.java` に工具別の点数・選択・描画・測定ガイドを実装。VHSはT4基準による長軸・短軸、VLASは基準線と左房端点、M-VLASはVLAS基準線への垂線投影で計測。
+- `MainMenuBar` / `ToolbarPanel` / 2D操作UIと英日i18nにカード連携を追加。
+- `VeterinaryCardiacROITest` に点数検証、短軸の直交投影、M-VLAS垂線投影、描画・ヒットテストを追加。
 
 ## [2026-11-05 更新] — ローカル優先LLM草稿支援
 

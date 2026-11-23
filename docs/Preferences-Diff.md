@@ -278,7 +278,7 @@
 4. **機能実装の範囲**：設定UI + 永続化 + 既存コードとのキー連携（`useVOILUT` / `roi.defaultName` / `isLUT12Bit` / `fusion.*` など既存キーへの統一）を優先。未実装の機能本体（Bonjour 検索、XML-RPC サーバ等）は設定値を読み取る側を後続タスクで対応。
 5. **検証**：各Phase完了後 `./gradlew compileJava` + `./gradlew test`（あれば）。
 
-## 実装進捗
+## 実装進捗（更新: 2026-11-23）
 - [x] 差分ドキュメント作成
 - [x] Phase 1 UI: General / Viewers / 3D / PET（設定UI・ローカル永続化）
 - [x] Phase 2 UI: Database / CD/DVD / Protocols / Locations / Listener（設定UI・ローカル永続化）
