@@ -42,6 +42,7 @@ public class QueryController extends JFrame {
     private DefaultTableModel tableModel;
     private JButton queryButton, queryPatientButton, retrieveButton, verifyButton, settingsButton;
     private JComboBox<String> retrieveToCombo;
+    private JLabel retrieveStatusLabel;
         private javax.swing.Timer autoQueryTimer;
         private boolean automaticQueryInProgress;
         private final java.util.Set<String> autoRetrieveInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -637,6 +638,8 @@ public class QueryController extends JFrame {
         statusBar.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
         JLabel keepOnTop = new JLabel(LanguageManager.get("query.keepontop", "Keep this window on top"));
         statusBar.add(keepOnTop, BorderLayout.WEST);
+        retrieveStatusLabel = new JLabel(" ", SwingConstants.CENTER);
+        statusBar.add(retrieveStatusLabel, BorderLayout.CENTER);
         statusBar.add(new JLabel("127.0.0.1"), BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
 
@@ -909,6 +912,9 @@ public class QueryController extends JFrame {
         }
 
         // HOROS準拠: 各行を個別のSwingWorkerで並列実行し、Activityパネルに同時表示する
+        if (retrieveStatusLabel != null) {
+            retrieveStatusLabel.setText("Retrieving " + targets.size() + " study(s)...");
+        }
         final java.util.concurrent.atomic.AtomicInteger remaining = new java.util.concurrent.atomic.AtomicInteger(targets.size());
         for (String[] target : targets) {
             final String studyInstanceUID = target[0];
@@ -944,22 +950,28 @@ public class QueryController extends JFrame {
                 protected void done() {
                     try {
                         DicomService.MoveResult res = get();
-                        if (remoteCount > 0) {
-                            DicomDatabase db = resolveLocalDatabase();
-                            DicomStudy local = db != null ? db.getStudyByUID(studyInstanceUID) : null;
-                            int localCount = (local != null && local.getNumberOfImages() != null) ? local.getNumberOfImages() : 0;
-                            if (localCount < remoteCount) {
-                                String detail = String.format(
-                                        "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s)",
-                                        patientName, localCount, remoteCount,
-                                        res.completed, res.failed, res.warning,
-                                        res.storeError != null ? ", StoreError=" + res.storeError : "");
-                                System.err.println(detail);
-                                showWrappedErrorDialog(detail);
-                            }
+                        DicomDatabase db = resolveLocalDatabase();
+                        DicomStudy local = db != null ? db.getStudyByUID(studyInstanceUID) : null;
+                        int localCount = (local != null && local.getNumberOfImages() != null) ? local.getNumberOfImages() : 0;
+                        String summary = String.format("Done: %s (PACS ok=%d, fail=%d, Local=%d/%d)",
+                                patientName, res.completed, res.failed, localCount, remoteCount);
+                        if (retrieveStatusLabel != null) {
+                            retrieveStatusLabel.setText(summary);
+                        }
+                        if (remoteCount > 0 && localCount < remoteCount) {
+                            String detail = String.format(
+                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s)",
+                                    patientName, localCount, remoteCount,
+                                    res.completed, res.failed, res.warning,
+                                    res.storeError != null ? ", StoreError=" + res.storeError : "");
+                            System.err.println(detail);
+                            showWrappedErrorDialog(detail);
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
+                        if (retrieveStatusLabel != null) {
+                            retrieveStatusLabel.setText("Failed: " + patientName + " - " + e.getMessage());
+                        }
                         showWrappedErrorDialog(
                                 LanguageManager.get("query.retrieve_failed", "Retrieve failed for ") + patientName + ":\n" + e.getMessage());
                     } finally {
