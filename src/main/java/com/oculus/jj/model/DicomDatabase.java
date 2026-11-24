@@ -1177,25 +1177,26 @@ public class DicomDatabase {
      * HOROS-20240407準拠: Seriesが選択されたときに呼び出される
      */
     public void loadImagesForSeriesIfNeeded(DicomSeries series) {
-        if (series == null || (series.getImages() != null && !series.getImages().isEmpty())) {
+        if (series == null || sqliteConnection == null || (series.getImages() != null && !series.getImages().isEmpty())) {
             return; // 既に読み込み済み
         }
 
-        try {
-            // SeriesのDBIDを取得（StudyのSeriesから検索）
-            String sql = "SELECT id FROM Series WHERE seriesInstanceUID = ?";
-            try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
-                pstmt.setString(1, series.getSeriesInstanceUID());
-                try (ResultSet rs = pstmt.executeQuery()) {
-                    if (rs.next()) {
-                        int seriesDbId = rs.getInt("id");
-                        loadImagesForSeries(series, seriesDbId);
+        synchronized (sqliteConnection) {
+            try {
+                // SeriesのDBIDを取得（StudyのSeriesから検索）
+                String sql = "SELECT id FROM Series WHERE seriesInstanceUID = ?";
+                try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
+                    pstmt.setString(1, series.getSeriesInstanceUID());
+                    try (ResultSet rs = pstmt.executeQuery()) {
+                        if (rs.next()) {
+                            int seriesDbId = rs.getInt("id");
+                            loadImagesForSeries(series, seriesDbId);
+                        }
                     }
                 }
+            } catch (Exception e) {
+                logger.warn("Failed to lazy-load images for series {}", series.getSeriesInstanceUID(), e);
             }
-        } catch (Exception e) {
-
-            // series.getSeriesInstanceUID(), e);
         }
     }
 
@@ -1467,24 +1468,27 @@ public class DicomDatabase {
             return false;
         }
 
-        if (studiesToSave != null && !studiesToSave.isEmpty()) {
-            try {
-                sqliteConnection.setAutoCommit(false);
-                for (DicomStudy study : studiesToSave) {
-                    saveStudy(study);
-                }
-                sqliteConnection.commit();
-                sqliteConnection.setAutoCommit(true);
-            } catch (SQLException e) {
+        synchronized (sqliteConnection) {
+            if (studiesToSave != null && !studiesToSave.isEmpty()) {
                 try {
-                    sqliteConnection.rollback();
+                    sqliteConnection.setAutoCommit(false);
+                    for (DicomStudy study : studiesToSave) {
+                        saveStudy(study);
+                    }
+                    sqliteConnection.commit();
                     sqliteConnection.setAutoCommit(true);
-                } catch (SQLException ignored) {
+                } catch (SQLException e) {
+                    logger.error("Failed to save studies to SQLite: {}", e.getMessage(), e);
+                    try {
+                        sqliteConnection.rollback();
+                        sqliteConnection.setAutoCommit(true);
+                    } catch (SQLException ignored) {
+                    }
+                    return false;
                 }
-                return false;
             }
+            return saveAlbumsToDatabase();
         }
-        return saveAlbumsToDatabase();
     }
 
     private boolean saveAlbumsToDatabase() {
@@ -2808,7 +2812,7 @@ public class DicomDatabase {
                     }
                 }
             } catch (Exception e) {
-
+                logger.warn("Failed to extract DICOM elements from {}", path, e);
             }
 
             // HOROS-20240407準拠: キャンセルチェック（1624-1640行目）
@@ -3174,6 +3178,7 @@ public class DicomDatabase {
                         series.setDateAdded(today);
                         newObject = true;
                     } else {
+                        loadImagesForSeriesIfNeeded(series);
                         newObject = false;
                     }
 
@@ -3415,7 +3420,7 @@ public class DicomDatabase {
                 updateStudyNumberOfImages(study);
 
             } catch (Exception e) {
-
+                logger.warn("Failed to extract DICOM elements", e);
             }
         }
 
