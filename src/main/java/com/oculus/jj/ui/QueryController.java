@@ -930,7 +930,7 @@ public class QueryController extends JFrame {
                     try {
                         DicomService.MoveResult res = DicomService.getInstance().moveWithResult(node, studyInstanceUID);
                         // INCOMINGからの取り込みを実行（ロック競合を避けるためスレッド用メソッドを使用）
-                        DicomDatabase db = DicomDatabase.defaultDatabase();
+                        DicomDatabase db = resolveLocalDatabase();
                         if (db != null) {
                             db.importFilesFromIncomingDirThread();
                         }
@@ -945,7 +945,8 @@ public class QueryController extends JFrame {
                     try {
                         DicomService.MoveResult res = get();
                         if (remoteCount > 0) {
-                            DicomStudy local = DicomDatabase.defaultDatabase().getStudyByUID(studyInstanceUID);
+                            DicomDatabase db = resolveLocalDatabase();
+                            DicomStudy local = db != null ? db.getStudyByUID(studyInstanceUID) : null;
                             int localCount = (local != null && local.getNumberOfImages() != null) ? local.getNumberOfImages() : 0;
                             if (localCount < remoteCount) {
                                 String detail = String.format(
@@ -1052,7 +1053,8 @@ public class QueryController extends JFrame {
                 // 2. ローカルの画像数を取得
                 int localCount = 0;
                 if (studyUID != null && !studyUID.isEmpty()) {
-                    DicomStudy local = DicomDatabase.defaultDatabase().getStudyByUID(studyUID);
+                    DicomDatabase db = resolveLocalDatabase();
+                    DicomStudy local = db != null ? db.getStudyByUID(studyUID) : null;
                     if (local != null) {
                         if (local.getNumberOfImages() != null && local.getNumberOfImages() > 0) {
                             localCount = local.getNumberOfImages();
@@ -1162,6 +1164,11 @@ public class QueryController extends JFrame {
         public int getIconHeight() {
             return 18;
         }
+    }
+
+    private static DicomDatabase resolveLocalDatabase() {
+        DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        return db != null ? db : DicomDatabase.defaultDatabase();
     }
 
     private void showWrappedErrorDialog(String message) {
