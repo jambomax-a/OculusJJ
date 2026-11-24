@@ -28,6 +28,9 @@ public class DicomStoreSCP extends BasicCStoreSCP {
     }
     private File getStorageDir() {
         DicomDatabase db = DicomDatabase.activeLocalDatabase();
+        if (db == null) {
+            db = DicomDatabase.defaultDatabase();
+        }
         if (db != null) {
             File dir = new File(db.incomingDirPath());
             if (!dir.exists()) {

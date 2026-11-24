@@ -7,6 +7,8 @@ import org.dcm4che3.data.UID;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.pdu.AAssociateRQ;
 import org.dcm4che3.net.pdu.PresentationContext;
+import org.dcm4che3.net.service.BasicCEchoSCP;
+import org.dcm4che3.net.service.DicomServiceRegistry;
 import org.dcm4che3.net.IncompatibleConnectionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,30 +41,60 @@ public class DicomService {
     private final Connection conn = new Connection();
     private final ApplicationEntity ae = new ApplicationEntity();
     private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "DICOM-Device-Scheduler");
+        t.setDaemon(true);
+        return t;
+    });
     private ScheduledExecutorService incomingImportScheduler;
     private boolean listenerStarted;
+    private volatile String lastListenerError;
 
     private DicomService() {
         device.addConnection(conn);
         device.addApplicationEntity(ae);
         ae.addConnection(conn);
         device.setExecutor(executorService);
+        device.setScheduledExecutor(scheduledExecutor);
 
         ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
+        ae.setAssociationInitiator(true);
+        ae.setAssociationAcceptor(true);
 
-        // C-STORE SCPの登録
+        // C-ECHO / C-STORE SCPの登録
         String[] ts = {
                 UID.ImplicitVRLittleEndian,
                 UID.ExplicitVRLittleEndian,
                 UID.JPEGBaseline8Bit,
+                UID.JPEGExtended12Bit,
+                UID.JPEGLossless,
                 UID.JPEGLosslessSV1,
                 UID.JPEGLSLossless,
+                UID.JPEGLSNearLossless,
                 UID.JPEG2000Lossless,
+                UID.JPEG2000,
                 UID.RLELossless
         };
         ae.addTransferCapability(
+                new TransferCapability(null, UID.Verification, TransferCapability.Role.SCP, UID.ImplicitVRLittleEndian));
+        ae.addTransferCapability(
                 new TransferCapability(null, "*", TransferCapability.Role.SCP, ts));
-        device.setDimseRQHandler(new DicomStoreSCP("*"));
+        DicomServiceRegistry serviceRegistry = new DicomServiceRegistry();
+        serviceRegistry.addDicomService(new BasicCEchoSCP());
+        serviceRegistry.addDicomService(new DicomStoreSCP("*"));
+        device.setDimseRQHandler(serviceRegistry);
+    }
+
+    public boolean isListenerStarted() {
+        return listenerStarted;
+    }
+
+    public String getLastListenerError() {
+        return lastListenerError;
+    }
+
+    public void setLastListenerError(String err) {
+        this.lastListenerError = err;
     }
 
     public synchronized void startListener(int port) throws IOException, GeneralSecurityException {
@@ -213,6 +245,7 @@ public class DicomService {
                     .defaultManager();
             final Thread currentThread = Thread.currentThread();
             final int[] finalStatus = { -1 };
+            final String[] errorComment = { null };
 
             DimseRSPHandler rspHandler = new DimseRSPHandler(association.nextMessageID()) {
                 @Override
@@ -220,6 +253,10 @@ public class DicomService {
                     super.onDimseRSP(as, cmd, data);
                     int status = cmd.getInt(0x00000900, -1); // Status (C-MOVE)
                     finalStatus[0] = status;
+                    String comment = cmd.getString(0x00000902); // ErrorComment
+                    if (comment != null && !comment.isEmpty()) {
+                        errorComment[0] = comment;
+                    }
 
                     // C-MOVEの重複操作数（完了、残数、失敗、警告）を取得
                     int completed = cmd.getInt(0x00001021, 0); // NumberOfCompletedSuboperations
@@ -256,7 +293,18 @@ public class DicomService {
 
             // ステータスチェック
             if (finalStatus[0] != 0 && !Status.isPending(finalStatus[0])) {
-                throw new IOException("C-MOVE retrieve failed with status: 0x" + Integer.toHexString(finalStatus[0]));
+                StringBuilder msg = new StringBuilder("C-MOVE retrieve failed with status: 0x")
+                        .append(Integer.toHexString(finalStatus[0]));
+                if (errorComment[0] != null) {
+                    msg.append(" (").append(errorComment[0]).append(")");
+                }
+                msg.append(" [MoveDestination=").append(manager.getLocalAET())
+                   .append(", ListenerRunning=").append(listenerStarted)
+                   .append(", Port=").append(conn.getPort()).append("]");
+                if (!listenerStarted && lastListenerError != null) {
+                    msg.append(" ListenerError=").append(lastListenerError);
+                }
+                throw new IOException(msg.toString());
             }
         } finally {
             if (association.isReadyForDataTransfer()) {

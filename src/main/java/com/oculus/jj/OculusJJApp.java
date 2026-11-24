@@ -475,8 +475,10 @@ public class OculusJJApp {
                         int port = com.oculus.jj.config.AppPreferences.getListenerPort();
                         manager.setLocalConfig(aetitle, port);
                         com.oculus.jj.model.DicomService.getInstance().startListener(port);
+                        com.oculus.jj.model.DicomService.getInstance().setLastListenerError(null);
                     } catch (Exception e) {
-                        // Listener startup is optional and must not prevent the viewer from opening.
+                        com.oculus.jj.model.DicomService.getInstance().setLastListenerError(e.getMessage());
+                        System.err.println("Failed to start DICOM Listener: " + e.getMessage());
                     }
                 }
                 if (com.oculus.jj.config.AppPreferences.getBool("webserver.active", false)) {
