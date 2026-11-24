@@ -95,7 +95,8 @@ public class DicomStoreSCP extends BasicCStoreSCP {
             rsp.setInt(0x00000900, VR.US, Status.Success);
             return;
         }
-        File temporary = new File(storageDir, "." + safeFilename + ".part-" + Long.toHexString(System.nanoTime()));
+        File temporary = new File(storageDir,
+                "." + safeFilename + ".part-" + Long.toHexString(System.nanoTime()) + "-" + Thread.currentThread().threadId());
         try {
             try (DicomOutputStream out = new DicomOutputStream(temporary)) {
                 Attributes fmi = as.createFileMetaInformation(iuid, cuid, tsuid);

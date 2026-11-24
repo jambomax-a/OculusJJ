@@ -892,28 +892,35 @@ public class QueryController extends JFrame {
 
         retrieveButton.setEnabled(false);
 
-        // 各行を個別のSwingWorkerで実行
+        final List<String[]> targets = new ArrayList<>();
         for (int viewRow : selectedRows) {
             int modelRow = resultsTable.convertRowIndexToModel(viewRow);
             String rawStudyInstanceUID = (String) tableModel.getValueAt(modelRow, 10);
-            final String studyInstanceUID = rawStudyInstanceUID != null ? rawStudyInstanceUID.trim() : "";
-            // HOROS-20240407準拠: レンダラーでのステータス判定に使用するため、正確なPatientNameを取得
-            final String patientName = (String) tableModel.getValueAt(modelRow, 0);
+            String studyInstanceUID = rawStudyInstanceUID != null ? rawStudyInstanceUID.trim() : "";
+            String patientName = (String) tableModel.getValueAt(modelRow, 0);
+            if (!studyInstanceUID.isEmpty()) {
+                targets.add(new String[] { studyInstanceUID, patientName });
+            }
+        }
+        if (targets.isEmpty()) {
+            retrieveButton.setEnabled(true);
+            return;
+        }
 
-            SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+        // HOROS準拠: 各行を個別のSwingWorkerで並列実行し、Activityパネルに同時表示する
+        final java.util.concurrent.atomic.AtomicInteger remaining = new java.util.concurrent.atomic.AtomicInteger(targets.size());
+        for (String[] target : targets) {
+            final String studyInstanceUID = target[0];
+            final String patientName = target[1];
+
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
                 @Override
                 protected Void doInBackground() throws Exception {
-                    // HOROS-20240407準拠: Activityパネルに表示するためにスレッドを登録
                     Thread currentThread = Thread.currentThread();
-                    com.oculus.jj.threads.ThreadsManager tm = com.oculus.jj.threads.ThreadsManager
-                            .defaultManager();
-                    // 特定のパターン("Retrieving [PatientName] ([StudyUID])...")でステータスを設定
-                    // 同名患者を区別するためUIDを含める
+                    com.oculus.jj.threads.ThreadsManager tm = com.oculus.jj.threads.ThreadsManager.defaultManager();
                     tm.setThreadStatus(currentThread, "Retrieving " + patientName + " (" + studyInstanceUID + ")...");
-                    tm.setThreadProgress(currentThread, -1.0); // Indeterminate
+                    tm.setThreadProgress(currentThread, -1.0);
                     tm.addThreadAndStart(currentThread);
-
-                    // UIの強制再描画（レンダラーのisRetrieving判定を即座に反映させるため）
                     SwingUtilities.invokeLater(() -> resultsTable.repaint());
 
                     try {
@@ -933,15 +940,15 @@ public class QueryController extends JFrame {
                         showWrappedErrorDialog(
                                 LanguageManager.get("query.retrieve_failed", "Retrieve failed for ") + patientName + ":\n" + e.getMessage());
                     } finally {
-                        // 全てのworkerが完了したかチェックしてボタンを有効化するのは複雑なため、
-                        // 最後の行の処理が完了したタイミングか、簡易的に個別に有効化検討。
-                        // ここでは複数選択を考慮し、最後にボタンを有効化する。
+                        if (remaining.decrementAndGet() == 0) {
+                            retrieveButton.setEnabled(true);
+                        }
+                        resultsTable.repaint();
                     }
                 }
             };
             worker.execute();
         }
-        retrieveButton.setEnabled(true);
     }
 
     private void performVerify() {

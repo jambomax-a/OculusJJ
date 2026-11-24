@@ -69,31 +69,11 @@ public class DicomService {
         device.setExecutor(executorService);
         device.setScheduledExecutor(scheduledExecutor);
 
-        // C-ECHO / C-STORE SCPの登録
-        String[] ts = {
-                UID.ImplicitVRLittleEndian,
-                UID.ExplicitVRLittleEndian,
-                "1.2.840.10008.1.2.2",      // ExplicitVRBigEndian
-                "1.2.840.10008.1.2.1.99",   // DeflatedExplicitVRLittleEndian
-                UID.JPEGBaseline8Bit,
-                UID.JPEGExtended12Bit,
-                UID.JPEGLossless,
-                UID.JPEGLosslessSV1,
-                UID.JPEGLSLossless,
-                UID.JPEGLSNearLossless,
-                UID.JPEG2000Lossless,
-                UID.JPEG2000,
-                "1.2.840.10008.1.2.4.92",   // JPEG2000Part2Lossless
-                "1.2.840.10008.1.2.4.93",   // JPEG2000Part2
-                UID.RLELossless,
-                "1.2.840.10008.1.2.4.100",  // MPEG2MPML
-                "1.2.840.10008.1.2.4.102",  // MPEG4HP41
-                "1.2.840.10008.1.2.4.103"   // MPEG4HP41BD
-        };
+        // C-ECHO / C-STORE SCPの登録（任意のSOP Class / Transfer Syntaxを受信保存可能にする）
         ae.addTransferCapability(
-                new TransferCapability(null, UID.Verification, TransferCapability.Role.SCP, UID.ImplicitVRLittleEndian));
+                new TransferCapability(null, UID.Verification, TransferCapability.Role.SCP, "*"));
         ae.addTransferCapability(
-                new TransferCapability(null, "*", TransferCapability.Role.SCP, ts));
+                new TransferCapability(null, "*", TransferCapability.Role.SCP, "*"));
         DicomServiceRegistry serviceRegistry = new DicomServiceRegistry();
         serviceRegistry.addDicomService(new BasicCEchoSCP());
         serviceRegistry.addDicomService(new DicomStoreSCP("*"));
@@ -251,6 +231,7 @@ public class DicomService {
         } finally {
             if (association.isReadyForDataTransfer()) {
                 association.release();
+                association.waitForSocketClose();
             }
         }
 
@@ -359,6 +340,7 @@ public class DicomService {
         } finally {
             if (association.isReadyForDataTransfer()) {
                 association.release();
+                association.waitForSocketClose();
             }
         }
     }
