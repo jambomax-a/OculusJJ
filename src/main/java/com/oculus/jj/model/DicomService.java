@@ -239,9 +239,36 @@ public class DicomService {
     }
 
     /**
+     * C-MOVE 実行結果サマリー
+     */
+    public static class MoveResult {
+        public final int status;
+        public final int completed;
+        public final int failed;
+        public final int warning;
+        public final String storeError;
+
+        public MoveResult(int status, int completed, int failed, int warning, String storeError) {
+            this.status = status;
+            this.completed = completed;
+            this.failed = failed;
+            this.warning = warning;
+            this.storeError = storeError;
+        }
+    }
+
+    /**
      * C-MOVE 実行
      */
     public void move(DicomNode remoteNode, String studyInstanceUID)
+            throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
+        moveWithResult(remoteNode, studyInstanceUID);
+    }
+
+    /**
+     * C-MOVE 実行（結果サマリー付き）
+     */
+    public MoveResult moveWithResult(DicomNode remoteNode, String studyInstanceUID)
             throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
         if (studyInstanceUID != null) {
             studyInstanceUID = studyInstanceUID.trim();
@@ -317,7 +344,7 @@ public class DicomService {
             association.waitForOutstandingRSP();
 
             // ステータスチェック
-            if (finalStatus[0] != 0 && !Status.isPending(finalStatus[0])) {
+            if ((finalStatus[0] != 0 && !Status.isPending(finalStatus[0])) || counts[3] > 0) {
                 StringBuilder msg = new StringBuilder("C-MOVE retrieve failed with status: 0x")
                         .append(Integer.toHexString(finalStatus[0]));
                 if (errorComment[0] != null) {
@@ -337,6 +364,7 @@ public class DicomService {
                 }
                 throw new IOException(msg.toString());
             }
+            return new MoveResult(finalStatus[0], counts[0], counts[3], counts[2], lastStoreError);
         } finally {
             if (association.isReadyForDataTransfer()) {
                 association.release();

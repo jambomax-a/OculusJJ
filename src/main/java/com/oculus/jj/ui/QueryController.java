@@ -898,8 +898,9 @@ public class QueryController extends JFrame {
             String rawStudyInstanceUID = (String) tableModel.getValueAt(modelRow, 10);
             String studyInstanceUID = rawStudyInstanceUID != null ? rawStudyInstanceUID.trim() : "";
             String patientName = (String) tableModel.getValueAt(modelRow, 0);
+            String remoteCountStr = (String) tableModel.getValueAt(modelRow, 5);
             if (!studyInstanceUID.isEmpty()) {
-                targets.add(new String[] { studyInstanceUID, patientName });
+                targets.add(new String[] { studyInstanceUID, patientName, remoteCountStr != null ? remoteCountStr : "0" });
             }
         }
         if (targets.isEmpty()) {
@@ -912,10 +913,13 @@ public class QueryController extends JFrame {
         for (String[] target : targets) {
             final String studyInstanceUID = target[0];
             final String patientName = target[1];
+            int parsedRemote = 0;
+            try { parsedRemote = Integer.parseInt(target[2].trim()); } catch (Exception ignored) {}
+            final int remoteCount = parsedRemote;
 
-            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            SwingWorker<DicomService.MoveResult, Void> worker = new SwingWorker<>() {
                 @Override
-                protected Void doInBackground() throws Exception {
+                protected DicomService.MoveResult doInBackground() throws Exception {
                     Thread currentThread = Thread.currentThread();
                     com.oculus.jj.threads.ThreadsManager tm = com.oculus.jj.threads.ThreadsManager.defaultManager();
                     tm.setThreadStatus(currentThread, "Retrieving " + patientName + " (" + studyInstanceUID + ")...");
@@ -924,17 +928,35 @@ public class QueryController extends JFrame {
                     SwingUtilities.invokeLater(() -> resultsTable.repaint());
 
                     try {
-                        DicomService.getInstance().move(node, studyInstanceUID);
+                        DicomService.MoveResult res = DicomService.getInstance().moveWithResult(node, studyInstanceUID);
+                        // INCOMINGからの取り込みを実行（ロック競合を避けるためスレッド用メソッドを使用）
+                        DicomDatabase db = DicomDatabase.defaultDatabase();
+                        if (db != null) {
+                            db.importFilesFromIncomingDirThread();
+                        }
+                        return res;
                     } finally {
                         tm.removeThread(currentThread);
                     }
-                    return null;
                 }
 
                 @Override
                 protected void done() {
                     try {
-                        get();
+                        DicomService.MoveResult res = get();
+                        if (remoteCount > 0) {
+                            DicomStudy local = DicomDatabase.defaultDatabase().getStudyByUID(studyInstanceUID);
+                            int localCount = (local != null && local.getNumberOfImages() != null) ? local.getNumberOfImages() : 0;
+                            if (localCount < remoteCount) {
+                                String detail = String.format(
+                                        "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s)",
+                                        patientName, localCount, remoteCount,
+                                        res.completed, res.failed, res.warning,
+                                        res.storeError != null ? ", StoreError=" + res.storeError : "");
+                                System.err.println(detail);
+                                showWrappedErrorDialog(detail);
+                            }
+                        }
                     } catch (Exception e) {
                         e.printStackTrace();
                         showWrappedErrorDialog(
