@@ -930,8 +930,8 @@ public class QueryController extends JFrame {
                         get();
                     } catch (Exception e) {
                         e.printStackTrace();
-                        JOptionPane.showMessageDialog(QueryController.this,
-                                LanguageManager.get("query.retrieve_failed", "Retrieve failed for ") + patientName + ": " + e.getMessage());
+                        showWrappedErrorDialog(
+                                LanguageManager.get("query.retrieve_failed", "Retrieve failed for ") + patientName + ":\n" + e.getMessage());
                     } finally {
                         // 全てのworkerが完了したかチェックしてボタンを有効化するのは複雑なため、
                         // 最後の行の処理が完了したタイミングか、簡易的に個別に有効化検討。
@@ -1133,6 +1133,22 @@ public class QueryController extends JFrame {
         public int getIconHeight() {
             return 18;
         }
+    }
+
+    private void showWrappedErrorDialog(String message) {
+        JTextArea area = new JTextArea(message);
+        area.setEditable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setOpaque(false);
+        area.setColumns(50);
+        int lines = Math.min(12, Math.max(3, message.length() / 50 + 2));
+        area.setRows(lines);
+        JScrollPane scroll = new JScrollPane(area);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setPreferredSize(new Dimension(560, Math.min(240, lines * 20 + 16)));
+        JOptionPane.showMessageDialog(this, scroll,
+                LanguageManager.get("query.title", "DICOM Query/Retrieve"), JOptionPane.ERROR_MESSAGE);
     }
 
     /** ダイアログとして表示 */

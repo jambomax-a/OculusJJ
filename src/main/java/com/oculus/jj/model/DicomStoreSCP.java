@@ -61,6 +61,24 @@ public class DicomStoreSCP extends BasicCStoreSCP {
         }
         return filename;
     }
+    private static void moveWithRetry(java.nio.file.Path src, java.nio.file.Path dst) throws IOException {
+        IOException lastEx = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                try {
+                    Files.move(src, dst, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException ex) {
+                    Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                }
+                return;
+            } catch (IOException ex) {
+                lastEx = ex;
+                try { Thread.sleep(50); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            }
+        }
+        throw lastEx;
+    }
+
     @Override
     protected void store(Association as, PresentationContext pc, Attributes rq,
             PDVInputStream data, Attributes rsp) throws IOException {
@@ -77,7 +95,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
             rsp.setInt(0x00000900, VR.US, Status.Success);
             return;
         }
-        File temporary = new File(storageDir, safeFilename + ".part-" + UUID.randomUUID());
+        File temporary = new File(storageDir, "." + safeFilename + ".part-" + Long.toHexString(System.nanoTime()));
         try {
             try (DicomOutputStream out = new DicomOutputStream(temporary)) {
                 Attributes fmi = as.createFileMetaInformation(iuid, cuid, tsuid);
@@ -89,11 +107,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
                     data.copyTo(out);
                 }
             }
-            try {
-                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException ex) {
-                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            }
+            moveWithRetry(temporary.toPath(), file.toPath());
             javax.swing.SwingUtilities.invokeLater(() -> {
                 DicomDatabase db = DicomDatabase.activeLocalDatabase();
                 if (db != null) {

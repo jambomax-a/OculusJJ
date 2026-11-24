@@ -4096,7 +4096,7 @@ public class DicomDatabase {
         }
 
         for (File f : files) {
-            if (f.isFile() && !f.getName().startsWith(".")) {
+            if (f.isFile() && !f.getName().startsWith(".") && !f.getName().contains(".part-")) {
                 // HOROS-20240407準拠: インポートファイルをデータベースフォルダに移動
 
                 String originalName = f.getName();
