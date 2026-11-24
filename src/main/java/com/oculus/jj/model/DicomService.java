@@ -39,6 +39,7 @@ public class DicomService {
 
     private final Device device = new Device("OculusJJ");
     private final Connection conn = new Connection();
+    private final Connection scuConn = new Connection();
     private final ApplicationEntity ae = new ApplicationEntity();
     private final ExecutorService executorService = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -52,15 +53,21 @@ public class DicomService {
     private volatile String lastStoreError;
 
     private DicomService() {
-        device.addConnection(conn);
-        device.addApplicationEntity(ae);
-        ae.addConnection(conn);
-        device.setExecutor(executorService);
-        device.setScheduledExecutor(scheduledExecutor);
-
-        ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
+        String initialAet = DicomNodeManager.getInstance().getLocalAET();
+        if (initialAet == null || initialAet.isBlank()) {
+            initialAet = "OCULUSJJ";
+        }
+        ae.setAETitle(initialAet);
         ae.setAssociationInitiator(true);
         ae.setAssociationAcceptor(true);
+
+        device.addConnection(conn);
+        device.addConnection(scuConn);
+        device.addApplicationEntity(ae);
+        ae.addConnection(conn);
+        ae.addConnection(scuConn);
+        device.setExecutor(executorService);
+        device.setScheduledExecutor(scheduledExecutor);
 
         // C-ECHO / C-STORE SCPの登録
         String[] ts = {
@@ -109,15 +116,30 @@ public class DicomService {
         this.lastStoreError = err;
     }
 
+    private synchronized String ensureLocalAET() {
+        String targetAet = DicomNodeManager.getInstance().getLocalAET();
+        if (targetAet == null || targetAet.isBlank()) {
+            targetAet = "OCULUSJJ";
+        }
+        if (!targetAet.equals(ae.getAETitle()) || ae.getDevice() == null) {
+            if (ae.getDevice() != null) {
+                device.removeApplicationEntity(ae);
+            }
+            ae.setAETitle(targetAet);
+            device.addApplicationEntity(ae);
+        }
+        return targetAet;
+    }
+
     public synchronized void startListener(int port) throws IOException, GeneralSecurityException {
         if (listenerStarted) {
-            ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
+            ensureLocalAET();
             if (conn.getPort() == port) {
                 return;
             }
             stopListener();
         }
-        ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
+        ensureLocalAET();
         conn.setPort(port);
         device.bindConnections();
         listenerStarted = true;
@@ -175,20 +197,20 @@ public class DicomService {
         // // logger.info("Starting C-ECHO to {}:{}", remoteNode.getAddress(),
         // remoteNode.getPort());
 
-        DicomNodeManager manager = DicomNodeManager.getInstance();
-        ae.setAETitle(manager.getLocalAET());
+        ensureLocalAET();
 
         AAssociateRQ rq = new AAssociateRQ();
         rq.setCalledAET(remoteNode.getAeTitle());
         rq.addPresentationContext(new PresentationContext(1, UID.Verification, UID.ImplicitVRLittleEndian));
 
-        Association association = ae.connect(new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+        Association association = ae.connect(scuConn, new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
         try {
             association.cecho().next();
             return true;
         } finally {
             if (association.isReadyForDataTransfer()) {
                 association.release();
+                association.waitForSocketClose();
             }
         }
     }
@@ -202,8 +224,7 @@ public class DicomService {
         // remoteNode.getPort());
         final List<Attributes> results = new ArrayList<>();
 
-        DicomNodeManager manager = DicomNodeManager.getInstance();
-        ae.setAETitle(manager.getLocalAET());
+        ensureLocalAET();
 
         AAssociateRQ rq = new AAssociateRQ();
         rq.setCalledAET(remoteNode.getAeTitle());
@@ -211,7 +232,7 @@ public class DicomService {
         rq.addPresentationContext(
                 new PresentationContext(1, UID.StudyRootQueryRetrieveInformationModelFind, UID.ImplicitVRLittleEndian));
 
-        Association association = ae.connect(new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+        Association association = ae.connect(scuConn, new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
         try {
             DimseRSPHandler rspHandler = new DimseRSPHandler(association.nextMessageID()) {
                 @Override
@@ -244,8 +265,7 @@ public class DicomService {
         if (studyInstanceUID != null) {
             studyInstanceUID = studyInstanceUID.trim();
         }
-        DicomNodeManager manager = DicomNodeManager.getInstance();
-        ae.setAETitle(manager.getLocalAET());
+        String localAet = ensureLocalAET();
 
         Attributes keys = new Attributes();
         keys.setString(0x00080052, VR.CS, "STUDY"); // QueryRetrieveLevel
@@ -256,7 +276,7 @@ public class DicomService {
         rq.addPresentationContext(
                 new PresentationContext(1, UID.StudyRootQueryRetrieveInformationModelMove, UID.ImplicitVRLittleEndian));
 
-        Association association = ae.connect(new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+        Association association = ae.connect(scuConn, new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
         try {
             // HOROS-20240407準拠: 進捗を管理するためにカスタムDimseRSPHandlerを使用
             final com.oculus.jj.threads.ThreadsManager tm = com.oculus.jj.threads.ThreadsManager
@@ -312,7 +332,7 @@ public class DicomService {
 
             // C-MOVEの送信。宛先(Move Destination)は自分のAET
             association.cmove(UID.StudyRootQueryRetrieveInformationModelMove, Priority.NORMAL, keys, null,
-                    manager.getLocalAET(), rspHandler);
+                    localAet, rspHandler);
             association.waitForOutstandingRSP();
 
             // ステータスチェック
@@ -322,7 +342,7 @@ public class DicomService {
                 if (errorComment[0] != null) {
                     msg.append(" (").append(errorComment[0]).append(")");
                 }
-                msg.append(" [MoveDestination=").append(manager.getLocalAET())
+                msg.append(" [MoveDestination=").append(localAet)
                    .append(", ListenerRunning=").append(listenerStarted)
                    .append(", Port=").append(conn.getPort())
                    .append(", ok=").append(counts[0])
@@ -371,13 +391,12 @@ public class DicomService {
             tsuid = UID.ExplicitVRLittleEndian;
         }
 
-        DicomNodeManager manager = DicomNodeManager.getInstance();
-        ae.setAETitle(manager.getLocalAET());
+        ensureLocalAET();
         AAssociateRQ rq = new AAssociateRQ();
         rq.setCalledAET(remoteNode.getAeTitle());
         rq.addPresentationContext(new PresentationContext(1, cuid, tsuid));
         Association association = ae.connect(
-                new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+                scuConn, new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
         try {
             org.dcm4che3.net.DimseRSP rsp = association.cstore(cuid, iuid, Priority.NORMAL,
                     org.dcm4che3.net.DataWriterAdapter.forAttributes(dataset), tsuid);
@@ -399,15 +418,14 @@ public class DicomService {
      */
     public void getC(DicomNode remoteNode, Attributes keys)
             throws IOException, InterruptedException, IncompatibleConnectionException, GeneralSecurityException {
-        DicomNodeManager manager = DicomNodeManager.getInstance();
-        ae.setAETitle(manager.getLocalAET());
+        ensureLocalAET();
 
         AAssociateRQ rq = new AAssociateRQ();
         rq.setCalledAET(remoteNode.getAeTitle());
         rq.addPresentationContext(
                 new PresentationContext(1, UID.StudyRootQueryRetrieveInformationModelGet, UID.ImplicitVRLittleEndian));
 
-        Association association = ae.connect(new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
+        Association association = ae.connect(scuConn, new Connection(null, remoteNode.getAddress(), remoteNode.getPort()), rq);
         try {
             DimseRSPHandler rspHandler = new DimseRSPHandler(association.nextMessageID()) {
                 @Override
@@ -553,8 +571,7 @@ public class DicomService {
         int rows = grid[1];
         int slotsPerFilm = Math.max(1, cols * rows);
 
-        DicomNodeManager manager = DicomNodeManager.getInstance();
-        ae.setAETitle(manager.getLocalAET());
+        ensureLocalAET();
 
         String metaUID = UID.BasicGrayscalePrintManagementMeta;
         AAssociateRQ rq = new AAssociateRQ();
@@ -562,7 +579,7 @@ public class DicomService {
         rq.addPresentationContext(new PresentationContext(1, metaUID,
                 UID.ExplicitVRLittleEndian, UID.ImplicitVRLittleEndian));
 
-        Association association = ae.connect(new Connection(null, printer.getAddress(), printer.getPort()), rq);
+        Association association = ae.connect(scuConn, new Connection(null, printer.getAddress(), printer.getPort()), rq);
         try {
             String filmSessionIUID = org.dcm4che3.util.UIDUtils.createUID();
             DimseRSP sessionRsp = association.ncreate(metaUID, UID.BasicFilmSession, filmSessionIUID, filmSessionAttrs,
