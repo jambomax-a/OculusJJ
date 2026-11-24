@@ -935,10 +935,10 @@ public class QueryController extends JFrame {
 
                     try {
                         DicomService.MoveResult res = DicomService.getInstance().moveWithResult(node, studyInstanceUID);
-                        // INCOMINGからの取り込みを実行（ロック競合を避けるためスレッド用メソッドを使用）
+                        // INCOMINGからの取り込み完了まで待機して実行（HOROS準拠のロック）
                         DicomDatabase db = resolveLocalDatabase();
                         if (db != null) {
-                            db.importFilesFromIncomingDirThread();
+                            db.importFilesFromIncomingDir(false, 0);
                         }
                         return res;
                     } finally {

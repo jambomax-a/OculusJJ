@@ -1459,16 +1459,23 @@ public class DicomDatabase {
         }
     }
 
+    private volatile String lastSaveError = "";
+
     /**
      * 指定されたStudyリストをデータベースに保存
      */
     public boolean save(java.util.Collection<DicomStudy> studiesToSave) {
+        return save(studiesToSave, true);
+    }
+
+    private boolean save(java.util.Collection<DicomStudy> studiesToSave, boolean includeAlbums) {
         if (sqliteConnection == null) {
-            // System.out.println(">>> SQLite connection is null, cannot save data");
+            lastSaveError = "sqliteConnection is null";
             return false;
         }
 
         synchronized (sqliteConnection) {
+            lastSaveError = "";
             if (studiesToSave != null && !studiesToSave.isEmpty()) {
                 try {
                     sqliteConnection.setAutoCommit(false);
@@ -1478,6 +1485,7 @@ public class DicomDatabase {
                     sqliteConnection.commit();
                     sqliteConnection.setAutoCommit(true);
                 } catch (SQLException e) {
+                    lastSaveError = "saveStudy: " + e.getMessage();
                     logger.error("Failed to save studies to SQLite: {}", e.getMessage(), e);
                     try {
                         sqliteConnection.rollback();
@@ -1487,7 +1495,7 @@ public class DicomDatabase {
                     return false;
                 }
             }
-            return saveAlbumsToDatabase();
+            return includeAlbums ? saveAlbumsToDatabase() : true;
         }
     }
 
@@ -1584,6 +1592,8 @@ public class DicomDatabase {
             sqliteConnection.setAutoCommit(true);
             return true;
         } catch (SQLException e) {
+            lastSaveError = "saveAlbums: " + e.getMessage();
+            logger.error("Failed to save albums to SQLite: {}", e.getMessage(), e);
             try {
                 sqliteConnection.rollback();
                 sqliteConnection.setAutoCommit(true);
@@ -3409,10 +3419,11 @@ public class DicomDatabase {
             }
         }
 
-        // HOROS-20240407準拠: データベースに保存
-        boolean saved = save(touchedStudies);
-        lastImportDiagnostic = String.format("extracted=%d/%d, saved=%s",
-                dicomFilesArray.size(), dicomFilesArray.size(), saved);
+        // HOROS-20240407準拠: データベースに保存（ファイル追加時はAlbum再保存は不要）
+        boolean saved = save(touchedStudies, false);
+        lastImportDiagnostic = String.format("extracted=%d/%d, saved=%s%s",
+                dicomFilesArray.size(), dicomFilesArray.size(), saved,
+                (!saved && lastSaveError != null && !lastSaveError.isEmpty()) ? " (" + lastSaveError + ")" : "");
 
         // HOROS-20240407準拠: データベース変更を通知
         notifyDatabaseChanged();
@@ -4072,6 +4083,15 @@ public class DicomDatabase {
      * 受信ディレクトリからファイルをインポート（リスナー圧縮設定付き）
      */
     public int importFilesFromIncomingDir(Boolean showGUI, int listenerCompressionSettings) {
+        importFilesFromIncomingDirLock.lock();
+        try {
+            return importFilesFromIncomingDirLocked(showGUI, listenerCompressionSettings);
+        } finally {
+            importFilesFromIncomingDirLock.unlock();
+        }
+    }
+
+    private int importFilesFromIncomingDirLocked(Boolean showGUI, int listenerCompressionSettings) {
         String incomingPath = incomingDirPath();
         File incomingDir = new File(incomingPath);
         if (!incomingDir.exists() || !incomingDir.isDirectory()) {
