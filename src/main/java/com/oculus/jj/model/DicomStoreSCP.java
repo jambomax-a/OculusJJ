@@ -103,6 +103,8 @@ public class DicomStoreSCP extends BasicCStoreSCP {
             rsp.setInt(0x00000900, VR.US, Status.Success); // Status
         } catch (Exception e) {
             try { Files.deleteIfExists(temporary.toPath()); } catch (Exception ignored) { }
+            logger.error("C-STORE SCP failed for iuid={} cuid={} tsuid={}", iuid, cuid, tsuid, e);
+            DicomService.getInstance().setLastStoreError(e.getClass().getSimpleName() + ": " + e.getMessage());
             rsp.setInt(0x00000900, VR.US, Status.ProcessingFailure); // Status
         }
     }

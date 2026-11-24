@@ -49,6 +49,7 @@ public class DicomService {
     private ScheduledExecutorService incomingImportScheduler;
     private boolean listenerStarted;
     private volatile String lastListenerError;
+    private volatile String lastStoreError;
 
     private DicomService() {
         device.addConnection(conn);
@@ -65,6 +66,8 @@ public class DicomService {
         String[] ts = {
                 UID.ImplicitVRLittleEndian,
                 UID.ExplicitVRLittleEndian,
+                "1.2.840.10008.1.2.2",      // ExplicitVRBigEndian
+                "1.2.840.10008.1.2.1.99",   // DeflatedExplicitVRLittleEndian
                 UID.JPEGBaseline8Bit,
                 UID.JPEGExtended12Bit,
                 UID.JPEGLossless,
@@ -73,7 +76,12 @@ public class DicomService {
                 UID.JPEGLSNearLossless,
                 UID.JPEG2000Lossless,
                 UID.JPEG2000,
-                UID.RLELossless
+                "1.2.840.10008.1.2.4.92",   // JPEG2000Part2Lossless
+                "1.2.840.10008.1.2.4.93",   // JPEG2000Part2
+                UID.RLELossless,
+                "1.2.840.10008.1.2.4.100",  // MPEG2MPML
+                "1.2.840.10008.1.2.4.102",  // MPEG4HP41
+                "1.2.840.10008.1.2.4.103"   // MPEG4HP41BD
         };
         ae.addTransferCapability(
                 new TransferCapability(null, UID.Verification, TransferCapability.Role.SCP, UID.ImplicitVRLittleEndian));
@@ -97,13 +105,23 @@ public class DicomService {
         this.lastListenerError = err;
     }
 
+    public void setLastStoreError(String err) {
+        this.lastStoreError = err;
+    }
+
     public synchronized void startListener(int port) throws IOException, GeneralSecurityException {
-        if (listenerStarted)
-            return;
+        if (listenerStarted) {
+            ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
+            if (conn.getPort() == port) {
+                return;
+            }
+            stopListener();
+        }
         ae.setAETitle(DicomNodeManager.getInstance().getLocalAET());
         conn.setPort(port);
         device.bindConnections();
         listenerStarted = true;
+        lastListenerError = null;
         int intervalSeconds = Math.max(1, Math.min(3600,
                 com.oculus.jj.config.AppPreferences.getInt("listener.checkInterval", 3)));
         incomingImportScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -246,6 +264,8 @@ public class DicomService {
             final Thread currentThread = Thread.currentThread();
             final int[] finalStatus = { -1 };
             final String[] errorComment = { null };
+            final int[] counts = { 0, 0, 0, 0 }; // completed, remaining, warning, failed
+            lastStoreError = null;
 
             DimseRSPHandler rspHandler = new DimseRSPHandler(association.nextMessageID()) {
                 @Override
@@ -263,6 +283,10 @@ public class DicomService {
                     int remaining = cmd.getInt(0x00001020, 0); // NumberOfRemainingSuboperations
                     int warning = cmd.getInt(0x00001023, 0); // NumberOfWarningSuboperations
                     int failed = cmd.getInt(0x00001022, 0); // NumberOfFailedSuboperations
+                    counts[0] = completed;
+                    counts[1] = remaining;
+                    counts[2] = warning;
+                    counts[3] = failed;
 
                     int total = completed + remaining + warning + failed;
                     if (total > 0) {
@@ -300,9 +324,15 @@ public class DicomService {
                 }
                 msg.append(" [MoveDestination=").append(manager.getLocalAET())
                    .append(", ListenerRunning=").append(listenerStarted)
-                   .append(", Port=").append(conn.getPort()).append("]");
+                   .append(", Port=").append(conn.getPort())
+                   .append(", ok=").append(counts[0])
+                   .append(", fail=").append(counts[3])
+                   .append(", warn=").append(counts[2]).append("]");
                 if (!listenerStarted && lastListenerError != null) {
                     msg.append(" ListenerError=").append(lastListenerError);
+                }
+                if (lastStoreError != null) {
+                    msg.append(" StoreError=").append(lastStoreError);
                 }
                 throw new IOException(msg.toString());
             }

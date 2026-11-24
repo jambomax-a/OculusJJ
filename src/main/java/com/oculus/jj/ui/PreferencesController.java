@@ -2159,19 +2159,48 @@ public class PreferencesController extends JFrame {
         JPanel portRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         portRow.add(new JLabel(LanguageManager.get("prefs.lis.port", "Port Number:")));
         JTextField port = new JTextField(String.valueOf(AppPreferences.getListenerPort()), 8);
-        port.addActionListener(e -> saveIntField(port, "listener.port", 11112, 1, 131072));
-        port.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override
-            public void focusLost(java.awt.event.FocusEvent e) {
-                saveIntField(port, "listener.port", 11112, 1, 131072);
-            }
-        });
-        portRow.add(port);
-        portRow.add(new JLabel(LanguageManager.get("prefs.lis.port_range", "(between 1 and 131072)")));
-        connection.add(portRow);
         JCheckBox listenerActive = new JCheckBox(
                 LanguageManager.get("prefs.lis.activate", "Activate DICOM listener when Horos is running"),
                 AppPreferences.isListenerAutoStart());
+        Runnable applyListenerChanges = () -> {
+            String aetText = aet.getText().trim();
+            if (aetText.isEmpty()) aetText = "OCULUSJJ";
+            try {
+                int listenerPort = Integer.parseInt(port.getText().trim());
+                if (listenerPort < 1 || listenerPort > 65535)
+                    throw new NumberFormatException("Port must be 1-65535");
+                AppPreferences.setListenerAETitle(aetText);
+                AppPreferences.setListenerPort(listenerPort);
+                DicomNodeManager.getInstance().setLocalConfig(aetText, listenerPort);
+                if (listenerActive.isSelected()) {
+                    DicomService.getInstance().startListener(listenerPort);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, ex.getMessage(), LanguageManager.get("prefs.error", "Error"),
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        };
+        aet.addActionListener(e -> applyListenerChanges.run());
+        aet.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                applyListenerChanges.run();
+            }
+        });
+        port.addActionListener(e -> {
+            saveIntField(port, "listener.port", 11112, 1, 65535);
+            applyListenerChanges.run();
+        });
+        port.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                saveIntField(port, "listener.port", 11112, 1, 65535);
+                applyListenerChanges.run();
+            }
+        });
+        portRow.add(port);
+        portRow.add(new JLabel(LanguageManager.get("prefs.lis.port_range", "(between 1 and 65535)")));
+        connection.add(portRow);
         listenerActive.addActionListener(e -> {
             boolean enabled = listenerActive.isSelected();
             AppPreferences.setListenerAutoStart(enabled);
