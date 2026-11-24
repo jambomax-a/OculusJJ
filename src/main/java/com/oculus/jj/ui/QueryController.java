@@ -916,6 +916,7 @@ public class QueryController extends JFrame {
         if (initDb != null) {
             initDb.resetImportSessionStats();
         }
+        DicomService.getInstance().resetScpStats();
         if (retrieveStatusLabel != null) {
             retrieveStatusLabel.setText("Retrieving " + targets.size() + " study(s)...");
         }
@@ -965,13 +966,15 @@ public class QueryController extends JFrame {
                         if (remoteCount > 0 && localCount < remoteCount) {
                             String dbDiag = db != null ? db.getLastImportDiagnostic() : "";
                             String sessionStats = db != null ? db.getImportSessionStats(studyInstanceUID) : "";
+                            String scpStats = DicomService.getInstance().getScpStats();
                             String detail = String.format(
-                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s%s%s)",
+                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s%s%s, SCP={%s})",
                                     patientName, localCount, remoteCount,
                                     res.completed, res.failed, res.warning,
                                     res.storeError != null ? ", StoreError=" + res.storeError : "",
                                     (dbDiag != null && !dbDiag.isEmpty()) ? ", DB=" + dbDiag : "",
-                                    (sessionStats != null && !sessionStats.isEmpty()) ? ", Session={" + sessionStats + "}" : "");
+                                    (sessionStats != null && !sessionStats.isEmpty()) ? ", Session={" + sessionStats + "}" : "",
+                                    scpStats);
                             System.err.println(detail);
                             showWrappedErrorDialog(detail);
                         }

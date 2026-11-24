@@ -82,6 +82,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
     @Override
     protected void store(Association as, PresentationContext pc, Attributes rq,
             PDVInputStream data, Attributes rsp) throws IOException {
+        DicomService.getInstance().recordScpCall();
         String iuid = rq.getString(0x00001000); // AffectedSOPInstanceUID
         String cuid = rq.getString(0x00000002); // AffectedSOPClassUID
         String tsuid = pc.getTransferSyntax();
@@ -92,6 +93,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
         File file = new File(storageDir, safeFilename);
         if (file.exists() && !com.oculus.jj.config.AppPreferences.getBool("listener.replaceExisting", false)) {
             data.copyTo(OutputStream.nullOutputStream());
+            DicomService.getInstance().recordScpSkipped();
             rsp.setInt(0x00000900, VR.US, Status.Success);
             return;
         }
@@ -109,6 +111,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
                 }
             }
             moveWithRetry(temporary.toPath(), file.toPath());
+            DicomService.getInstance().recordScpSaved();
             javax.swing.SwingUtilities.invokeLater(() -> {
                 DicomDatabase db = DicomDatabase.activeLocalDatabase();
                 if (db != null) {
@@ -118,6 +121,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
             rsp.setInt(0x00000900, VR.US, Status.Success); // Status
         } catch (Exception e) {
             try { Files.deleteIfExists(temporary.toPath()); } catch (Exception ignored) { }
+            DicomService.getInstance().recordScpError();
             logger.error("C-STORE SCP failed for iuid={} cuid={} tsuid={}", iuid, cuid, tsuid, e);
             DicomService.getInstance().setLastStoreError(e.getClass().getSimpleName() + ": " + e.getMessage());
             rsp.setInt(0x00000900, VR.US, Status.ProcessingFailure); // Status

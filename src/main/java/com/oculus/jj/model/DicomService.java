@@ -51,6 +51,27 @@ public class DicomService {
     private boolean listenerStarted;
     private volatile String lastListenerError;
     private volatile String lastStoreError;
+    private final java.util.concurrent.atomic.AtomicInteger scpCalls = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger scpSaved = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger scpSkippedExists = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger scpErrors = new java.util.concurrent.atomic.AtomicInteger();
+
+    public void resetScpStats() {
+        scpCalls.set(0);
+        scpSaved.set(0);
+        scpSkippedExists.set(0);
+        scpErrors.set(0);
+    }
+
+    public void recordScpCall() { scpCalls.incrementAndGet(); }
+    public void recordScpSaved() { scpSaved.incrementAndGet(); }
+    public void recordScpSkipped() { scpSkippedExists.incrementAndGet(); }
+    public void recordScpError() { scpErrors.incrementAndGet(); }
+
+    public String getScpStats() {
+        return String.format("calls=%d, saved=%d, skipped=%d, err=%d",
+                scpCalls.get(), scpSaved.get(), scpSkippedExists.get(), scpErrors.get());
+    }
 
     private DicomService() {
         String initialAet = DicomNodeManager.getInstance().getLocalAET();
