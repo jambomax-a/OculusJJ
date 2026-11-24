@@ -912,6 +912,10 @@ public class QueryController extends JFrame {
         }
 
         // HOROS準拠: 各行を個別のSwingWorkerで並列実行し、Activityパネルに同時表示する
+        DicomDatabase initDb = resolveLocalDatabase();
+        if (initDb != null) {
+            initDb.resetImportSessionStats();
+        }
         if (retrieveStatusLabel != null) {
             retrieveStatusLabel.setText("Retrieving " + targets.size() + " study(s)...");
         }
@@ -960,12 +964,14 @@ public class QueryController extends JFrame {
                         }
                         if (remoteCount > 0 && localCount < remoteCount) {
                             String dbDiag = db != null ? db.getLastImportDiagnostic() : "";
+                            String sessionStats = db != null ? db.getImportSessionStats(studyInstanceUID) : "";
                             String detail = String.format(
-                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s%s)",
+                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s%s%s)",
                                     patientName, localCount, remoteCount,
                                     res.completed, res.failed, res.warning,
                                     res.storeError != null ? ", StoreError=" + res.storeError : "",
-                                    (dbDiag != null && !dbDiag.isEmpty()) ? ", DB=" + dbDiag : "");
+                                    (dbDiag != null && !dbDiag.isEmpty()) ? ", DB=" + dbDiag : "",
+                                    (sessionStats != null && !sessionStats.isEmpty()) ? ", Session={" + sessionStats + "}" : "");
                             System.err.println(detail);
                             showWrappedErrorDialog(detail);
                         }

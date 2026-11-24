@@ -1460,6 +1460,27 @@ public class DicomDatabase {
     }
 
     private volatile String lastSaveError = "";
+    private volatile String lastExtractError = "";
+    private final java.util.concurrent.atomic.AtomicInteger sessionFilesSeen = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger sessionFilesExtracted = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger sessionImagesAdded = new java.util.concurrent.atomic.AtomicInteger();
+
+    public void resetImportSessionStats() {
+        sessionFilesSeen.set(0);
+        sessionFilesExtracted.set(0);
+        sessionImagesAdded.set(0);
+        lastExtractError = "";
+        lastSaveError = "";
+    }
+
+    public String getImportSessionStats(String studyUID) {
+        DicomStudy st = studyUID != null ? getStudyByUID(studyUID) : null;
+        int seriesCnt = (st != null && st.getSeries() != null) ? st.getSeries().size() : -1;
+        return String.format("seen=%d, ext=%d, added=%d, series=%d%s%s",
+                sessionFilesSeen.get(), sessionFilesExtracted.get(), sessionImagesAdded.get(), seriesCnt,
+                (lastExtractError != null && !lastExtractError.isEmpty()) ? ", extErr=" + lastExtractError : "",
+                (lastSaveError != null && !lastSaveError.isEmpty()) ? ", saveErr=" + lastSaveError : "");
+    }
 
     /**
      * 指定されたStudyリストをデータベースに保存
@@ -2779,6 +2800,7 @@ public class DicomDatabase {
             errorsDir.mkdirs();
         }
 
+        sessionFilesSeen.addAndGet(expandedPaths.size());
         // HOROS-20240407準拠: DICOMファイルをスキャンしてdicomFilesArrayを構築（1537-1641行目）
         List<Map<String, Object>> dicomFilesArray = new java.util.ArrayList<>();
         long startTime = System.currentTimeMillis();
@@ -2813,6 +2835,7 @@ public class DicomDatabase {
 
                     if (curDict != null) {
                         dicomFilesArray.add(curDict);
+                        sessionFilesExtracted.incrementAndGet();
                     } else {
                         // HOROS-20240407準拠: 読み取り不能なファイルの処理（1593-1609行目）
                         String absolutePath = file.getAbsolutePath();
@@ -3390,6 +3413,7 @@ public class DicomDatabase {
                     if (!currentImageSet.contains(image)) {
                         currentImageSet.add(image);
                         series.addImagesObject(image);
+                        sessionImagesAdded.incrementAndGet();
                     }
 
                     // HOROS-20240407準拠: ファイルパスマッピングに追加
@@ -3415,6 +3439,7 @@ public class DicomDatabase {
                 updateStudyNumberOfImages(study);
 
             } catch (Exception e) {
+                lastSaveError = "addDict: " + e.getMessage();
                 logger.warn("Failed to extract DICOM elements", e);
             }
         }
@@ -3515,6 +3540,7 @@ public class DicomDatabase {
             }
             return dis.readDataset();
         } catch (Exception e) {
+            lastExtractError = file.getName() + ": " + e.getMessage();
             logger.warn("Failed to read DICOM attributes from {}: {}", file.getName(), e.getMessage());
             return null;
         }
