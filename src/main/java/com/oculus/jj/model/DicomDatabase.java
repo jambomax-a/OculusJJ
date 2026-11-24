@@ -2977,23 +2977,8 @@ public class DicomDatabase {
                         if (tstudy.getPatientUID() == null) {
                             tstudy.setPatientUID(patientUID);
                         }
-
-                        // HOROS-20240407準拠: patientUIDを比較（1943行目）
-                        if (patientUID != null && patientUID.equals(tstudy.getPatientUID())) {
-                            study = tstudy;
-                        } else {
-                            // HOROS-20240407準拠: 複数のStudyを検索（1947-1958行目）
-                            for (int j = 0; j < studiesArrayStudyInstanceUID.size(); j++) {
-                                String uid = studiesArrayStudyInstanceUID.get(j);
-                                if (uid != null && uid.equals(studyID)) {
-                                    DicomStudy s = studiesArray.get(j);
-                                    if (patientUID != null && patientUID.equals(s.getPatientUID())) {
-                                        study = s;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+                        // studyInstanceUIDはDB上でUNIQUEのため、UID一致時は同一Studyとして統合する
+                        study = tstudy;
                     }
 
                     // HOROS-20240407準拠: 新しいStudyを作成（1971-1992行目）
@@ -3425,7 +3410,9 @@ public class DicomDatabase {
         }
 
         // HOROS-20240407準拠: データベースに保存
-        save(touchedStudies);
+        boolean saved = save(touchedStudies);
+        lastImportDiagnostic = String.format("extracted=%d/%d, saved=%s",
+                dicomFilesArray.size(), dicomFilesArray.size(), saved);
 
         // HOROS-20240407準拠: データベース変更を通知
         notifyDatabaseChanged();
@@ -3506,21 +3493,18 @@ public class DicomDatabase {
      */
     private Attributes readDicomAttributes(java.io.File file) {
         try (DicomInputStream dis = new DicomInputStream(file)) {
-            // HOROS-20240407準拠: プリアンブル（128バイト）がある場合は読み飛ばす
-            // readFileMetaInformation()を呼び出すことで、プリアンブルがある場合はそれを読み飛ばし、
-            // ない場合でもデータセットの先頭から読み込めるように試行する
+            dis.setIncludeBulkData(DicomInputStream.IncludeBulkData.NO);
             try {
                 dis.readFileMetaInformation();
             } catch (Exception e) {
-                // ファイルメタ情報がない場合（プリアンブルがないDICOMファイル）は無視して進む
-                // DicomInputStreamを再度オープンして先頭から読み込む
                 try (DicomInputStream dis2 = new DicomInputStream(file)) {
+                    dis2.setIncludeBulkData(DicomInputStream.IncludeBulkData.NO);
                     return dis2.readDataset();
                 }
             }
             return dis.readDataset();
         } catch (Exception e) {
-
+            logger.warn("Failed to read DICOM attributes from {}: {}", file.getName(), e.getMessage());
             return null;
         }
     }
@@ -4076,6 +4060,12 @@ public class DicomDatabase {
      */
     public int importFilesFromIncomingDir(Boolean showGUI) {
         return importFilesFromIncomingDir(showGUI, 0);
+    }
+
+    private volatile String lastImportDiagnostic = "";
+
+    public String getLastImportDiagnostic() {
+        return lastImportDiagnostic;
     }
 
     /**

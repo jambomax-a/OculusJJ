@@ -959,11 +959,13 @@ public class QueryController extends JFrame {
                             retrieveStatusLabel.setText(summary);
                         }
                         if (remoteCount > 0 && localCount < remoteCount) {
+                            String dbDiag = db != null ? db.getLastImportDiagnostic() : "";
                             String detail = String.format(
-                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s)",
+                                    "%s: Retrieve完了しましたが件数が一致しません (Local=%d / Remote=%d, PACS応答: ok=%d, fail=%d, warn=%d%s%s)",
                                     patientName, localCount, remoteCount,
                                     res.completed, res.failed, res.warning,
-                                    res.storeError != null ? ", StoreError=" + res.storeError : "");
+                                    res.storeError != null ? ", StoreError=" + res.storeError : "",
+                                    (dbDiag != null && !dbDiag.isEmpty()) ? ", DB=" + dbDiag : "");
                             System.err.println(detail);
                             showWrappedErrorDialog(detail);
                         }
