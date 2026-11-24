@@ -61,8 +61,8 @@ public class DicomStoreSCP extends BasicCStoreSCP {
     @Override
     protected void store(Association as, PresentationContext pc, Attributes rq,
             PDVInputStream data, Attributes rsp) throws IOException {
-        String iuid = rq.getString(0x0008119A); // AffectedSOPInstanceUID
-        String cuid = rq.getString(0x00081199); // AffectedSOPClassUID
+        String iuid = rq.getString(0x00001000); // AffectedSOPInstanceUID
+        String cuid = rq.getString(0x00000002); // AffectedSOPClassUID
         String tsuid = pc.getTransferSyntax();
         File storageDir = getStorageDir();
         String rawFilename = iuid != null ? iuid : UUID.randomUUID().toString();
@@ -71,7 +71,7 @@ public class DicomStoreSCP extends BasicCStoreSCP {
         File file = new File(storageDir, safeFilename);
         if (file.exists() && !com.oculus.jj.config.AppPreferences.getBool("listener.replaceExisting", false)) {
             data.copyTo(OutputStream.nullOutputStream());
-            rsp.setInt(0x00080160, VR.US, Status.Success);
+            rsp.setInt(0x00000900, VR.US, Status.Success);
             return;
         }
         File temporary = new File(storageDir, safeFilename + ".part-" + UUID.randomUUID());
@@ -97,10 +97,10 @@ public class DicomStoreSCP extends BasicCStoreSCP {
                     db.initiateImportFilesFromIncomingDirUnlessAlreadyImporting();
                 }
             });
-            rsp.setInt(0x00080160, VR.US, Status.Success); // Status
+            rsp.setInt(0x00000900, VR.US, Status.Success); // Status
         } catch (Exception e) {
             try { Files.deleteIfExists(temporary.toPath()); } catch (Exception ignored) { }
-            rsp.setInt(0x00080160, VR.US, Status.ProcessingFailure); // Status
+            rsp.setInt(0x00000900, VR.US, Status.ProcessingFailure); // Status
         }
     }
 }

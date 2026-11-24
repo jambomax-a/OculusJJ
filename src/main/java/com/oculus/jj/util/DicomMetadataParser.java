@@ -23,13 +23,13 @@ public class DicomMetadataParser {
     // DICOMタグ数値（dcm4che-core 5.xのTag.javaがDICOMデータ辞典自動生成前で未定義のため直接定義）
     private static final int SOPInstanceUID = 0x00080018;
     private static final int StudyInstanceUID = 0x0020000D;
-    private static final int SeriesInstanceUID = 0x00200011;
+    private static final int SeriesInstanceUID = 0x0020000E;
     private static final int SOPClassUID = 0x00080016;
     private static final int Modality = 0x00080060;
     private static final int ImageType = 0x00080008;
     private static final int Manufacturer = 0x00080070;
     private static final int ManufacturerModelName = 0x00081090;
-    private static final int DeviceSerialNumber = 0x0008103E;
+    private static final int DeviceSerialNumber = 0x00181000;
     private static final int PatientID = 0x00100020;
     private static final int PatientName = 0x00100010;
     private static final int PatientBirthDate = 0x00100030;
@@ -38,7 +38,7 @@ public class DicomMetadataParser {
     private static final int StudyDate = 0x00080020;
     private static final int SeriesDate = 0x00080021;
     private static final int AcquisitionDate = 0x00080022;
-    private static final int InstanceCreationDate = 0x00080013;
+    private static final int InstanceCreationDate = 0x00080012;
     private static final int StudyDescription = 0x00081030;
     private static final int SeriesDescription = 0x0008103E;
     private static final int Rows = 0x00280010;

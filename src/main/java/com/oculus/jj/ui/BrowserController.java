@@ -11057,9 +11057,9 @@ public class BrowserController extends JFrame {
         try {
             org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(out);
             org.dcm4che3.data.Attributes fmi = new org.dcm4che3.data.Attributes();
-            fmi.setString(0x00020000, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.88.33"); // MediaStorageSOPClassUID
-            fmi.setString(0x00020001, org.dcm4che3.data.VR.UI, sopUID); // MediaStorageSOPInstanceUID
-            fmi.setString(0x00020002, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID (Explicit VR LE)
+            fmi.setString(0x00020002, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.88.33"); // MediaStorageSOPClassUID
+            fmi.setString(0x00020003, org.dcm4che3.data.VR.UI, sopUID); // MediaStorageSOPInstanceUID
+            fmi.setString(0x00020010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID (Implicit VR LE)
             dos.writeFileMetaInformation(fmi);
             dos.writeDataset(attrs, null);
             dos.finish();
@@ -14275,12 +14275,12 @@ public class BrowserController extends JFrame {
         attrs.setString(0x00080016, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // SOPClassUID
         attrs.setString(0x00080018, org.dcm4che3.data.VR.UI, sopUID); // SOPInstanceUID
         attrs.setString(0x00080020, org.dcm4che3.data.VR.DA, now.substring(0, 8)); // StudyDate
-        attrs.setString(0x00080030, org.dcm4che3.data.VR.DA, now.substring(0, 8)); // SeriesDate
-        attrs.setString(0x00080033, org.dcm4che3.data.VR.TM, now.substring(8)); // StudyTime
+        attrs.setString(0x00080021, org.dcm4che3.data.VR.DA, now.substring(0, 8)); // SeriesDate
+        attrs.setString(0x00080030, org.dcm4che3.data.VR.TM, now.substring(8)); // StudyTime
         attrs.setString(0x00080060, org.dcm4che3.data.VR.CS, "SC"); // Modality
         attrs.setString(0x00080070, org.dcm4che3.data.VR.LO, "OculusJJ"); // Manufacturer
-        attrs.setString(0x00081010, org.dcm4che3.data.VR.SH, "OculusJJ"); // InstitutionName
-        attrs.setString(0x00081030, org.dcm4che3.data.VR.SH, "OculusJJ"); // StationName
+        attrs.setString(0x00080080, org.dcm4che3.data.VR.LO, "OculusJJ"); // InstitutionName
+        attrs.setString(0x00081010, org.dcm4che3.data.VR.SH, "OculusJJ"); // StationName
         if (pix.getStudyDescription() != null && !pix.getStudyDescription().isEmpty())
             attrs.setString(0x00081030, org.dcm4che3.data.VR.LO, pix.getStudyDescription()); // StudyDescription
         attrs.setString(0x0008103E, org.dcm4che3.data.VR.LO, seriesDescription); // SeriesDescription
@@ -14305,18 +14305,18 @@ public class BrowserController extends JFrame {
         attrs.setString(0x0020000D, org.dcm4che3.data.VR.UI, studyUID); // StudyInstanceUID
         attrs.setString(0x0020000E, org.dcm4che3.data.VR.UI, seriesUID); // SeriesInstanceUID
         attrs.setString(0x00200010, org.dcm4che3.data.VR.SH, "OCULUSJJ"); // StudyID
-        attrs.setString(0x00201001, org.dcm4che3.data.VR.IS, String.valueOf(seriesNumber)); // SeriesNumber
-        attrs.setString(0x00201002, org.dcm4che3.data.VR.IS, "1"); // InstanceNumber
-        attrs.setString(0x00280002, org.dcm4che3.data.VR.CS,
+        attrs.setString(0x00200011, org.dcm4che3.data.VR.IS, String.valueOf(seriesNumber)); // SeriesNumber
+        attrs.setString(0x00200013, org.dcm4che3.data.VR.IS, "1"); // InstanceNumber
+        attrs.setString(0x00080008, org.dcm4che3.data.VR.CS,
                 new String[] { "ORIGINAL", "PRIMARY", "SC" }); // ImageType
         attrs.setString(0x00280004, org.dcm4che3.data.VR.CS, "RGB"); // PhotometricInterpretation
-        attrs.setInt(0x00280006, org.dcm4che3.data.VR.US, 3); // SamplesPerPixel
+        attrs.setInt(0x00280002, org.dcm4che3.data.VR.US, 3); // SamplesPerPixel
         attrs.setInt(0x00280010, org.dcm4che3.data.VR.US, h); // Rows
         attrs.setInt(0x00280011, org.dcm4che3.data.VR.US, w); // Columns
-        attrs.setInt(0x00280101, org.dcm4che3.data.VR.US, 8); // BitsAllocated
-        attrs.setInt(0x00280102, org.dcm4che3.data.VR.US, 8); // BitsStored
-        attrs.setInt(0x00280103, org.dcm4che3.data.VR.US, 7); // HighBit
-        attrs.setInt(0x00280104, org.dcm4che3.data.VR.US, 0); // PixelRepresentation
+        attrs.setInt(0x00280100, org.dcm4che3.data.VR.US, 8); // BitsAllocated
+        attrs.setInt(0x00280101, org.dcm4che3.data.VR.US, 8); // BitsStored
+        attrs.setInt(0x00280102, org.dcm4che3.data.VR.US, 7); // HighBit
+        attrs.setInt(0x00280103, org.dcm4che3.data.VR.US, 0); // PixelRepresentation
         double psx = pix.getPixelSpacingX();
         double psy = pix.getPixelSpacingY();
         if (psx > 0 && psy > 0)
@@ -14326,7 +14326,7 @@ public class BrowserController extends JFrame {
             String src = pix.getSrcFile();
             if (src.length() > 64)
                 src = src.substring(src.length() - 64);
-            attrs.setString(0x00280008, org.dcm4che3.data.VR.LO, src); // ImageComments
+            attrs.setString(0x00204000, org.dcm4che3.data.VR.LT, src); // ImageComments
         }
         attrs.setBytes(0x7FE00010, org.dcm4che3.data.VR.OB, pixelData); // PixelData
 
@@ -14335,9 +14335,9 @@ public class BrowserController extends JFrame {
             parent.mkdirs();
         org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(outFile);
         org.dcm4che3.data.Attributes fmi = new org.dcm4che3.data.Attributes();
-        fmi.setString(0x00020000, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
-        fmi.setString(0x00020001, org.dcm4che3.data.VR.UI, sopUID); // MediaStorageSOPInstanceUID
-        fmi.setString(0x00020002, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID (Explicit VR LE)
+        fmi.setString(0x00020002, org.dcm4che3.data.VR.UI, "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
+        fmi.setString(0x00020003, org.dcm4che3.data.VR.UI, sopUID); // MediaStorageSOPInstanceUID
+        fmi.setString(0x00020010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID (Implicit VR LE)
         dos.writeFileMetaInformation(fmi);
         dos.writeDataset(attrs, null);
         dos.finish();
@@ -16547,7 +16547,7 @@ public class BrowserController extends JFrame {
                 dis.readFileMetaInformation();
                 org.dcm4che3.data.Attributes fmi = dis.getFileMetaInformation();
                 if (fmi != null) {
-                    String tsuid = fmi.getString(0x00080010); // TransferSyntaxUID
+                    String tsuid = fmi.getString(0x00020010); // TransferSyntaxUID
                 }
                 attrs = dis.readDataset();
                 dis.close();
@@ -16587,10 +16587,10 @@ public class BrowserController extends JFrame {
             java.io.File tmpFmi = java.io.File.createTempFile("fmi", "tmp");
             org.dcm4che3.io.DicomOutputStream dos = new org.dcm4che3.io.DicomOutputStream(tmpFmi);
             org.dcm4che3.data.Attributes fmo = new org.dcm4che3.data.Attributes();
-            fmo.setString(0x00080016, org.dcm4che3.data.VR.UI,
+            fmo.setString(0x00020002, org.dcm4che3.data.VR.UI,
                     "1.2.840.10008.5.1.4.1.1.7"); // MediaStorageSOPClassUID
-            fmo.setString(0x00080018, org.dcm4che3.data.VR.UI, newSopInstanceUID); // MediaStorageSOPInstanceUID
-            fmo.setString(0x00080010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID
+            fmo.setString(0x00020003, org.dcm4che3.data.VR.UI, newSopInstanceUID); // MediaStorageSOPInstanceUID
+            fmo.setString(0x00020010, org.dcm4che3.data.VR.UI, "1.2.840.10008.1.2"); // TransferSyntaxUID
             dos.writeFileMetaInformation(fmo);
             dos.close();
             byte[] fmiBytes = java.nio.file.Files.readAllBytes(tmpFmi.toPath());

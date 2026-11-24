@@ -3531,7 +3531,7 @@ public class DicomDatabase {
     private String extractSeriesInstanceUID(java.io.File file) {
         Attributes attrs = readDicomAttributes(file);
         if (attrs != null) {
-            return attrs.getString(0x00200011); // SeriesInstanceUID
+            return attrs.getString(0x0020000E); // SeriesInstanceUID
         }
         return null;
     }
@@ -3564,7 +3564,7 @@ public class DicomDatabase {
         // HOROS-20240407準拠: Transfer Syntax UIDを確認してMPEG2を識別
         // DicomFileDCMTKCategory.mm 326行目、DicomDatabase+Scan.mm 236行目
         String fileType = "DICOM";
-        String transferSyntaxUID = attrs.getString(0x00080010); // TransferSyntaxUID
+        String transferSyntaxUID = attrs.getString(0x00020010); // TransferSyntaxUID
         if (transferSyntaxUID != null && transferSyntaxUID.equals("1.2.840.10008.1.2.4.100")) {
             // HOROS-20240407準拠: MPEG2 Main Profile at Main Level
             fileType = "DICOMMPEG2";
@@ -3632,10 +3632,7 @@ public class DicomDatabase {
         dict.put("studyDescription", studyDescription);
 
         // HOROS-20240407準拠: studyDate (1710行目)
-        Date studyDate = attrs.getDate(0x00080021); // StudyDateAndTime
-        if (studyDate == null) {
-            studyDate = attrs.getDate(0x00080020); // StudyDate
-        }
+        Date studyDate = attrs.getDate(0x00080020); // StudyDate
         if (studyDate != null) {
             dict.put("studyDate", studyDate);
         }
@@ -3653,7 +3650,7 @@ public class DicomDatabase {
         }
 
         // HOROS-20240407準拠: performingPhysiciansName (1706行目)
-        String performingPhysician = attrs.getString(0x00081052); // PerformingPhysicianName
+        String performingPhysician = attrs.getString(0x00081050); // PerformingPhysicianName
         if (performingPhysician != null) {
             dict.put("performingPhysiciansName", performingPhysician);
         }
@@ -3671,7 +3668,7 @@ public class DicomDatabase {
         }
 
         // HOROS-20240407準拠: seriesID (1714行目) = SeriesInstanceUID
-        String seriesInstanceUID = attrs.getString(0x00200011); // SeriesInstanceUID
+        String seriesInstanceUID = attrs.getString(0x0020000E); // SeriesInstanceUID
         if (seriesInstanceUID != null) {
             dict.put("seriesID", seriesInstanceUID);
             dict.put("seriesDICOMUID", seriesInstanceUID);
@@ -3695,7 +3692,7 @@ public class DicomDatabase {
         dict.put("seriesDescription", seriesDescription);
 
         // HOROS-20240407準拠: seriesNumber (1716行目)
-        int seriesNumber = attrs.getInt(0x00200013, 0); // SeriesNumber
+        int seriesNumber = attrs.getInt(0x00200011, 0); // SeriesNumber
         dict.put("seriesNumber", seriesNumber);
 
         // HOROS-20240407準拠: modality (1696行目)
@@ -3725,15 +3722,15 @@ public class DicomDatabase {
         dict.put("imageID", instanceNumber);
 
         // HOROS-20240407準拠: sliceLocation (1724行目)
-        double sliceLocation = attrs.getDouble(0x00201003, 0.0); // SliceLocation
+        double sliceLocation = attrs.getDouble(0x00201041, 0.0); // SliceLocation
         dict.put("sliceLocation", sliceLocation);
 
         // HOROS-20240407準拠: height (1726行目)
-        int height = attrs.getInt(0x00280011, 0); // Rows
+        int height = attrs.getInt(0x00280010, 0); // Rows
         dict.put("height", height);
 
         // HOROS-20240407準拠: width (1727行目)
-        int width = attrs.getInt(0x00280010, 0); // Columns
+        int width = attrs.getInt(0x00280011, 0); // Columns
         dict.put("width", width);
 
         // HOROS-20240407準拠: numberOfSeries (1728行目)
@@ -3843,16 +3840,13 @@ public class DicomDatabase {
         }
         meta.studyDescription = studyDescription;
         // HOROS-20240407準拠: StudyDateとStudyTimeを組み合わせる
-        meta.studyDate = attrs.getDate(0x00080021); // StudyDateAndTime
-        if (meta.studyDate == null) {
-            meta.studyDate = attrs.getDate(0x00080020); // StudyDate
-        }
+        meta.studyDate = attrs.getDate(0x00080020); // StudyDate
         meta.accessionNumber = attrs.getString(0x00080050); // AccessionNumber
         meta.referringPhysician = attrs.getString(0x00080090); // ReferringPhysicianName
         meta.institutionName = attrs.getString(0x00080080); // InstitutionName
 
         // Series level
-        meta.seriesInstanceUID = attrs.getString(0x00200011); // SeriesInstanceUID
+        meta.seriesInstanceUID = attrs.getString(0x0020000E); // SeriesInstanceUID
         // HOROS-20240407準拠: DicomFileDCMTKCategory.mm 594-604行目
         // Series Description
         // if (dataset->findAndGetString(DCM_SeriesDescription, string, OFFalse).good()
@@ -3907,10 +3901,10 @@ public class DicomDatabase {
             seriesDescription = "unnamed";
         }
         meta.seriesDescription = seriesDescription;
-        meta.seriesNumber = attrs.getInt(0x00200013, 0); // SeriesNumber
+        meta.seriesNumber = attrs.getInt(0x00200011, 0); // SeriesNumber
         meta.modality = attrs.getString(0x00080060); // Modality
         // HOROS-20240407準拠: SeriesDateとSeriesTimeを組み合わせる
-        meta.seriesDate = attrs.getDate(0x00080021); // SeriesDateAndTime
+        meta.seriesDate = attrs.getDate(0x00080021); // SeriesDate
         if (meta.seriesDate == null) {
             meta.seriesDate = attrs.getDate(0x00080020); // StudyDate
         }
@@ -3918,7 +3912,7 @@ public class DicomDatabase {
         // Image level
         meta.sopInstanceUID = attrs.getString(0x00080018); // SOPInstanceUID
         meta.instanceNumber = attrs.getInt(0x00200013, 0); // InstanceNumber
-        meta.sliceLocation = attrs.getDouble(0x00201003, 0.0); // SliceLocation
+        meta.sliceLocation = attrs.getDouble(0x00201041, 0.0); // SliceLocation
         meta.numberOfFrames = attrs.getInt(0x00280008, 1); // NumberOfFrames
 
         // Window level/width

@@ -150,7 +150,7 @@ public class DicomFileImporter {
 
             // ===== 基本属性抽出 =====
             String studyUID = attrs.getString(0x0020000D);
-            String seriesUID = attrs.getString(0x00200011);
+            String seriesUID = attrs.getString(0x0020000E);
             String instanceUID = attrs.getString(0x00080018);
 
             if (studyUID == null || seriesUID == null || instanceUID == null) {
@@ -171,7 +171,7 @@ public class DicomFileImporter {
             image.setSeriesDate(attrs.getDate(0x00080021));
             image.setAcquisitionDate(attrs.getDate(0x00080022));
             image.setManufacturerModelString(attrs.getString(0x00081090));
-            image.setDeviceSerialNumber(attrs.getString(0x0008103E));
+            image.setDeviceSerialNumber(attrs.getString(0x00181000));
 
             // 画像パラメータ
             image.setHeight(attrs.getInt(0x00280010, 0));

@@ -41,7 +41,7 @@ public class DicomSequenceParser {
     // DICOMDIR関連タグ
     private static final int DirectoryRecordType = 0x00041430;
     private static final int StudyInstanceUID = 0x0020000D;
-    private static final int SeriesInstanceUID = 0x00200011;
+    private static final int SeriesInstanceUID = 0x0020000E;
     private static final int SOPInstanceUID = 0x00080018;
     private static final int DirectoryRecordOffset = 0x00041400;
     private static final int OffsetOfNextDirectoryRecord = 0x00041410;
@@ -370,7 +370,7 @@ public class DicomSequenceParser {
             return;
         }
 
-        Attributes[] frames = extractFrameAttributes(attrs, 0x52000023); // PerFrameFunctionalGroupsSequence
+        Attributes[] frames = extractFrameAttributes(attrs, 0x52009230); // PerFrameFunctionalGroupsSequence
         logger.info("PerFrameFunctionalGroups: {} frames", frames.length);
 
         for (int i = 0; i < Math.min(frames.length, 5); i++) { // 最大5フレーム表示

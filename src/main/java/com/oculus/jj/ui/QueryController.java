@@ -189,7 +189,7 @@ public class QueryController extends JFrame {
                         row.add(attr.getString(0x00100030, ""));
                         row.add(attr.getString(0x00081030, ""));
                         row.add(attr.getString(0x00080061, ""));
-                        row.add(attr.getString(0x00201206, "0"));
+                        row.add(attr.getString(0x00201208, "0"));
                         row.add(attr.getString(0x00080020, ""));
                         row.add(attr.getString(0x00080030, ""));
                         row.add(source.getAeTitle());
@@ -199,7 +199,7 @@ public class QueryController extends JFrame {
                         tableModel.addRow(row);
 
                         if (smartResult.autoRetrieve() && local != null) {
-                            int remoteCount = attr.getInt(0x00201206, 0);
+                            int remoteCount = attr.getInt(0x00201208, 0);
                             DicomStudy localStudy = local.getStudyByUID(uid);
                             int localCount = localStudy == null || localStudy.getNumberOfImages() == null
                                     ? 0 : localStudy.getNumberOfImages();
@@ -242,7 +242,7 @@ public class QueryController extends JFrame {
         keys.setString(0x00100030, org.dcm4che3.data.VR.DA, "");
         keys.setString(0x00081030, org.dcm4che3.data.VR.LO, "");
         if (!keys.contains(0x00080061)) keys.setString(0x00080061, org.dcm4che3.data.VR.CS, "");
-        keys.setString(0x00201206, org.dcm4che3.data.VR.IS, "");
+        keys.setString(0x00201208, org.dcm4che3.data.VR.IS, "");
         keys.setString(0x00080020, org.dcm4che3.data.VR.DA, keys.getString(0x00080020, ""));
         keys.setString(0x00080030, org.dcm4che3.data.VR.TM, "");
         keys.setString(0x00080050, org.dcm4che3.data.VR.SH, "");
@@ -746,7 +746,7 @@ public class QueryController extends JFrame {
         if (!keys.contains(0x00081030)) keys.setString(0x00081030, org.dcm4che3.data.VR.LO, ""); // StudyDescription
         if (!keys.contains(0x00080061)) keys.setString(0x00080061, org.dcm4che3.data.VR.CS, ""); // ModalitiesInStudy
         if (!keys.contains(0x00080050)) keys.setString(0x00080050, org.dcm4che3.data.VR.SH, ""); // AccessionNumber
-        if (!keys.contains(0x00201206)) keys.setString(0x00201206, org.dcm4che3.data.VR.IS, ""); // NumberOfStudyRelatedInstances
+        if (!keys.contains(0x00201208)) keys.setString(0x00201208, org.dcm4che3.data.VR.IS, ""); // NumberOfStudyRelatedInstances
         if (!keys.contains(0x0020000D)) keys.setString(0x0020000D, org.dcm4che3.data.VR.UI, ""); // StudyInstanceUID
 
         queryButton.setEnabled(false);
@@ -770,7 +770,7 @@ public class QueryController extends JFrame {
                         row.add(attr.getString(0x00100030, "")); // PatientBirthDate
                         row.add(attr.getString(0x00081030, "")); // StudyDescription
                         row.add(attr.getString(0x00080061, "")); // ModalitiesInStudy
-                        row.add(attr.getString(0x00201206, "0")); // NumberOfStudyRelatedInstances
+                        row.add(attr.getString(0x00201208, "0")); // NumberOfStudyRelatedInstances
                         row.add(attr.getString(0x00080020, "")); // StudyDate
                         row.add(attr.getString(0x00080030, "")); // StudyTime
                         row.add(node.getAeTitle());
@@ -848,7 +848,7 @@ public class QueryController extends JFrame {
         for (Attributes result : results) {
             String uid = result.getString(0x0020000D, "").trim();
             if (uid.isEmpty()) continue;
-            int remoteCount = result.getInt(0x00201206, 0);
+            int remoteCount = result.getInt(0x00201208, 0);
             DicomStudy local = localDatabase.getStudyByUID(uid);
             if (local == null) continue;
             int localCount = local.getNumberOfImages() == null ? 0 : local.getNumberOfImages();

@@ -282,7 +282,7 @@ public class LocalDicomRepository implements DicomRepository {
 
             String studyUID = attrs.getString(0x0020000D); // StudyInstanceUID
 
-            String seriesUID = attrs.getString(0x00200011); // SeriesInstanceUID
+            String seriesUID = attrs.getString(0x0020000E); // SeriesInstanceUID
             String instanceUID = attrs.getString(0x00080018); // SOPInstanceUID
 
             if (studyUID == null || seriesUID == null || instanceUID == null) {
@@ -299,9 +299,9 @@ public class LocalDicomRepository implements DicomRepository {
             image.setImagePositionPatient(ipp);
 
             // 画像のサイズとウィンドウ情報の抽出
-            if (attrs.contains(0x00280011) && attrs.contains(0x00280010)) { // Rows, Columns
-                image.setHeight(attrs.getInt(0x00280011, -1)); // Rows
-                image.setWidth(attrs.getInt(0x00280010, -1)); // Columns
+            if (attrs.contains(0x00280010) && attrs.contains(0x00280011)) { // Rows, Columns
+                image.setHeight(attrs.getInt(0x00280010, -1)); // Rows
+                image.setWidth(attrs.getInt(0x00280011, -1)); // Columns
             }
             if (attrs.contains(0x00281050)) { // WindowCenter
                 image.setWindowLevel(attrs.getDouble(0x00281050, -1.0)); // WindowCenter

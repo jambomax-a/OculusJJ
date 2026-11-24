@@ -158,7 +158,7 @@ public class TransferSyntaxHandler {
             FunctionalGroupModuleSequence,
             PerFrameFunctionalGroupsSequence,
             // Tag.FrameOfReferenceUID — scalarだが関連チェック用
-            0x00200054, // FrameOfReferenceUID
+            0x00200052, // FrameOfReferenceUID
             ScheduledStepAttributesSequence,
             ConversionPropertiesSequence,
             AcquisitionProtocolDescriptionSequence,

@@ -72,7 +72,7 @@ public class DicomCommunicationUtils {
      * DICOM検索キーにStudyDescriptionを設定します。
      */
     public static void setStudyDescription(Attributes keys, String description) {
-        keys.setString(0x00101020, VR.LO, "*" + description + "*"); // StudyDescription
+        keys.setString(0x00081030, VR.LO, "*" + description + "*"); // StudyDescription
     }
 
     /**
@@ -93,7 +93,7 @@ public class DicomCommunicationUtils {
      * DICOM検索キーにModalityを設定します。
      */
     public static void setModality(Attributes keys, String modality) {
-        keys.setString(0x00400275, VR.SQ, modality); // ScheduledStepAttributesSequence
+        keys.setString(0x00080060, VR.CS, modality); // Modality
     }
 
     // ==================== WADO-RS/STOW-RS 統合メソッド ====================
@@ -161,7 +161,7 @@ public class DicomCommunicationUtils {
     public static List<Attributes> findInstances(DicomNode node, String seriesInstanceUID) throws Exception {
         Attributes keys = new Attributes();
         keys.setString(0x00080052, VR.CS, "IMAGE"); // QueryRetrieveLevel
-        keys.setString(0x00200011, VR.UI, seriesInstanceUID); // SeriesInstanceUID
+        keys.setString(0x0020000E, VR.UI, seriesInstanceUID); // SeriesInstanceUID
         return DicomService.getInstance().find(node, keys);
     }
 

@@ -294,13 +294,13 @@ public class DicomPix {
             }
 
             this.studyInstanceUID = attrs.getString(0x0020000D); // StudyInstanceUID
-            this.seriesInstanceUID = attrs.getString(0x00200011); // SeriesInstanceUID
+            this.seriesInstanceUID = attrs.getString(0x0020000E); // SeriesInstanceUID
             this.frameOfReferenceUID = attrs.getString(0x00200052); // FrameOfReferenceUID
             // DICOM metadata (HOROS-20240407準拠: DicomPix.m 対応項目)
             this.patientID = attrs.getString(0x00100020); // PatientID
             this.studyDescription = attrs.getString(0x00081030); // StudyDescription
             this.seriesDescription = attrs.getString(0x0008103E); // SeriesDescription
-            this.seriesNumber = attrs.getInt(0x00200011, 0); // SeriesInstanceUID (SeriesNumber)
+            this.seriesNumber = attrs.getInt(0x00200011, 0); // SeriesNumber
             this.sopClassUID = attrs.getString(0x00080016); // SOPClassUID
             this.instanceComments = attrs.getString(0x00084000);
             this.accessionNumber = attrs.getString(0x00080050); // AccessionNumber
@@ -465,7 +465,7 @@ public class DicomPix {
             // EstimatedRadiographicMagnificationFactor (Correction for CR/DX/MG/RF etc)
             // US（超音波）の場合は適用しない（USの距離は通常Regionタグで完結するため）
             if (!"US".equals(this.modality)) {
-                double magFactor = attrs.getDouble(0x00186020, 1.0); // EstimatedRadiographicMagnificationFactor
+                double magFactor = attrs.getDouble(0x00181114, 1.0); // EstimatedRadiographicMagnificationFactor
                 if (magFactor > 0.0 && magFactor != 1.0) {
                     this.pixelSpacingX /= magFactor;
                     this.pixelSpacingY /= magFactor;
@@ -474,7 +474,7 @@ public class DicomPix {
 
             // Pixel Aspect Ratio
             boolean hasPixelAspectRatio = false;
-            double[] pixelAspectRatio = attrs.getDoubles(0x00280012); // PixelAspectRatio
+            double[] pixelAspectRatio = attrs.getDoubles(0x00280034); // PixelAspectRatio
             if (pixelAspectRatio != null && pixelAspectRatio.length >= 2) {
                 double ratiox = pixelAspectRatio[0];
                 double ratioy = pixelAspectRatio[1];
@@ -491,7 +491,7 @@ public class DicomPix {
                 }
             }
 
-            this.transferSyntaxUID = attrs.getString(0x00080010); // TransferSyntaxUID
+            this.transferSyntaxUID = attrs.getString(0x00020010); // TransferSyntaxUID
 
         } catch (Exception e) {
             // // logger.error("readHeader error: {}", e.getMessage());
