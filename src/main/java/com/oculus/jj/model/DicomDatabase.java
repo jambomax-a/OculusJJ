@@ -4149,17 +4149,8 @@ public class DicomDatabase {
                 if (originalLower.endsWith(".dcm") || originalLower.endsWith(".ima")) {
                     destName = originalName;
                 } else {
-                    int lastDot = originalName.lastIndexOf('.');
-                    if (lastDot < 0) {
-                        destName = originalName + ".dcm";
-                    } else {
-                        String ext = originalName.substring(lastDot).toLowerCase();
-                        if (!ext.equals(".dcm") && !ext.equals(".ima")) {
-                            destName = originalName.substring(0, lastDot) + ".dcm";
-                        } else {
-                            destName = originalName;
-                        }
-                    }
+                    // DICOM UIDの末尾 (.1, .2 等) を削ると同一シリーズ内の別画像が衝突するため、そのまま .dcm を付与する
+                    destName = originalName + ".dcm";
                 }
 
                 File destFile = new File(dataDir, destName);

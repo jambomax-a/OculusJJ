@@ -49,17 +49,8 @@ public class DicomStoreSCP extends BasicCStoreSCP {
         if (lower.endsWith(".dcm") || lower.endsWith(".ima")) {
             return filename; // Already DICOM extension
         }
-        int lastDot = filename.lastIndexOf('.');
-        if (lastDot < 0) {
-            // UID-based name like 1.2.392... has no extension -> append .dcm
-            return filename + ".dcm";
-        }
-        String ext = filename.substring(lastDot).toLowerCase();
-        if (!ext.equals(".dcm") && !ext.equals(".ima")) {
-            // Non-DICOM extension (e.g., .0, .1) -> replace with .dcm
-            return filename.substring(0, lastDot) + ".dcm";
-        }
-        return filename;
+        // DICOM UID (例: 1.2.392...1, .2, .3) は末尾の .数字 もUIDの一部なので削らず .dcm を付与する
+        return filename + ".dcm";
     }
     private static void moveWithRetry(java.nio.file.Path src, java.nio.file.Path dst) throws IOException {
         IOException lastEx = null;
