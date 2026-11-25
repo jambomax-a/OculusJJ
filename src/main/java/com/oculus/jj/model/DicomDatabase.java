@@ -1228,8 +1228,7 @@ public class DicomDatabase {
         } else {
             // 新規挿入
             String sql = "INSERT INTO ROI (sopInstanceUID, frame, type, points, name, color, thickness, pixelSpacingX, pixelSpacingY, textBoxOffsetX, textBoxOffsetY) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql,
-                    java.sql.Statement.RETURN_GENERATED_KEYS)) {
+            try (PreparedStatement pstmt = sqliteConnection.prepareStatement(sql)) {
                 pstmt.setString(1, sopInstanceUID);
                 pstmt.setInt(2, frame);
                 pstmt.setString(3, roi.getType().name());
@@ -1243,14 +1242,15 @@ public class DicomDatabase {
                 pstmt.setDouble(11, (double) roi.getTextBoxOffsetY());
                 pstmt.executeUpdate();
 
-                // 生成されたIDを取得してセット
-                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                // 生成されたIDを取得してセット（SQLite JDBCではgetGeneratedKeys()が未実装のためlast_insert_rowidを使用）
+                try (Statement idStmt = sqliteConnection.createStatement();
+                     ResultSet generatedKeys = idStmt.executeQuery("SELECT last_insert_rowid()")) {
                     if (generatedKeys.next()) {
                         roi.setId(generatedKeys.getInt(1));
                     }
                 }
             } catch (SQLException e) {
-
+                logger.warn("Failed to insert ROI into SQLite", e);
             }
         }
     }
@@ -1541,14 +1541,14 @@ public class DicomDatabase {
                     boolean smart = Boolean.TRUE.equals(album.isSmartAlbum());
                     if (albumId == null) {
                         try (PreparedStatement insert = sqliteConnection.prepareStatement(
-                                "INSERT INTO Album (name, smartAlbum, predicate, dateAdded) VALUES (?, ?, ?, ?)",
-                                Statement.RETURN_GENERATED_KEYS)) {
+                                "INSERT INTO Album (name, smartAlbum, predicate, dateAdded) VALUES (?, ?, ?, ?)")) {
                             insert.setString(1, album.getName());
                             insert.setInt(2, smart ? 1 : 0);
                             insert.setString(3, smart ? album.getPredicateString() : null);
                             insert.setString(4, LocalDateTime.now().toString());
                             insert.executeUpdate();
-                            try (ResultSet keys = insert.getGeneratedKeys()) {
+                            try (Statement idStmt = sqliteConnection.createStatement();
+                                 ResultSet keys = idStmt.executeQuery("SELECT last_insert_rowid()")) {
                                 if (keys.next()) albumId = keys.getInt(1);
                             }
                         }
