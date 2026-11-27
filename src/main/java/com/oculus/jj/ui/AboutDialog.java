@@ -14,20 +14,38 @@ public class AboutDialog extends JDialog {
         super(owner, "About OculusJJ", false);
         setResizable(false);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        AppIconManager.applyAppIcon(this);
         initUI();
     }
 
     private void initUI() {
         JPanel main = new JPanel();
         main.setLayout(new BoxLayout(main, BoxLayout.Y_AXIS));
-        main.setBorder(BorderFactory.createEmptyBorder(30, 40, 20, 40));
+        main.setBorder(BorderFactory.createEmptyBorder(24, 40, 20, 40));
 
-        // Logo area (placeholder text if no icon available)
+        // Hero logo (Veterinary X-Ray artwork)
+        ImageIcon xrayLogo = AppIconManager.getXRayLogoIcon(144, 144);
+        if (xrayLogo != null) {
+            JLabel heroLabel = new JLabel(xrayLogo, SwingConstants.CENTER);
+            heroLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            main.add(heroLabel);
+            main.add(Box.createVerticalStrut(12));
+        }
+
+        // Title row with Oculus Lens app icon
+        JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        titleRow.setOpaque(false);
+        titleRow.setAlignmentX(Component.CENTER_ALIGNMENT);
+        ImageIcon miniAppIcon = AppIconManager.getAppIcon(28, 28);
+        if (miniAppIcon != null) {
+            titleRow.add(new JLabel(miniAppIcon));
+        }
         JLabel logoLabel = new JLabel("OculusJJ", SwingConstants.CENTER);
-        logoLabel.setFont(new Font("SansSerif", Font.BOLD, 28));
-        logoLabel.setForeground(new Color(60, 90, 140));
-        main.add(logoLabel);
-        main.add(Box.createVerticalStrut(15));
+        logoLabel.setFont(new Font("SansSerif", Font.BOLD, 26));
+        logoLabel.setForeground(new Color(40, 85, 140));
+        titleRow.add(logoLabel);
+        main.add(titleRow);
+        main.add(Box.createVerticalStrut(10));
 
         JLabel versionLabel = new JLabel("Version 1.0.0", SwingConstants.CENTER);
         versionLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));

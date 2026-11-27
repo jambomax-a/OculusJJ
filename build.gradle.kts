@@ -66,8 +66,29 @@ implementation("org.jmdns:jmdns:3.6.1")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.16.1")
     // GPU Acceleration (OpenGL via LWJGL 3)
+    // natives classifierはビルドホストのOSで自動選択（-PlwjglNatives=natives-linux-arm64等の上書き可）
     val lwjglVersion = "3.2.3"
-    val lwjglNatives = "natives-windows"
+    fun osName(): String {
+        val os = System.getProperty("os.name").lowercase()
+        return when {
+            os.contains("windows") -> "windows"
+            os.contains("mac") -> "macos"
+            os.contains("linux") -> "linux"
+            else -> "linux"
+        }
+    }
+    fun archName(): String {
+        val arch = System.getProperty("os.arch")
+        return when (arch) {
+            "aarch64" -> "arm64"
+            "arm" -> "arm32"
+            else -> ""
+        }
+    }
+    val os = osName()
+    val arch = archName()
+    val lwjglDefault = if (arch.isEmpty()) "natives-$os" else "natives-$os-$arch"
+    val lwjglNatives = providers.gradleProperty("lwjglNatives").orElse(lwjglDefault).get()
     implementation("org.lwjgl", "lwjgl", lwjglVersion)
     implementation("org.lwjgl", "lwjgl-opengl", lwjglVersion)
     implementation("org.lwjgl", "lwjgl-glfw", lwjglVersion)
@@ -108,4 +129,32 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.withType<Javadoc>().configureEach {
     options.encoding = "UTF-8"
+}
+
+// ============================================================
+// Linux 自己完結配布物（JRE バンドル、Java インストール不要）
+// ============================================================
+tasks.register<Copy>("distLinuxCopyJARs") {
+    dependsOn("jar")
+    from(configurations.runtimeClasspath)
+    destinationDir = file("build/linux-dist/OculusJJ/lib")
+}
+
+tasks.register<Exec>("distLinux") {
+    dependsOn("distLinuxCopyJARs")
+    executable = "./scripts/build-linux-dist.sh"
+    args = listOf("build/linux-dist")
+}
+
+tasks.register<Tar>("distLinuxTar") {
+    dependsOn("distLinux")
+    archiveBaseName = "OculusJJ-1.0.0-linux-x64"
+    archiveVersion = ""
+    compression = Compression.GZIP
+    from("build/linux-dist")
+    destinationDirectory.set(file("build/distributions"))
+    // jlink 済みなので不要な除外は最小限に
+    exclude("**/docs")
+    exclude("**/man")
+    exclude("**/include")
 }

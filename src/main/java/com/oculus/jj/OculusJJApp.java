@@ -421,6 +421,13 @@ public class OculusJJApp {
         String language = com.oculus.jj.config.AppPreferences.getAppLanguage().contains("ja") ? "ja" : "en";
         com.oculus.jj.utils.LanguageManager.getInstance().loadLanguage(language);
 
+        // アプリケーションアイコンのグローバルフックとタスクバーアイコンを設定
+        if (!java.awt.GraphicsEnvironment.isHeadless()) {
+            com.oculus.jj.ui.AppIconManager.installGlobalWindowIconHook();
+            com.oculus.jj.ui.AppIconManager.applyTaskbarIcon();
+        }
+        final com.oculus.jj.ui.SplashWindow splash = com.oculus.jj.ui.SplashWindow.showIfSupported();
+
         // OpenCVネイティブライブラリをロード（JPEG圧縮DICOM画像を読み込むために必要）
         // 注意: opencv_java.dllはC++ソースをコンパイルする必要はなく、pre-builtバイナリを使用可能
         loadOpenCVNativeLibrary();
@@ -466,6 +473,7 @@ public class OculusJJApp {
             try {
                 // HOROS-20240407準拠：BrowserControllerを起動
                 BrowserController browser = new BrowserController();
+                com.oculus.jj.ui.AppIconManager.applyAppIcon(browser);
 
                 if (com.oculus.jj.config.AppPreferences.isListenerAutoStart()) {
                     try {
@@ -508,8 +516,14 @@ public class OculusJJApp {
                     // ただし、これは非同期処理のため、実際にはcomponentShownイベント内で
                     // uiInitializedフラグが設定されるまで待機する必要がある
                 }
+                if (splash != null) {
+                    splash.closeSafely();
+                }
 
             } catch (Exception e) {
+                if (splash != null) {
+                    splash.closeSafely();
+                }
                 // デバッグログを出力（エラー原因を特定するため）
                 // // System.err.println("Failed to start OculusJJ: " + e.getMessage());
                 e.printStackTrace();
